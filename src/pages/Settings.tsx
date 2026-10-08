@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import { deleteProfile, updateProfile, useSocial } from '../services/social'
 import { importPhoneBackup, latestPhoneBackup, type ImportResult, type PhoneBackup } from '../services/phoneBackup'
 import { useNavigate, useParams } from 'react-router-dom'
 import { motion } from 'motion/react'
@@ -399,6 +400,40 @@ function Usage() {
   )
 }
 
+/** Friends: who sees what you play, and deleting your profile. */
+function FriendsPrivacy() {
+  const nav = useNavigate()
+  const me = useSocial((s) => s.me)
+  const [confirm, setConfirm] = useState(false)
+  if (!me) return (
+    <Group title="Friends">
+      <Row title="Friends profile" sub="Not set up. Friends see what you play only if you create a profile.">
+        <button className="btn btn-secondary btn-sm" onClick={() => nav('/friends')}>Set up</button>
+      </Row>
+    </Group>
+  )
+  return (
+    <Group title="Friends">
+      <Row title="Who sees what you play" sub={me.privacy === 'off' ? 'Private session — nobody sees your listening.' : me.privacy === 'everyone' ? 'Anyone who opens your profile.' : 'Only your friends.'}>
+        <Segmented id="set-fr-privacy" size="sm" value={me.privacy} onChange={(v) => void updateProfile({ privacy: v })} options={[{ value: 'friends', label: 'Friends' }, { value: 'everyone', label: 'Everyone' }, { value: 'off', label: 'Private' }]} />
+      </Row>
+      <Row title={`@${me.handle}`} sub="Your Friends profile — what you share: your name, colour, what you play (as above), top artists and songs for taste match and Blend.">
+        <button className="btn btn-secondary btn-sm" onClick={() => nav(`/u/${me.handle}`)}>View</button>
+      </Row>
+      <Row title="Delete Friends profile" sub="Removes your profile, friends, inbox and listening activity from Arnav Music’s servers.">
+        <button className="btn btn-danger btn-sm" onClick={() => setConfirm(true)}>Delete</button>
+      </Row>
+      <Sheet open={confirm} onClose={() => setConfirm(false)} title="Delete your Friends profile?" width={420}>
+        <div className="t-sub">Your friends, messages and listening activity are removed for good. Your music library isn’t touched.</div>
+        <div className="row" style={{ justifyContent: 'flex-end', marginTop: 18 }}>
+          <button className="btn btn-ghost" onClick={() => setConfirm(false)}>Cancel</button>
+          <button className="btn btn-danger" onClick={() => void deleteProfile().then(() => { setConfirm(false); toast('Friends profile deleted') }).catch(() => toast('Couldn’t delete — try again'))}>Delete</button>
+        </div>
+      </Sheet>
+    </Group>
+  )
+}
+
 function Privacy() {
   const nav = useNavigate()
   const [confirm, setConfirm] = useState(false)
@@ -409,6 +444,7 @@ function Privacy() {
         <Row title="What goes to the cloud" sub="Only when signed in with sync on: likes, Arnav playlists, listening events and an idle YouTube-only queue — under your account, readable only by you." />
         <Row title="AI requests" sub="Your request text (and, if enabled, top artists/genres) is sent to Gemini via Firebase AI Logic." />
       </Group>
+      <FriendsPrivacy />
       <Group title="Local data">
         <Row title="Clear caches" sub="Search results, lyrics and AI answers saved in this browser">
           <button className="btn btn-secondary btn-sm" onClick={() => void idbClear('cache').then(() => toast('Caches cleared'))}>Clear</button>

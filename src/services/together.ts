@@ -50,6 +50,9 @@ export const validCode = (c: string) => /^[A-Z2-9]{6}$/.test(c)
 export function listenerName(): string {
   const saved = ls.get<string>('arnav.listenerName', '')
   if (saved) return saved
+  // Your Friends profile name, so friends recognise you in the room.
+  const social = ls.get<string>('arnav.social.name', '')
+  if (social) return social
   const u = useAuth.getState().user
   return (u?.displayName || u?.email?.split('@')[0] || 'Listener').slice(0, 40)
 }

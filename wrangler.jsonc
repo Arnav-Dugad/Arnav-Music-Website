@@ -16,7 +16,8 @@
   // Forks: create your own with `npx wrangler kv namespace create YT_CACHE` and replace the id.
   "kv_namespaces": [{ "binding": "YT_CACHE", "id": "dff3779a9544425a9aa0666f12b96512" }],
   // Listen together rooms (WebSocket). Free plan: SQLite-backed Durable Objects.
-  "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "ListeningRoom" }] },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ListeningRoom"] }]
+  // Friends, presence, listen-along and the inbox: one SocialHub (SQLite).
+  "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "ListeningRoom" }, { "name": "SOCIAL", "class_name": "SocialHub" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ListeningRoom"] }, { "tag": "v2", "new_sqlite_classes": ["SocialHub"] }]
   // Secret (never committed): npx wrangler secret put YOUTUBE_API_KEY
 }

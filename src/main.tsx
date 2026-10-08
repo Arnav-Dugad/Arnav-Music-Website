@@ -18,6 +18,7 @@ import './styles/components.css'
 import './styles/shell.css'
 import './styles/player.css'
 import './styles/pages.css'
+import './styles/social.css'
 // Last: phone and detail polish that must win over the page styles.
 import './styles/polish.css'
 
@@ -40,6 +41,7 @@ async function boot() {
   void pruneStaleCache()
   // Back in your listening room after a reload.
   void import('./services/together').then((m) => m.rejoinAfterReload())
+  void import('./services/social').then((m) => m.startSocial())
   // Diagnostics (read-only): window.__arnavLyricsProbe({ q: 'Kesariya Arijit Singh' })
   ;(window as unknown as { __arnavLyricsProbe: unknown }).__arnavLyricsProbe = async (i: { q?: string; v?: string }) => (await import('./services/lyricsProbe')).lyricsProbe(i)
   // Names every visitor's YouTube Topic results taught the server (artists, films).

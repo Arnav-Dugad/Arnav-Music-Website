@@ -24,6 +24,7 @@ import { useYoutubeReady } from '../services/status'
 import { verified } from '../services/catalog'
 import { useWeather } from '../services/weather'
 import { momentById } from '../lib/moments'
+import { NowCard, useListeningNow } from '../components/Social'
 import { rank } from '../lib/taste'
 
 function Handoff() {
@@ -173,6 +174,7 @@ export default function Home() {
       <Hero />
       <QuickTiles />
       <SetupNotice />
+      <FriendsNow />
 
       {recent.length > 0 && (
         <Shelf title="Continue listening" subtitle="Pick up where you left off">
@@ -277,5 +279,17 @@ export default function Home() {
         </section>
       )}
     </div>
+  )
+}
+
+/** Friends playing music right now — one tap to listen along. */
+function FriendsNow() {
+  const nav = useNavigate()
+  const live = useListeningNow()
+  if (!live.length) return null
+  return (
+    <Shelf title="Friends listening now" subtitle="Tap Listen along to hear exactly what they hear" action={<button className="btn btn-ghost btn-sm" onClick={() => nav('/friends')}>All friends</button>}>
+      {live.slice(0, 8).map((f) => <NowCard key={f.id} f={f} compact />)}
+    </Shelf>
   )
 }

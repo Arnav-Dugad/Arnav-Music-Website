@@ -9,6 +9,7 @@ import { useSync } from '../services/sync'
 import { useMemo } from 'react'
 import { trackRegistry } from '../state/tracks'
 import { artworkFor } from '../lib/classify'
+import { useSocial } from '../services/social'
 
 export const NAV: { to: string; label: string; icon: IconName; end?: boolean }[] = [
   { to: '/', label: 'Home', icon: 'home', end: true },
@@ -57,6 +58,12 @@ export function Sidebar() {
           <Icon name="radio" size={19} />
           <span>Listen together</span>
         </NavLink>
+        <NavLink to="/friends" className={`sb-link ${/^\/(friends|u\/|add\/)/.test(loc.pathname) ? 'active' : ''}`}>
+          {/^\/(friends|u\/|add\/)/.test(loc.pathname) && <motion.span layoutId="sb-active" className="sb-pill" transition={spring} />}
+          <Icon name="users" size={19} />
+          <span className="grow">Friends</span>
+          <FriendsBadge />
+        </NavLink>
       </nav>
       <div className="sb-section">
         <div className="sb-section-head">
@@ -93,6 +100,18 @@ export function Sidebar() {
   )
 }
 
+/** Requests waiting + unread songs, or how many friends are playing music right now. */
+function FriendsBadge() {
+  const pending = useSocial((s) => s.incoming.length + s.unread)
+  const live = useSocial((s) => Object.values(s.presence).filter((p) => p.now?.playing).length)
+  if (pending) return <span className="sc-badge">{pending > 9 ? '9+' : pending}</span>
+  if (live) return <span className="sb-live" title={`${live} friend${live > 1 ? 's' : ''} listening now`}><i />{live}</span>
+  return null
+}
+
+/** Phones: Friends takes the Moments slot (Moments stays in Home and ⌘K). */
+const TABS: typeof NAV = [NAV[0], NAV[1], { to: '/friends', label: 'Friends', icon: 'users' }, NAV[2], NAV[4]]
+
 export function syncLabel(s: string) {
   switch (s) {
     case 'SYNCING': return 'Syncing…'
@@ -122,17 +141,23 @@ export function PlaylistThumb({ artwork, trackIds, name, size = 'sm' }: { artwor
   return <span className={`pl-thumb ${size}`}><Artwork src={arts[0]} seed={name} icon="note" /></span>
 }
 
+function TabDot() {
+  const pending = useSocial((s) => s.incoming.length + s.unread)
+  return pending ? <i className="tab-dot" aria-label={`${pending} new`} /> : null
+}
+
 export function TabBar() {
   const loc = useLocation()
   return (
     <nav className="tabbar glass-thick" aria-label="Main">
-      {NAV.map((n) => {
-        const active = n.end ? loc.pathname === n.to : loc.pathname.startsWith(n.to)
+      {TABS.map((n) => {
+        const active = n.end ? loc.pathname === n.to : n.to === '/friends' ? /^\/(friends|u\/|add\/)/.test(loc.pathname) : loc.pathname.startsWith(n.to)
         return (
           <NavLink key={n.to} to={n.to} end={n.end} className={`tab ${active ? 'active' : ''}`}
             onClick={() => { if (active) document.querySelector('.main-scroll')?.scrollTo({ top: 0, behavior: 'smooth' }) }}>
             <motion.span animate={{ scale: active ? 1 : 0.94, y: active ? -1 : 0 }} transition={spring} className="tab-icon">
               <Icon name={n.icon} size={22} strokeWidth={active ? 2.1 : 1.8} />
+              {n.to === '/friends' && <TabDot />}
             </motion.span>
             <span className="tab-label">{n.label === 'Arnav AI' ? 'AI' : n.label}</span>
           </NavLink>

@@ -14,6 +14,7 @@ import { radioFor } from '../services/recs'
 import { verified } from '../services/catalog'
 import { setThemeWithReveal } from '../lib/reveal'
 import { shareCard } from '../lib/shareCard'
+import { useSendSheet } from './Social'
 import { useLyrics } from '../state/lyrics'
 import { activeIndex } from '../lib/lyrics'
 import { artworkFor } from '../lib/classify'
@@ -107,6 +108,7 @@ export function TrackMenu() {
             {menu.playlistId && menu.playlistId.startsWith('arn_') && <MenuItem icon="minus" label="Remove from this playlist" onClick={() => lib().removeFromPlaylist(menu.playlistId!, t.id)} />}
             {menu.queueKey && <MenuItem icon="minus" label="Remove from queue" onClick={() => player().remove(menu.queueKey!)} />}
             <div className="menu-sep" />
+            <MenuItem icon="send" label="Send to friends" onClick={() => useSendSheet.getState().open(t)} />
             <MenuItem icon="share" label="Share" onClick={() => shareTrack(t)} />
             <MenuItem icon="download" label="Share as a card" onClick={() => {
               const lyr = useLyrics.getState()
@@ -214,6 +216,9 @@ export function CommandPalette() {
       { id: 'liked', group: 'Go to', icon: 'heartFill', label: 'Liked Songs', run: go('/playlist/liked') },
       { id: 'dna', group: 'Go to', icon: 'chart', label: 'Taste DNA', run: go('/insights') },
       { id: 'together', group: 'Go to', icon: 'radio', label: 'Listen together', hint: 'Rooms', run: go('/together') },
+      { id: 'friends', group: 'Go to', icon: 'users', label: 'Friends', hint: 'Listening now', run: go('/friends') },
+      { id: 'inbox', group: 'Go to', icon: 'inbox', label: 'Inbox', hint: 'Songs from friends', run: go('/friends?tab=inbox') },
+      { id: 'fchart', group: 'Go to', icon: 'trophy', label: 'Friends chart', run: go('/friends?tab=charts') },
       { id: 'wrapped', group: 'Go to', icon: 'story', label: 'Your month, wrapped', run: go('/wrapped') },
       { id: 'wall', group: 'Go to', icon: 'wall', label: 'Album wall', hint: '3D', run: go('/wall') },
       { id: 'set', group: 'Go to', icon: 'gear', label: 'Settings', run: go('/settings') },

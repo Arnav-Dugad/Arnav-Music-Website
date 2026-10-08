@@ -16,6 +16,7 @@ import { Spinner } from './components/ui'
 import { PageBoundary } from './components/ErrorBoundary'
 import { isMorphing } from './lib/reveal'
 import { TogetherLayer } from './components/TogetherLayer'
+import { SendSheet } from './components/Social'
 import Home from './pages/Home'
 
 const Explore = lazy(() => import('./pages/Explore'))
@@ -27,6 +28,8 @@ const CreditsPage = lazy(() => import('./pages/Credits'))
 const WrappedPage = lazy(() => import('./pages/Wrapped'))
 const WallPage = lazy(() => import('./pages/Wall'))
 const TogetherPage = lazy(() => import('./pages/Together'))
+const FriendsPage = lazy(() => import('./pages/Friends'))
+const ProfilePage = lazy(() => import('./pages/Profile'))
 const AiPage = lazy(() => import('./pages/Ai'))
 const MomentsPage = lazy(() => import('./pages/Moments'))
 const MomentPage = lazy(() => import('./pages/Moment'))
@@ -41,7 +44,8 @@ function Page({ children }: { children: React.ReactNode }) {
     <motion.div
       // A cover morph (View Transition) already animates the change; don't fade the page under it.
       initial={isMorphing() ? false : { opacity: 0, y: 14, filter: 'blur(6px)' }}
-      animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+      // The filter is cleared afterwards: a leftover filter would trap fixed overlays inside the page.
+      animate={{ opacity: 1, y: 0, filter: 'blur(0px)', transitionEnd: { filter: 'none' } }}
       exit={{ opacity: 0, y: -8, filter: 'blur(4px)', transition: { duration: 0.16 } }}
       transition={{ type: 'spring', stiffness: 260, damping: 30 }}
     >
@@ -70,7 +74,7 @@ export default function App() {
 
   useEffect(() => {
     // Shared links (a song, a listening room) open straight away, even on a first visit.
-    if (!onboardingDone && !/^\/(welcome|track\/|together\/)/.test(loc.pathname)) nav('/welcome', { replace: true })
+    if (!onboardingDone && !/^\/(welcome|track\/|together|add\/|u\/|friends)/.test(loc.pathname)) nav('/welcome', { replace: true })
   }, [onboardingDone, loc.pathname, nav])
   useEffect(() => { scroller.current?.scrollTo({ top: 0 }) }, [loc.pathname])
   useEffect(() => { if (expanded) usePlayer.getState().setExpanded(false) }, [loc.pathname]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -100,6 +104,9 @@ export default function App() {
                 <Route path="/wall" element={<WallPage />} />
                 <Route path="/together" element={<Page><TogetherPage /></Page>} />
                 <Route path="/together/:code" element={<Page><TogetherPage /></Page>} />
+                <Route path="/friends" element={<Page><FriendsPage /></Page>} />
+                <Route path="/add/:code" element={<Page><FriendsPage /></Page>} />
+                <Route path="/u/:handle" element={<Page><ProfilePage /></Page>} />
                 <Route path="/ai" element={<Page><AiPage /></Page>} />
                 <Route path="/moments" element={<Page><MomentsPage /></Page>} />
                 <Route path="/moment/:id" element={<MomentPage />} />
@@ -128,6 +135,7 @@ export default function App() {
         <Toasts />
         <PreviewPill />
         <TogetherLayer />
+        <SendSheet />
       </div>
     </MotionConfig>
   )

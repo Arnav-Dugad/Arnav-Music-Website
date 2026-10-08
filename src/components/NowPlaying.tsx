@@ -12,6 +12,7 @@ import { useVideoSlot } from '../player/VideoHost'
 import { CoverParticles } from './CoverParticles'
 import { BeatShader } from './BeatShader'
 import { RoomReactBar } from './TogetherLayer'
+import { ListenersPill, useSendSheet } from './Social'
 import { ChorusButton, SectionStrip } from './SongMap'
 import { useMoodPick } from '../services/moodAutomix'
 import { useCurrentPalette } from '../hooks'
@@ -284,6 +285,7 @@ function NowPlayingView({ track }: { track: Track }) {
           <div className="np-mode">
             <Segmented id="np-mode" size="sm" value={mode} onChange={(m) => void setMode(m)} options={[{ value: 'SONG', label: 'Song' }, { value: 'VIDEO', label: resolving ? <><Spinner size={11} /> Video</> : 'Video' }]} />
           </div>
+          <button className="icon-btn" aria-label="Send to friends" title="Send to friends" onClick={() => useSendSheet.getState().open(track)}><Icon name="send" size={18} /></button>
           <button className="icon-btn" aria-label="Continue on your phone" title="Continue on your phone" onClick={() => ui().set({ phoneOpen: true })}><Icon name="phone" size={19} /></button>
           <button className="icon-btn" aria-label="More" onClick={(e) => openTrackMenu(e, track)}><Icon name="more" size={20} /></button>
         </div>
@@ -328,6 +330,7 @@ function NowPlayingView({ track }: { track: Track }) {
             </div>
           </div>
           <div className="np-foot">
+            <ListenersPill />
             <RoomReactBar />
             <SleepBadge />
             {upNext && !split && (

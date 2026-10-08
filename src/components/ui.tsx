@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type PointerEvent as RPointerEvent } from 'react'
 import { AnimatePresence, motion, useMotionValue, useSpring, useTransform } from 'motion/react'
 import { Icon, type IconName } from './Icon'
@@ -178,7 +179,9 @@ export function Sheet({ open, onClose, children, title, width = 520, className =
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [open, onClose])
-  return (
+  // Portalled to <body>: a page's enter animation (transform / filter) would otherwise trap the
+  // fixed overlay inside the page, under the tab bar and mini player.
+  return createPortal(
     <AnimatePresence>
       {open && (
         <motion.div className="sheet-root" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.22 }} onClick={onClose}>
@@ -203,7 +206,8 @@ export function Sheet({ open, onClose, children, title, width = 520, className =
           </motion.div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   )
 }
 

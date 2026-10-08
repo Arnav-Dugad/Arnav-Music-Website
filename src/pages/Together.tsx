@@ -10,6 +10,7 @@ import { toast } from '../state/ui'
 import { artworkFor } from '../lib/classify'
 import { dismissSuggestion, joinRoom, leaveRoom, listenerName, makeHost, newRoomCode, react, REACTIONS, resync, roomLink, setListenerName, toTrack, useTogether, validCode } from '../services/together'
 import { player } from '../state/player'
+import { InviteFriends } from '../components/Social'
 
 /** Listen together: start or join a room; everyone hears the host's music at the same moment. */
 export default function TogetherPage() {
@@ -119,6 +120,7 @@ export default function TogetherPage() {
               </AnimatePresence>
             </ul>
           </div>
+          <InviteFriends code={code} />
           <div className="together-panel glass together-invite">
             <Qr text={roomLink(code)} />
             <div>

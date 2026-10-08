@@ -55,6 +55,8 @@ export async function handleApi(request: Request, env: ApiEnv, waitUntil?: WaitU
     })
   }
   const route = url.pathname.replace(/\/+$/, '')
+  // Friends and rooms need Durable Objects (the Cloudflare Workers host); other hosts say so clearly.
+  if (route.startsWith('/api/social') || route.startsWith('/api/room')) return json({ error: 'social_unavailable', message: 'Friends and listening rooms need the Cloudflare Workers host.' }, 501)
   if (request.method !== 'GET' && !(request.method === 'POST' && route === '/api/community')) return json({ error: 'method_not_allowed' }, 405)
 
   try {

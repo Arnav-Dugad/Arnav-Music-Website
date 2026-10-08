@@ -95,3 +95,12 @@ button:disabled, .btn:disabled, .chip:disabled { cursor: not-allowed; }
 .lyr-line.indic { letter-spacing: 0; line-height: 1.38; font-weight: 720; }
 .cine .lyr-line.rtl, .cine .lyr-line.indic { font-family: var(--font-display); font-weight: 650; }
 .lyr.plain p[dir='auto'] { unicode-bidi: plaintext; }
+
+/* The listening-room pill never covers page controls: hidden during onboarding; on phones it sits
+   just above the mini player instead of over the page header. */
+.app.onboarding .together-pill { display: none; }
+@media (max-width: 700px) {
+  .together-pill { top: auto; right: 12px; bottom: calc(var(--tabbar-h) + var(--player-h) + 16px + env(safe-area-inset-bottom)); height: 32px; box-shadow: var(--shadow-2); }
+  .app:not(.has-track) .together-pill { bottom: calc(var(--tabbar-h) + 12px + env(safe-area-inset-bottom)); }
+}
+@media (max-width: 700px) { .app:has(.together-pill) .toasts { bottom: calc(var(--tabbar-h) + var(--player-h) + 62px + env(safe-area-inset-bottom)); } }
