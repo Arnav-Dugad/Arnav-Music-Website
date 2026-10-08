@@ -104,3 +104,13 @@ button:disabled, .btn:disabled, .chip:disabled { cursor: not-allowed; }
   .app:not(.has-track) .together-pill { bottom: calc(var(--tabbar-h) + 12px + env(safe-area-inset-bottom)); }
 }
 @media (max-width: 700px) { .app:has(.together-pill) .toasts { bottom: calc(var(--tabbar-h) + var(--player-h) + 62px + env(safe-area-inset-bottom)); } }
+
+/* Text fields show their own soft focus ring — no second outline on top. */
+.field:focus-visible, .fr-search input:focus-visible { outline: none; }
+/* Join a room: the code and the button share one line, same height, same top. */
+.together-card .together-join > .btn { margin: 0; align-self: stretch; }
+/* Centred pages never push their content above the top edge when it's taller than the screen. */
+.page.center { align-items: safe center; justify-items: safe center; }
+@media (max-width: 700px) { .page.center { padding-top: 20px; } }
+/* Friends setup: the input and button line up on phones too. */
+@media (max-width: 700px) { .fr-setup .field, .fr-setup .btn { height: 52px; width: 100%; justify-content: center; } }

@@ -11,7 +11,7 @@ import { duration, longDuration, plural, tidyTitle } from '../lib/format'
 import { normalize } from '../lib/query'
 import { MusicError, type Track } from '../lib/types'
 import { artistOverlap, itunesAlbum, itunesAlbumSearch, VARIANT, type ItunesItem } from '../lib/meta'
-import { addKnownFilm } from '../lib/knownArtists'
+import { addKnownFilm, isKnownFilm } from '../lib/knownArtists'
 import { trackRegistry } from '../state/tracks'
 import { player } from '../state/player'
 import { lib, useLibrary } from '../state/library'
@@ -29,9 +29,20 @@ const songKey = (s: string) => normalize(tidyTitle(s.replace(/\s*[([](?:from|fea
 async function findItunesAlbum(name: string, artist: string, id: number | null): Promise<{ album: ItunesItem | null; tracks: ItunesItem[] }> {
   if (id) return itunesAlbum(id)
   const results = await itunesAlbumSearch(artist ? `${albumBase(name)} ${artist.split(',')[0]}` : albumBase(name), 15).catch(() => [])
+  // A film's soundtrack beats a same-named DJ compilation ("Brahmāstra" by Various Artists, 44 remixes).
+  const rank = (a: ItunesItem) => {
+    let r = 0
+    if (/soundtrack|motion picture|\bost\b|from the (film|movie)/i.test(a.title ?? '')) r += 3
+    if (/bollywood|soundtrack|indian|film|punjabi|tamil|telugu/i.test(a.genre ?? '')) r += 2
+    if (artist && a.artist && artistOverlap(a.artist, artist)) r += 2
+    if (isKnownFilm(albumBase(name)) && /soundtrack|bollywood|indian|film/i.test(`${a.title} ${a.genre}`)) r += 2
+    if (/^various artists$/i.test(a.artist ?? '') && !/soundtrack/i.test(a.title ?? '')) r -= 3
+    if (/single$/i.test(a.title ?? '')) r -= 1
+    return r
+  }
   const best = results
     .filter((a) => a.title && sameAlbum(a.title, name) && (!artist || !a.artist || artistOverlap(a.artist, artist) || /soundtrack/i.test(a.title)))
-    .sort((a, b) => Number(/single$/i.test(a.title ?? '')) - Number(/single$/i.test(b.title ?? '')) || (b.trackCount ?? 0) - (a.trackCount ?? 0))[0]
+    .sort((a, b) => rank(b) - rank(a) || (b.trackCount ?? 0) - (a.trackCount ?? 0))[0]
   return best?.collectionId ? itunesAlbum(best.collectionId) : { album: null, tracks: [] }
 }
 
@@ -46,14 +57,15 @@ function officialAlbumPlaylist(p: { id: string; name: string; owner: string }, t
 }
 
 /** Best official upload for one album track (same song, shared artist, closest length). */
-function matchTrack(it: ItunesItem, pool: Track[]): Track | null {
+function matchTrack(it: ItunesItem, pool: Track[], albumTitle?: string): Track | null {
   const key = songKey(it.title ?? '')
   const wantVariant = VARIANT.test(it.title ?? '')
   const cands = pool.filter((t) => {
     const k = songKey(t.title)
     if (!k || !key) return false
     const same = k === key || titleSimilarity(tidyTitle(t.title), it.title ?? '') >= 0.85
-    return same && (wantVariant || !VARIANT.test(t.rawTitle ?? t.title)) && (!it.artist || artistOverlap(it.artist, `${t.artist}, ${t.credits ?? ''}`) || t.album != null)
+    // Another artist's upload only counts when it names this very album ("Song - Film | …").
+    return same && (wantVariant || !VARIANT.test(t.rawTitle ?? t.title)) && (!it.artist || artistOverlap(it.artist, `${t.artist}, ${t.credits ?? ''}`) || (t.album != null && (!albumTitle || sameAlbum(t.album, albumTitle))))
   })
   return cands.sort((a, b) => (b.trust ?? 1) - (a.trust ?? 1) || Math.abs((a.durationMs ?? 0) - (it.durationMs ?? 0)) - Math.abs((b.durationMs ?? 0) - (it.durationMs ?? 0)))[0] ?? null
 }
@@ -96,7 +108,7 @@ export default function AlbumPage() {
       if (matched < 5 && albumArtist) pools.push(...((await search(`${title} ${albumArtist.split(',')[0]}`, 'SONGS').catch(() => null))?.tracks ?? []))
       // Still short of the tracklist: the artist's Topic art tracks (official audio for every album song).
       const list = info.data?.tracks ?? []
-      const covered = list.filter((x) => matchTrack(x, pools)).length
+      const covered = list.filter((x) => matchTrack(x, pools, title)).length
       if (list.length >= 4 && covered < list.length * 0.7) pools.push(...((await search(`${albumArtist.split(',')[0]} ${title} topic`, 'SONGS').catch(() => null))?.tracks ?? []))
     }
     if (!pools.length && !it) throw new MusicError('http', 'Songs for this album couldn’t load.')
@@ -115,7 +127,7 @@ export default function AlbumPage() {
       const out: Track[] = []
       const miss: ItunesItem[] = []
       for (const item of list) {
-        const t = matchTrack(item, pool.filter((p) => !used.has(p.id)))
+        const t = matchTrack(item, pool.filter((p) => !used.has(p.id)), title)
         if (t) { used.add(t.id); out.push({ ...t, album: title, year: t.year ?? (it?.releaseDate ? Number(it.releaseDate.slice(0, 4)) : null) }) } else miss.push(item)
       }
       return { rows: out, missing: miss }
@@ -144,7 +156,7 @@ export default function AlbumPage() {
     setFinding(item.title)
     try {
       const r = await search(`${item.title} ${item.artist?.split(',')[0] ?? albumArtist}`, 'SONGS')
-      const t = matchTrack(item, verified(r.tracks))
+      const t = matchTrack(item, verified(r.tracks), title)
       if (t) player().play([t], 0, { context: title })
       else toast('No official upload of this song found')
     } catch { toast('Couldn’t search right now') } finally { setFinding(null) }

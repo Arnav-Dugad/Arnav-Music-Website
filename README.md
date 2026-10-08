@@ -42,6 +42,8 @@ A premium, Apple-style music web app: YouTube discovery through the official API
 - **Mood-matched automix**: Smart automix picks which upcoming song fits the moment (energy, Deezer tempo, genre, Arnav AI's pick), only for shuffle, radio, mixes and AI sessions.
 - **Song identity**: ISRC links each upload to Deezer and MusicBrainz exactly, and to Apple Music when the length matches.
 - **Artist eras**, **Arnav AI on a film's music**, **yearly Wrapped** with year-over-year comparisons and cover-burst transitions, **constellations** on the album wall, a swinging **vinyl tonearm** and lyrics that **swell and glow on held notes**.
+- **Friends** (`/friends`, profiles at `/u/<handle>`): make a profile in one step, no sign-in needed (signing in links it to your account on every device). Add friends by @name, by invite link (`/add/<code>`: open it and you're friends) or by QR. See what friends are **listening to right now** with live progress. **Listen along** in one tap: same song, same second (about 1 s apart in tests), or join their listening room. Invite friends into your room from the room page, send songs with a note, and react from the **inbox**. There's a friends **activity** feed, a weekly **friends chart**, **taste match %**, shared artists and a **Blend** on each profile, waves 👋, a "listening along with you" pill, and notifications while the tab is hidden. Privacy: friends / everyone / private session, plus blocking and deleting your profile. Runs on a Durable Object (`worker/social.ts`), so it needs the Cloudflare Workers host.
+- **Lyrics across languages**: tested on Hindi, Punjabi, Urdu, Spanish, Arabic and English uploads. The title parser reads film uploads ("Film: Song", quoted titles, en-dash casts, 8K/4K tags), show prefixes (Coke Studio), song-then-artist uploads, producer channels and Bzrp sessions. Lyrics matching handles film edits that are shorter than the song, lyrics timed to the exact upload, featured artists, and storefronts that lack a song (US fallback). **Self-aligning lyrics**: when the timing is only a guess, Arnav AI listens once and shares the result, with **piecewise timing** for edited videos so cut verses disappear instead of drifting. Arabic and Urdu read **right to left** (fill sweeps from the right), Indic scripts keep their vowel signs, word fill is estimated per script, and Noto fonts load only when those scripts appear.
 - **Everywhere**: ⌘K command palette, keyboard shortcuts (`?`), Media Session (hardware keys / OS media controls), sleep timer, speed, endless radio, unplayable-video rescue, Start radio / Not interested / Don't recommend artist, sharing (`/track/<id>`), PWA manifest, light/dark/auto, artwork-tinted or fixed accent, glass on/off, three motion levels, high contrast, and responsive layouts (sidebar + floating player on desktop; tab bar + mini player on phones).
 
 ## Architecture
@@ -55,7 +57,8 @@ src/                 React 19 + TypeScript + Motion (Vite)
   components/ pages/ UI
 server/handlers.ts   One edge API for every host: /api/yt (YouTube, key stays server-side),
                      /api/img (artwork with CORS for colour extraction), /api/lyrics (LRCLIB), /api/health
-worker/              Cloudflare Workers entry (static assets + API) and room.ts (Listen together Durable Object)
+worker/              Cloudflare Workers entry (static assets + API), room.ts (Listen together) and social.ts
+                     (Friends hub: profiles, presence, inbox; Firebase ID tokens verified in firebaseToken.ts)
 functions/           Cloudflare Pages Functions entry
 api/                 Vercel Edge Functions entry
 tests/               Unit tests ported from the Android app's core/domain tests
@@ -76,7 +79,7 @@ tests/               Unit tests ported from the Android app's core/domain tests
 Hardened rules for both clients live in `firebase/firestore.rules`. `firebase/tests` replays the app's own rule tests plus every web write in the Firebase emulator (likes, tombstones, playlists, history, queue, settings and cross-account denial): all pass. Deploy them with `firebase deploy --only firestore:rules` from a project owner account.
 
 ### Edge API additions
-`/api/meta` (iTunes, MusicBrainz, Wikidata, Deezer, NetEase; allow-listed and cached in KV), `/api/credits` (one cached credits record per video for everyone), `/api/community` (lyrics version and timing listeners agreed on: median of up to 25 fixes), `/api/known` (artist and film names learned only from YouTube Topic data and Wikidata). `videos`, `search` and `playlistItems` responses carry `arnav`: the shared parse of each title with those names, so every visitor sees the same clean metadata.
+`/api/meta` (iTunes, MusicBrainz, Wikidata, Deezer, NetEase; allow-listed and cached in KV), `/api/credits` (one cached credits record per video for everyone), `/api/community` (lyrics version and timing listeners agreed on: median of up to 25 fixes), `/api/known` (artist and film names learned only from YouTube Topic data and Wikidata). `/api/social/*` (Friends; Durable Object `SocialHub`, migration `v2`) and `/api/room/<CODE>` (Listen together) answer `501` on hosts without Durable Objects. `videos`, `search` and `playlistItems` responses carry `arnav`: the shared parse of each title with those names, so every visitor sees the same clean metadata.
 
 ## Configuration
 | Secret / setting | Where | Notes |
