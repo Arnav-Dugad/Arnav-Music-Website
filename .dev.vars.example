@@ -1,0 +1,5 @@
+# Copy to .dev.vars for `wrangler dev` (never commit .dev.vars).
+YOUTUBE_API_KEY=
+# Only if your key is restricted to the Android app:
+# YOUTUBE_ANDROID_PACKAGE=com.arnav.music
+# YOUTUBE_ANDROID_CERT=

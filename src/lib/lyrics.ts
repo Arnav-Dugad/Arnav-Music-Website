@@ -1,0 +1,283 @@
+import { idbGet, idbSet } from './idb'
+import { titleSimilarity } from './classify'
+import { useUsage } from './usage'
+import type { Track } from './types'
+
+/** One sung word with absolute timing (ms). */
+export interface LyricWord { start: number; end: number; text: string }
+
+/** A displayed line. No text and no background = instrumental break. */
+export interface LyricLine {
+  start: number
+  end: number
+  text: string
+  words: LyricWord[]
+  background?: string
+  backgroundWords?: LyricWord[]
+  /** True when word timing was spread by syllables, not timed by the source. */
+  estimated: boolean
+}
+
+export type Lyrics =
+  | { kind: 'synced'; lines: LyricLine[]; source: string }
+  | { kind: 'plain'; lines: string[]; source: string }
+
+export const isInstrumental = (l: LyricLine) => !l.text.trim() && !l.background?.trim()
+
+const INSTRUMENTAL_GAP_MS = 6_000
+const LAST_LINE_MS = 5_000
+const MIN_LINE_MS = 2_500
+const MS_PER_WORD = 380
+
+const timeTag = /^\s*\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?\]/
+const wordTag = /<(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?>/g
+const metaTag = /^\s*\[([A-Za-z#][A-Za-z0-9_\- ]{0,15}):(.*)\]\s*$/
+const bgLine = /^\s*\[bg:(.*)]\s*$/i
+const voicePrefix = /^\s*v\d{1,2}:\s*/i
+const metaKeys = new Set(['ar', 'al', 'ti', 'au', 'by', 'length', 'offset', 're', 've', 'tool', 'la', 'lang', 'id', 'kana', 'sign', 'hash', 'total', '#', 'artist', 'album', 'title', 'author', 'version', 'encoding'])
+const sectionLabel = /^\s*[([]?\s*(chorus|verse|bridge|intro|outro|hook|pre-?chorus|refrain|interlude|instrumental|x\d+|\d+x|repeat)\b[^)\]]*[)\]]?\s*$/i
+
+function toMs(m: string, s: string, frac?: string): number {
+  const f = frac ? Number(frac.padEnd(3, '0').slice(0, 3)) : 0
+  return Number(m) * 60_000 + Number(s) * 1000 + f
+}
+
+interface Entry { time: number; text: string; words: LyricWord[]; bg?: string; bgWords?: LyricWord[] }
+
+/** Splits "text <00:01.20>word <00:01.50>word" into display text and timed words. */
+function parseWords(body: string): { text: string; words: LyricWord[] } {
+  const matches = [...body.matchAll(wordTag)]
+  if (matches.length === 0) return { text: body.replace(/\s+/g, ' ').trim(), words: [] }
+  const words: LyricWord[] = []
+  for (let i = 0; i < matches.length; i++) {
+    const m = matches[i]
+    const start = toMs(m[1], m[2], m[3])
+    const from = (m.index ?? 0) + m[0].length
+    const to = i + 1 < matches.length ? matches[i + 1].index ?? body.length : body.length
+    const text = body.slice(from, to).replace(/\s+/g, ' ')
+    if (text.trim()) words.push({ start, end: start, text: text.trim() })
+    else if (words.length) words[words.length - 1].end = start
+  }
+  for (let i = 0; i < words.length; i++) {
+    if (words[i].end <= words[i].start) words[i].end = words[i + 1]?.start ?? words[i].start + 600
+  }
+  return { text: words.map((w) => w.text).join(' ').trim(), words }
+}
+
+/** "I'm on my way (on my way)" → lead + backing vocals. Section labels are never vocals. */
+function splitBackground(text: string): { text: string; background?: string } {
+  if (!text.trim() || sectionLabel.test(text)) return { text }
+  const trailing = /^(.*?)\s*[(（]([^()（）]{2,})[)）]\s*$/.exec(text)
+  if (trailing && !sectionLabel.test(trailing[2])) return { text: trailing[1].trim(), background: trailing[2].trim() }
+  const leading = /^\s*[(（]([^()（）]{2,})[)）]\s*(.*)$/.exec(text)
+  if (leading && !sectionLabel.test(leading[1])) return { text: leading[2].trim(), background: leading[1].trim() }
+  return { text }
+}
+
+/** Rough syllable count for word-fill estimation (works across Latin scripts; others fall back to length). */
+function syllables(word: string): number {
+  const w = word.toLowerCase().replace(/[^\p{L}]/gu, '')
+  if (!w) return 1
+  if (!/[a-z]/.test(w)) return Math.max(1, Math.round(w.length / 2))
+  const groups = w.replace(/e$/, '').match(/[aeiouy]+/g)
+  return Math.max(1, groups?.length ?? 1)
+}
+
+/** Spreads a line's words over its sung stretch by syllables (Apple-style fill for line-synced LRC). */
+export function estimateWords(text: string, start: number, end: number): LyricWord[] {
+  const tokens = text.split(/\s+/).filter(Boolean)
+  if (!tokens.length) return []
+  const weights = tokens.map(syllables)
+  const total = weights.reduce((a, b) => a + b, 0)
+  const sung = Math.min(end - start, Math.max(MIN_LINE_MS * 0.8, tokens.length * MS_PER_WORD * 1.15))
+  let t = start
+  return tokens.map((tok, i) => {
+    const d = (sung * weights[i]) / total
+    const w = { start: t, end: t + d, text: tok }
+    t += d
+    return w
+  })
+}
+
+export function parseLrc(raw: string, durationMs?: number | null, source = 'LRCLIB'): Lyrics | null {
+  const text = raw.replace(/^﻿/, '').replace(/\r\n?/g, '\n')
+  if (!text.trim()) return null
+  let offset = 0
+  const entries: Entry[] = []
+  const plain: string[] = []
+  let last: Entry[] = []
+
+  for (const line of text.split('\n')) {
+    const bg = bgLine.exec(line)
+    if (bg) {
+      const { text: shown, words } = parseWords(bg[1])
+      if (!shown) continue
+      plain.push(`(${shown})`)
+      for (const e of last) {
+        e.bg = e.bg ? `${e.bg} ${shown}` : shown
+        e.bgWords = [...(e.bgWords ?? []), ...words.map((w) => ({ ...w, start: w.start + (e.time - last[0].time), end: w.end + (e.time - last[0].time) }))]
+      }
+      continue
+    }
+    const stamps: number[] = []
+    let rest = line
+    for (;;) {
+      const m = timeTag.exec(rest)
+      if (!m) break
+      stamps.push(toMs(m[1], m[2], m[3]))
+      rest = rest.slice(m[0].length)
+    }
+    if (stamps.length === 0) {
+      const meta = metaTag.exec(line)
+      if (meta) {
+        const key = meta[1].trim().toLowerCase()
+        if (key === 'offset') offset = Number(meta[2].trim().replace(/^\+/, '')) || offset
+        if (metaKeys.has(key)) continue
+      }
+      plain.push(line.trimEnd())
+      continue
+    }
+    const parsed = parseWords(rest.replace(voicePrefix, ''))
+    // "♪" / "…" lines mark instrumental passages.
+    const lineText = /^[\s♪♫♬♩…·•.\-]*$/.test(parsed.text) ? '' : parsed.text
+    const words = lineText ? parsed.words : []
+    const made = stamps.map((s) => ({ time: s, text: lineText, words: words.map((w) => ({ ...w, start: w.start + (s - stamps[0]), end: w.end + (s - stamps[0]) })) }))
+    entries.push(...made)
+    last = made
+  }
+
+  if (entries.length === 0) {
+    while (plain.length && !plain[0].trim()) plain.shift()
+    while (plain.length && !plain[plain.length - 1].trim()) plain.pop()
+    return plain.length ? { kind: 'plain', lines: plain, source } : null
+  }
+
+  const sorted = entries
+    .map((e) => (offset ? { ...e, time: Math.max(0, e.time - offset), words: e.words.map((w) => ({ ...w, start: w.start - offset, end: w.end - offset })) } : e))
+    .sort((a, b) => a.time - b.time)
+
+  const out: LyricLine[] = []
+  const first = sorted[0]
+  if (first.time >= INSTRUMENTAL_GAP_MS && (first.text || first.bg)) out.push({ start: 0, end: first.time, text: '', words: [], estimated: false })
+  for (let i = 0; i < sorted.length; i++) {
+    const cur = sorted[i]
+    const next = sorted[i + 1]
+    const hardEnd = next ? next.time : durationMs && durationMs > cur.time ? durationMs : cur.time + LAST_LINE_MS
+    if (!cur.text && !cur.bg) {
+      // An empty timed line is an explicit break.
+      out.push({ start: cur.time, end: hardEnd, text: '', words: [], estimated: false })
+      continue
+    }
+    const split = cur.bg ? { text: cur.text, background: cur.bg } : splitBackground(cur.text)
+    const wordCount = split.text.split(/\s+/).filter(Boolean).length
+    const sungEnd = cur.words.length ? cur.words[cur.words.length - 1].end : cur.time + Math.max(MIN_LINE_MS, wordCount * MS_PER_WORD * 1.6)
+    let end = hardEnd
+    let gap = false
+    if (next && next.time - sungEnd >= INSTRUMENTAL_GAP_MS) {
+      end = Math.max(cur.time + MIN_LINE_MS, sungEnd + 800)
+      gap = true
+    }
+    const words = cur.words.length && !cur.bg && split.background ? cur.words.filter((w) => split.text.includes(w.text)) : cur.words
+    out.push({
+      start: cur.time,
+      end,
+      text: split.text,
+      words: words.length ? words : estimateWords(split.text, cur.time, end),
+      background: split.background,
+      backgroundWords: cur.bgWords,
+      estimated: words.length === 0,
+    })
+    if (gap && next) out.push({ start: end, end: next.time, text: '', words: [], estimated: false })
+  }
+  return { kind: 'synced', lines: out, source }
+}
+
+/** Index of the line being sung at [pos]; -1 before the first line. */
+export function activeIndex(lines: LyricLine[], pos: number): number {
+  if (!lines.length || pos < lines[0].start) return -1
+  let lo = 0
+  let hi = lines.length - 1
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >>> 1
+    if (lines[mid].start <= pos) lo = mid
+    else hi = mid - 1
+  }
+  return lo
+}
+
+export function progress(start: number, end: number, pos: number): number {
+  if (pos <= start) return 0
+  if (end <= start || pos >= end) return 1
+  return (pos - start) / (end - start)
+}
+
+// ── LRCLIB ───────────────────────────────────────────────────────────────────
+interface LrclibRecord { id?: number; trackName?: string; artistName?: string; albumName?: string; duration?: number; instrumental?: boolean; plainLyrics?: string | null; syncedLyrics?: string | null }
+
+const noise = /\s*[([](?:[^)\]]*(?:feat|ft\.|with |official|lyric|audio|video|visuali[sz]er|remaster|live|explicit|clean|hd|4k)[^)\]]*)[)\]]/gi
+const dashFeat = /\s+-\s+(?:feat|ft)\..*$/i
+export const cleanTitle = (raw: string) => raw.replace(noise, '').replace(dashFeat, '').trim()
+
+export type LyricsResult = { status: 'found'; lyrics: Lyrics } | { status: 'instrumental' } | { status: 'none' }
+
+async function lrclib(ep: 'get' | 'search', params: Record<string, string>): Promise<unknown> {
+  const qs = new URLSearchParams({ ep, ...params })
+  const r = await fetch(`/api/lyrics?${qs.toString()}`)
+  if (r.status === 404) return null
+  if (!r.ok) throw new Error(`lyrics ${r.status}`)
+  return r.json()
+}
+
+function toResult(rec: LrclibRecord, durationMs?: number | null): LyricsResult | null {
+  if (rec.syncedLyrics?.trim()) {
+    const l = parseLrc(rec.syncedLyrics, durationMs)
+    if (l) return { status: 'found', lyrics: l }
+  }
+  if (rec.plainLyrics?.trim()) {
+    const l = parseLrc(rec.plainLyrics, durationMs)
+    if (l) return { status: 'found', lyrics: l }
+  }
+  if (rec.instrumental) return { status: 'instrumental' }
+  return null
+}
+
+/** Looks a song up on LRCLIB: exact signature first, then a search preferring synced + closest duration. */
+export async function findLyrics(track: Track): Promise<LyricsResult> {
+  const cacheKey = `lyr|v2|${track.id}`
+  const hit = await idbGet<{ result: LyricsResult; at: number }>(cacheKey, 'cache')
+  if (hit && (hit.result.status === 'found' || Date.now() - hit.at < 3 * 86_400_000)) return hit.result
+  useUsage.getState().bump({ lyricsLookups: 1 })
+  const title = cleanTitle(track.title)
+  const artist = track.artist.split(',')[0].split(' & ')[0].split(' x ')[0].trim()
+  if (!title || !artist) return { status: 'none' }
+  const durSec = track.durationMs ? track.durationMs / 1000 : null
+
+  let result: LyricsResult | null = null
+  if (durSec) {
+    const rec = (await lrclib('get', {
+      track_name: title, artist_name: artist, duration: String(Math.round(durSec)),
+      ...(track.album ? { album_name: track.album } : {}),
+    })) as LrclibRecord | null
+    if (rec) result = toResult(rec, track.durationMs)
+  }
+  if (!result) {
+    const list = ((await lrclib('search', { track_name: title, artist_name: artist })) as LrclibRecord[] | null) ?? []
+    const best = list
+      .filter((c) => (c.syncedLyrics ?? c.plainLyrics)?.trim() || c.instrumental)
+      .filter((c) => durSec == null || c.duration == null || Math.abs(c.duration - durSec) <= 6)
+      .filter((c) => titleSimilarity(cleanTitle(c.trackName ?? ''), title) >= 0.6)
+      .sort((a, b) => Number(!!b.syncedLyrics?.trim()) - Number(!!a.syncedLyrics?.trim()) ||
+        (durSec == null ? 0 : Math.abs((a.duration ?? 1e9) - durSec) - Math.abs((b.duration ?? 1e9) - durSec)))[0]
+    if (best) result = toResult(best, track.durationMs)
+  }
+  const final = result ?? { status: 'none' as const }
+  void idbSet(cacheKey, { result: final, at: Date.now() }, 'cache')
+  return final
+}
+
+/** Saves lyrics written by Arnav AI or pasted by the listener for this song. */
+export async function saveLyrics(track: Track, raw: string, source: string): Promise<Lyrics | null> {
+  const lyrics = parseLrc(raw, track.durationMs, source)
+  if (lyrics) await idbSet(`lyr|v2|${track.id}`, { result: { status: 'found', lyrics }, at: Date.now() }, 'cache')
+  return lyrics
+}

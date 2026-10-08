@@ -1,0 +1,127 @@
+import type { CSSProperties } from 'react'
+
+/** Minimal, consistent 24px icon set (stroke 1.8, round joins) in the spirit of SF Symbols. */
+const P: Record<string, string> = {
+  home: 'M3.5 10.5 12 3.8l8.5 6.7V19a1.5 1.5 0 0 1-1.5 1.5h-4.2v-6.2H9.2v6.2H5A1.5 1.5 0 0 1 3.5 19z',
+  compass: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zm3.6-12.6-2.1 5.1-5.1 2.1 2.1-5.1z',
+  search: 'M10.8 18.1a7.3 7.3 0 1 0 0-14.6 7.3 7.3 0 0 0 0 14.6zM16.1 16.1l4.4 4.4',
+  sparkles: 'M10 3.5c.6 3.4 2.6 5.4 6 6-3.4.6-5.4 2.6-6 6-.6-3.4-2.6-5.4-6-6 3.4-.6 5.4-2.6 6-6zM18 14.5c.3 1.7 1.3 2.7 3 3-1.7.3-2.7 1.3-3 3-.3-1.7-1.3-2.7-3-3 1.7-.3 2.7-1.3 3-3zM18.5 2.8c.2 1 .8 1.6 1.8 1.8-1 .2-1.6.8-1.8 1.8-.2-1-.8-1.6-1.8-1.8 1-.2 1.6-.8 1.8-1.8z',
+  moments: 'M3 15c3-5 6-7.5 9-7.5S18 10 21 15M3 19.5c3-3 6-4.5 9-4.5s6 1.5 9 4.5M12 3.5v1.5M5.6 6l1 1M18.4 6l-1 1',
+  library: 'M5 4v16M9.5 4v16M14 4.6l5.2 15',
+  chart: 'M4 20h16M7 16.5V11M12 16.5V6M17 16.5v-8',
+  gear: 'M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4zM19.4 13.5l1.6 1.2-1.8 3.1-1.9-.7a7.4 7.4 0 0 1-1.9 1.1l-.3 2h-3.6l-.3-2a7.4 7.4 0 0 1-1.9-1.1l-1.9.7-1.8-3.1 1.6-1.2a7.6 7.6 0 0 1 0-2.9L3.4 9.4l1.8-3.1 1.9.7a7.4 7.4 0 0 1 1.9-1.1l.3-2h3.6l.3 2a7.4 7.4 0 0 1 1.9 1.1l1.9-.7 1.8 3.1-1.6 1.2a7.6 7.6 0 0 1 0 2.9z',
+  next: 'M5 5.5v13l9.5-6.5zM18.5 5.5v13',
+  prev: 'M19 5.5v13l-9.5-6.5zM5.5 5.5v13',
+  shuffle: 'M3.5 7h3.2c2 0 3.1.8 4.2 2.5l2.2 4.9c.8 1.7 2.1 2.6 4.1 2.6h3.3M3.5 17h3.2c1.5 0 2.5-.5 3.3-1.5M14.4 8.5c.8-1 1.8-1.5 3.3-1.5h3.3M18.5 4.5 21 7l-2.5 2.5M18.5 14.5 21 17l-2.5 2.5',
+  repeat: 'M4 11V9.5A3.5 3.5 0 0 1 7.5 6H19M16 3l3 3-3 3M20 13v1.5a3.5 3.5 0 0 1-3.5 3.5H5M8 21l-3-3 3-3',
+  heart: 'M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 8.8 5.5c1.4 0 2.5.6 3.2 1.7.7-1.1 1.8-1.7 3.2-1.7a4.3 4.3 0 0 1 4.3 4.3C19.5 15.4 12 20 12 20z',
+  plus: 'M12 5v14M5 12h14',
+  more: 'M5.5 12h.01M12 12h.01M18.5 12h.01',
+  queue: 'M4 6h12M4 11h12M4 16h7M15.5 14v6.5l5-3.25z',
+  lyrics: 'M4.5 5.5h15a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H10l-4.5 3.5v-3.5h-1a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1zM8 9.5h8M8 12.5h5',
+  volume: 'M4 9.5h3l4.5-4v13L7 14.5H4zM15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11',
+  volumeLow: 'M4 9.5h3l4.5-4v13L7 14.5H4zM15.5 9a4 4 0 0 1 0 6',
+  mute: 'M4 9.5h3l4.5-4v13L7 14.5H4zM16 9.5l5 5M21 9.5l-5 5',
+  chevronLeft: 'M14.5 5.5 8 12l6.5 6.5',
+  chevronRight: 'M9.5 5.5 16 12l-6.5 6.5',
+  chevronDown: 'M5.5 9.5 12 16l6.5-6.5',
+  chevronUp: 'M5.5 14.5 12 8l6.5 6.5',
+  close: 'M6 6l12 12M18 6 6 18',
+  check: 'M5 12.5 10 17.5 19 7',
+  clock: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7.5V12l3 2',
+  user: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4.5 20.5c.8-3.6 3.8-5.5 7.5-5.5s6.7 1.9 7.5 5.5',
+  logout: 'M15 4.5h3a1.5 1.5 0 0 1 1.5 1.5v12a1.5 1.5 0 0 1-1.5 1.5h-3M10 16.5 5.5 12 10 7.5M5.5 12h10',
+  cloud: 'M7 18.5h10a4 4 0 0 0 .6-8A6 6 0 0 0 6.1 9.6 4.5 4.5 0 0 0 7 18.5z',
+  sync: 'M19.5 12a7.5 7.5 0 0 1-13 5.1M4.5 12a7.5 7.5 0 0 1 13-5.1M17.5 3.5v3.4h-3.4M6.5 20.5v-3.4h3.4',
+  trash: 'M4.5 6.5h15M9.5 6.5V4.5h5v2M6.5 6.5l.8 13a1.5 1.5 0 0 0 1.5 1.4h6.4a1.5 1.5 0 0 0 1.5-1.4l.8-13M10 10.5v6.5M14 10.5v6.5',
+  edit: 'M4.5 19.5l1-4 10.4-10.4a2.1 2.1 0 0 1 3 3L8.5 18.5zM14 7l3 3',
+  pin: 'M14.5 3.5l6 6-2.7.9-3.8 3.8-.6 4-3.6-3.6-4.8 4.9M9.8 14.6 5.5 10.3l4-.6 3.8-3.8z',
+  link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
+  share: 'M12 3.5v11M8 7.5l4-4 4 4M5.5 12v6.5a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V12',
+  radio: 'M12 13.8a1.8 1.8 0 1 0 0-3.6 1.8 1.8 0 0 0 0 3.6zM8.5 15.5a5 5 0 0 1 0-7M15.5 8.5a5 5 0 0 1 0 7M5.6 18.4a9 9 0 0 1 0-12.8M18.4 5.6a9 9 0 0 1 0 12.8',
+  expand: 'M14.5 4.5h5v5M9.5 19.5h-5v-5M19.5 4.5l-6 6M4.5 19.5l6-6',
+  minimize: 'M4.5 14.5h5v5M19.5 9.5h-5v-5M4.5 19.5l5-5M19.5 4.5l-5 5',
+  moon: 'M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10z',
+  sun: 'M12 16.5a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9zM12 2.5v2M12 19.5v2M4.6 4.6 6 6M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4',
+  speed: 'M12 20.5a8.5 8.5 0 1 1 8.5-8.5M12 12l4.5-4.5M20.5 16v4.5M18 18.5h5',
+  grid: 'M4.5 4.5h6v6h-6zM13.5 4.5h6v6h-6zM4.5 13.5h6v6h-6zM13.5 13.5h6v6h-6z',
+  list: 'M8.5 6h11M8.5 12h11M8.5 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01',
+  drag: 'M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01',
+  external: 'M13.5 4.5h6v6M19.5 4.5l-8 8M17.5 13.5v4.5a1.5 1.5 0 0 1-1.5 1.5H6a1.5 1.5 0 0 1-1.5-1.5V8A1.5 1.5 0 0 1 6 6.5h4.5',
+  info: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 11v5.5M12 7.5h.01',
+  keyboard: 'M3.5 6.5h17a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-17a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1zM7 10h.01M10.5 10h.01M14 10h.01M17.5 10h.01M7.5 14h9',
+  globe: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM3 12h18M12 3c2.4 2.5 3.6 5.5 3.6 9S14.4 18.5 12 21c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3z',
+  download: 'M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19.5h14',
+  upload: 'M12 15V4M7.5 8.5 12 4l4.5 4.5M5 19.5h14',
+  bolt: 'M13 2.5 5 13.5h6l-1 8 8-11h-6z',
+  wand: 'M4 20 15.5 8.5M14 4.5V2.5M19.5 10h2M18 6l1.5-1.5M10 4.5 9 3M20 14.5l1 1M13.5 6.5l4 4',
+  minus: 'M5 12h14',
+  album: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 14.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',
+  history: 'M4 12a8 8 0 1 0 2.3-5.6M4 4.5v3.9h3.9M12 8v4.5l3 1.8',
+  mic: 'M12 14.5a3 3 0 0 0 3-3v-5a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3zM6.5 11a5.5 5.5 0 0 0 11 0M12 16.5v4',
+  tv: 'M3.5 5.5h17a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-17a1 1 0 0 1-1-1v-10a1 1 0 0 1 1-1zM8 20.5h8',
+  note: 'M9 17.5V5.5l10.5-2v12M9 17.5a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0zM19.5 15.5a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z',
+  translate: 'M4 5.5h9M8.5 3.5v2M6 5.5c.8 3 2.8 5.4 6 7M11 5.5c-.8 3-2.8 5.4-6 7M13 20.5l3.7-9 3.8 9M14.2 17.5h5',
+  flame: 'M12 21c3.6 0 6-2.5 6-6 0-3-2-5.5-3.5-7-.2 2-1.3 3.2-2.5 3.5C12.5 8 11 5 8.5 3c.3 3-3 5.5-3 10 0 4 2.9 8 6.5 8z',
+  trophy: 'M8 4.5h8v5a4 4 0 0 1-8 0zM8 6.5H4.5v1a3 3 0 0 0 3.5 3M16 6.5h3.5v1a3 3 0 0 1-3.5 3M12 13.5v4M8.5 20.5h7',
+  filter: 'M4 6h16M7 12h10M10 18h4',
+  stop: 'M7 7h10v10H7z',
+}
+
+const FILLED: Record<string, string> = {
+  play: 'M7.5 4.6v14.8c0 .9 1 1.4 1.7.9l11.3-7.4a1.05 1.05 0 0 0 0-1.8L9.2 3.7c-.7-.5-1.7 0-1.7.9z',
+  pause: 'M7 4.5h3a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-13a1 1 0 0 1 1-1zM14 4.5h3a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1v-13a1 1 0 0 1 1-1z',
+  heartFill: 'M12 20.3s-8-4.8-8-10.6A4.6 4.6 0 0 1 8.6 5c1.4 0 2.6.6 3.4 1.6.8-1 2-1.6 3.4-1.6A4.6 4.6 0 0 1 20 9.7c0 5.8-8 10.6-8 10.6z',
+  nextFill: 'M4.5 5.8v12.4c0 .8.9 1.3 1.6.8l8.6-6.2a1 1 0 0 0 0-1.6L6.1 5c-.7-.5-1.6 0-1.6.8zM16.5 5h2.2a.8.8 0 0 1 .8.8v12.4a.8.8 0 0 1-.8.8h-2.2a.8.8 0 0 1-.8-.8V5.8a.8.8 0 0 1 .8-.8z',
+  prevFill: 'M19.5 5.8v12.4c0 .8-.9 1.3-1.6.8l-8.6-6.2a1 1 0 0 1 0-1.6L17.9 5c.7-.5 1.6 0 1.6.8zM7.5 5H5.3a.8.8 0 0 0-.8.8v12.4c0 .4.4.8.8.8h2.2c.4 0 .8-.4.8-.8V5.8a.8.8 0 0 0-.8-.8z',
+  youtube: 'M21.6 7.2a2.5 2.5 0 0 0-1.8-1.8C18.2 5 12 5 12 5s-6.2 0-7.8.4A2.5 2.5 0 0 0 2.4 7.2C2 8.8 2 12 2 12s0 3.2.4 4.8a2.5 2.5 0 0 0 1.8 1.8C5.8 19 12 19 12 19s6.2 0 7.8-.4a2.5 2.5 0 0 0 1.8-1.8c.4-1.6.4-4.8.4-4.8s0-3.2-.4-4.8zM10 15V9l5.2 3z',
+  google: 'M21.8 12.2c0-.7-.1-1.4-.2-2H12v3.8h5.5a4.7 4.7 0 0 1-2 3.1v2.6h3.3c1.9-1.8 3-4.4 3-7.5zM12 22c2.7 0 5-.9 6.8-2.4l-3.3-2.6c-.9.6-2.1 1-3.5 1-2.7 0-5-1.8-5.8-4.3H2.8v2.6A10 10 0 0 0 12 22zM6.2 13.7a6 6 0 0 1 0-3.8V7.3H2.8a10 10 0 0 0 0 9zM12 6c1.5 0 2.9.5 4 1.5l2.9-2.9A10 10 0 0 0 2.8 7.3l3.4 2.6C7 7.8 9.3 6 12 6z',
+}
+
+export type IconName = keyof typeof P | keyof typeof FILLED
+
+export function Icon({ name, size = 20, className, style, strokeWidth = 1.8, title }: { name: IconName; size?: number; className?: string; style?: CSSProperties; strokeWidth?: number; title?: string }) {
+  const filled = name in FILLED
+  const d = filled ? FILLED[name as keyof typeof FILLED] : P[name as keyof typeof P]
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      className={className}
+      style={{ flex: 'none', ...style }}
+      fill={filled ? 'currentColor' : 'none'}
+      stroke={filled ? 'none' : 'currentColor'}
+      strokeWidth={name === 'more' || name === 'drag' ? Math.max(2.8, strokeWidth) : strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden={title ? undefined : true}
+      role={title ? 'img' : undefined}
+    >
+      {title && <title>{title}</title>}
+      <path d={d} fillRule={name === 'google' ? 'nonzero' : 'evenodd'} />
+    </svg>
+  )
+}
+
+/** The Arnav Music mark: a light-arc rising into an apex, with a waveform cross-bar — a soft "A". */
+export function Logo({ size = 30, glow = false }: { size?: number; glow?: boolean }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 108 108" aria-label="Arnav Music" role="img" style={{ flex: 'none', filter: glow ? 'drop-shadow(0 4px 18px rgba(140,124,255,.45))' : undefined }}>
+      <defs>
+        <linearGradient id="am-bg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#1d1838" />
+          <stop offset="1" stopColor="#07070c" />
+        </linearGradient>
+        <linearGradient id="am-arc" x1="33" y1="73" x2="75" y2="38" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#52D6C3" />
+          <stop offset="1" stopColor="#B9AEFF" />
+        </linearGradient>
+      </defs>
+      <rect width="108" height="108" rx="26" fill="url(#am-bg)" />
+      <rect x="0.75" y="0.75" width="106.5" height="106.5" rx="25.5" fill="none" stroke="rgba(255,255,255,.1)" strokeWidth="1.5" />
+      <path d="M33,73 C39,62 44.5,38 54,38.5 C63.5,39 69,62 75,73" stroke="url(#am-arc)" strokeWidth="5.2" strokeLinecap="round" fill="none" />
+      <path d="M42.5,62 C46,57.5 48.5,66.5 54,62 C59.5,57.5 62,66.5 65.5,62" stroke="#fff" strokeWidth="4" strokeLinecap="round" fill="none" />
+    </svg>
+  )
+}

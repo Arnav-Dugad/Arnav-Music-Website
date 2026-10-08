@@ -1,0 +1,19 @@
+{
+  // Cloudflare Workers with static assets: the SPA is served from ./dist,
+  // /api/* runs in worker/index.ts. Deploy: npm run deploy:cloudflare
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "arnav-music",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "observability": { "enabled": true },
+  // Shared response cache for YouTube + LRCLIB (saves quota across all visitors).
+  // Forks: create your own with `npx wrangler kv namespace create YT_CACHE` and replace the id.
+  "kv_namespaces": [{ "binding": "YT_CACHE", "id": "dff3779a9544425a9aa0666f12b96512" }]
+  // Secret (never committed): npx wrangler secret put YOUTUBE_API_KEY
+}
