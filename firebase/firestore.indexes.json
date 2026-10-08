@@ -1,0 +1,20 @@
+{
+  "indexes": [],
+  "fieldOverrides": [
+    {
+      "collectionGroup": "vaultChunks",
+      "fieldPath": "payload",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "backups",
+      "fieldPath": "chunkIds",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "backups",
+      "fieldPath": "counts",
+      "indexes": []
+    }
+  ]
+}

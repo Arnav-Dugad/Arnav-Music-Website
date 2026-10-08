@@ -1,0 +1,161 @@
+rules_version = '2';
+
+// Arnav Music — Firestore security rules (Android app + web edition).
+// Every document lives under users/{uid}; only that signed-in user can touch it.
+// Writes are shape- and size-validated server-side; the client is never trusted.
+//
+// Changes from the Android app's original rules (all backwards compatible with what the
+// Android app and the website write; verified in the emulator):
+//   • likes: the doc id must be a YouTube track id ("yt:…"), and an embedded track must be
+//     the same track (track.id == trackId) with a well-formed playbackRef.
+//   • playlists: ids are limited to [A-Za-z0-9_-] (covers arn_ / ytimp_ / imp_ ids).
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
+    function onlyKeys(allowed) { return request.resource.data.keys().hasOnly(allowed); }
+    function str(v, max) { return v is string && v.size() <= max; }
+    function optStr(field, max) {
+      return !(field in request.resource.data) || request.resource.data[field] == null || str(request.resource.data[field], max);
+    }
+    function ts(v) { return v is int && v >= 0 && v <= request.time.toMillis() + 86400000; }
+
+    function validTrack(t) {
+      return t is map
+        && t.keys().hasOnly(['id', 'title', 'artist', 'album', 'durationMs', 'artworkUrl', 'playbackRef', 'channelId', 'genres'])
+        && str(t.id, 64) && str(t.title, 200) && str(t.artist, 200) && str(t.playbackRef, 200)
+        && (!('album' in t) || t.album == null || str(t.album, 200))
+        && (!('artworkUrl' in t) || t.artworkUrl == null || str(t.artworkUrl, 500))
+        && (!('channelId' in t) || t.channelId == null || str(t.channelId, 64))
+        && (!('genres' in t) || t.genres == null || str(t.genres, 200))
+        && (!('durationMs' in t) || t.durationMs == null || (t.durationMs is int && t.durationMs >= 0 && t.durationMs < 86400000));
+    }
+
+    match /users/{uid} {
+      allow read, delete: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && onlyKeys(['displayName', 'settings', 'updatedAt', 'schema'])
+        && optStr('displayName', 80)
+        && optStr('settings', 8000)
+        && ts(request.resource.data.updatedAt)
+        && request.resource.data.schema is int;
+
+      match /likes/{trackId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+          && trackId.matches('^yt:[A-Za-z0-9_-]{1,61}$')
+          && onlyKeys(['trackId', 'likedAt', 'updatedAt', 'deleted', 'track'])
+          && request.resource.data.trackId == trackId
+          && ts(request.resource.data.likedAt)
+          && ts(request.resource.data.updatedAt)
+          && request.resource.data.deleted is bool
+          && (request.resource.data.track == null
+            || (validTrack(request.resource.data.track)
+              && request.resource.data.track.id == trackId
+              && request.resource.data.track.playbackRef.matches('^[A-Za-z0-9_-]{1,64}$')));
+      }
+
+      match /playlists/{playlistId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+          && playlistId.matches('^[A-Za-z0-9_-]{1,64}$')
+          && onlyKeys(['name', 'description', 'kind', 'artworkUrl', 'pinned', 'createdAt', 'updatedAt', 'deleted', 'tracks'])
+          && str(request.resource.data.name, 100)
+          && str(request.resource.data.description, 500)
+          && request.resource.data.kind == 'ARNAV'
+          && optStr('artworkUrl', 500)
+          && request.resource.data.pinned is bool
+          && ts(request.resource.data.createdAt)
+          && ts(request.resource.data.updatedAt)
+          && request.resource.data.deleted is bool
+          && request.resource.data.tracks is list
+          && request.resource.data.tracks.size() <= 500;
+      }
+
+      match /liveRecords/{recordId} {
+        allow read, delete: if isOwner(uid);
+        function validLive() {
+          let d = request.resource.data;
+          return onlyKeys(['kind','value','revision','deleted','deviceId','updatedAt','schema'])
+            && d.schema == 1 && d.deviceId.matches('^[0-9a-f-]{36}$')
+            && d.updatedAt == request.time && d.deleted is bool
+            && d.revision is int && d.revision > 0 && d.revision <= 2147483647
+            && ((d.kind == 'history' && recordId.matches('^h_[0-9a-f]{64}$') && str(d.value, 4000))
+              || (d.kind == 'queue' && recordId == 'q_shared' && str(d.value, 200000) && !d.deleted)
+              || (d.kind == 'setting' && recordId in ['s_themeMode','s_accentMode','s_presetAccent','s_glass','s_motion','s_artworkMotion','s_gyroParallax','s_haptics','s_performance','s_highContrast','s_reduceTransparency','s_libraryLayout','s_gapless','s_fadeMs','s_crossfadeMs','s_skipSilence','s_playbackSpeed','s_pauseOnDisconnect','s_aiEnabled','s_aiPersonalization','s_explanations','s_dailyAiLimit','s_youtubeDailyBudget','s_weeklyRecapNotification','s_selectedMoods','s_seedArtists','s_regionCode','s_autoUpdate','s_updateWifiOnly','s_preferVideos','s_autoReplaceUnavailable','s_floatingPlayer','s_beatVisuals','s_ambientEdgeGlow','s_analyzeLocalAudio','s_miniPlayerLyrics','s_smartTransitions','s_onlineLyrics','s_lyricsTranslation','s_lyricsRomanization','s_autoTagLocal','s_widgetMaterialYou','s_endlessRadio','s_autoAiLyrics','s_cropArtTracks','s_movingGradient','s_doubleTapSeek','s_coverParticles','s_beatDropHaptics','s_studio'] && str(d.value, 8000) && !d.deleted));
+        }
+        allow create: if isOwner(uid) && validLive() && request.resource.data.revision == 1;
+        allow update: if isOwner(uid) && validLive()
+          && request.resource.data.revision == resource.data.revision + 1
+          && request.resource.data.kind == resource.data.kind
+          && (resource.data.kind != 'history'
+            || (request.resource.data.value == resource.data.value
+              && request.resource.data.deviceId == resource.data.deviceId
+              && (!resource.data.deleted || request.resource.data.deleted)));
+      }
+
+      match /vaultChunks/{chunkId} {
+        allow read, delete: if isOwner(uid);
+        allow create: if isOwner(uid)
+          && chunkId.matches('^[0-9a-f]{64}$')
+          && onlyKeys(['hash', 'payload', 'bytes', 'schema', 'createdAt'])
+          && request.resource.data.hash == chunkId
+          && str(request.resource.data.payload, 409600)
+          && request.resource.data.bytes is int && request.resource.data.bytes > 0 && request.resource.data.bytes <= 307200
+          && request.resource.data.schema == 1 && request.resource.data.createdAt == request.time;
+        allow update: if false;
+      }
+      match /backups/{backupId} {
+        allow read, delete: if isOwner(uid);
+        allow create: if isOwner(uid)
+          && onlyKeys(['schema', 'roomVersion', 'deviceId', 'deviceLabel', 'appVersion', 'createdAt', 'publishedAt', 'hash', 'bytes', 'chunkIds', 'counts'])
+          && request.resource.data.schema == 1 && request.resource.data.roomVersion == 6
+          && request.resource.data.deviceId.matches('^[0-9a-f-]{36}$')
+          && request.resource.data.hash.matches('^[0-9a-f]{64}$')
+          && backupId == request.resource.data.deviceId + '_' + request.resource.data.hash
+          && str(request.resource.data.deviceLabel, 100) && str(request.resource.data.appVersion, 40)
+          && ts(request.resource.data.createdAt) && request.resource.data.publishedAt == request.time
+          && request.resource.data.bytes is int && request.resource.data.bytes > 0 && request.resource.data.bytes <= 67108864
+          && request.resource.data.chunkIds is list && request.resource.data.chunkIds.size() > 0 && request.resource.data.chunkIds.size() <= 256
+          && request.resource.data.counts is map && request.resource.data.counts.keys().hasOnly(['tracks','likes','playlists','playlist_tracks','play_events','search_cache','recent_searches','ai_cache','kv_sync','lyrics','audio_features','pending_matches','import_history','tag_overrides','rec_feedback','skip_marks'])
+          && request.resource.data.counts.tracks is int && request.resource.data.counts.tracks >= 0 && request.resource.data.counts.tracks <= 1000000
+          && request.resource.data.counts.likes is int && request.resource.data.counts.likes >= 0 && request.resource.data.counts.likes <= 1000000
+          && request.resource.data.counts.playlists is int && request.resource.data.counts.playlists >= 0 && request.resource.data.counts.playlists <= 1000000
+          && request.resource.data.counts.playlist_tracks is int && request.resource.data.counts.playlist_tracks >= 0 && request.resource.data.counts.playlist_tracks <= 1000000
+          && request.resource.data.counts.play_events is int && request.resource.data.counts.play_events >= 0 && request.resource.data.counts.play_events <= 1000000
+          && request.resource.data.counts.search_cache is int && request.resource.data.counts.search_cache >= 0 && request.resource.data.counts.search_cache <= 1000000
+          && request.resource.data.counts.recent_searches is int && request.resource.data.counts.recent_searches >= 0 && request.resource.data.counts.recent_searches <= 1000000
+          && request.resource.data.counts.ai_cache is int && request.resource.data.counts.ai_cache >= 0 && request.resource.data.counts.ai_cache <= 1000000
+          && request.resource.data.counts.kv_sync is int && request.resource.data.counts.kv_sync >= 0 && request.resource.data.counts.kv_sync <= 1000000
+          && request.resource.data.counts.lyrics is int && request.resource.data.counts.lyrics >= 0 && request.resource.data.counts.lyrics <= 1000000
+          && request.resource.data.counts.audio_features is int && request.resource.data.counts.audio_features >= 0 && request.resource.data.counts.audio_features <= 1000000
+          && request.resource.data.counts.pending_matches is int && request.resource.data.counts.pending_matches >= 0 && request.resource.data.counts.pending_matches <= 1000000
+          && request.resource.data.counts.import_history is int && request.resource.data.counts.import_history >= 0 && request.resource.data.counts.import_history <= 1000000
+          && request.resource.data.counts.tag_overrides is int && request.resource.data.counts.tag_overrides >= 0 && request.resource.data.counts.tag_overrides <= 1000000
+          && request.resource.data.counts.rec_feedback is int && request.resource.data.counts.rec_feedback >= 0 && request.resource.data.counts.rec_feedback <= 1000000
+          && request.resource.data.counts.skip_marks is int && request.resource.data.counts.skip_marks >= 0 && request.resource.data.counts.skip_marks <= 1000000;
+        allow update: if false;
+      }
+      match /devices/{deviceId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+          && deviceId.matches('^[0-9a-f-]{36}$')
+          && onlyKeys(['deviceLabel', 'appVersion', 'latestBackup', 'updatedAt', 'schema'])
+          && str(request.resource.data.deviceLabel, 100) && str(request.resource.data.appVersion, 40)
+          && str(request.resource.data.latestBackup, 110)
+          && request.resource.data.schema == 1 && request.resource.data.updatedAt == request.time
+          && getAfter(/databases/$(database)/documents/users/$(uid)/backups/$(request.resource.data.latestBackup)).data.deviceId == deviceId;
+      }
+
+      // Anything not explicitly modelled is denied.
+      match /{rest=**} {
+        allow read, write: if false;
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
