@@ -1,7 +1,3 @@
-import { idbGet, idbSet } from './idb'
-import { titleSimilarity } from './classify'
-import { useUsage } from './usage'
-import type { Track } from './types'
 
 /** One sung word with absolute timing (ms). */
 export interface LyricWord { start: number; end: number; text: string }
@@ -87,9 +83,10 @@ function syllables(word: string): number {
 export function estimateWords(text: string, start: number, end: number): LyricWord[] {
   const tokens = text.split(/\s+/).filter(Boolean)
   if (!tokens.length) return []
-  const weights = tokens.map(syllables)
+  // Singers hold the last word of a line and breathe at commas: give those more time.
+  const weights = tokens.map((t, i) => syllables(t) + (i === tokens.length - 1 ? 1.1 : 0) + (/[,;:!?…]$/.test(t) ? 0.5 : 0))
   const total = weights.reduce((a, b) => a + b, 0)
-  const sung = Math.min(end - start, Math.max(MIN_LINE_MS * 0.8, tokens.length * MS_PER_WORD * 1.15))
+  const sung = Math.min(end - start, Math.max(MIN_LINE_MS * 0.8, tokens.length * MS_PER_WORD * 1.15 + 450))
   let t = start
   return tokens.map((tok, i) => {
     const d = (sung * weights[i]) / total
@@ -211,73 +208,7 @@ export function progress(start: number, end: number, pos: number): number {
   return (pos - start) / (end - start)
 }
 
-// ── LRCLIB ───────────────────────────────────────────────────────────────────
-interface LrclibRecord { id?: number; trackName?: string; artistName?: string; albumName?: string; duration?: number; instrumental?: boolean; plainLyrics?: string | null; syncedLyrics?: string | null }
-
+// ── Title cleaning for lyrics lookups ─────────────────────────────────────────
 const noise = /\s*[([](?:[^)\]]*(?:feat|ft\.|with |official|lyric|audio|video|visuali[sz]er|remaster|live|explicit|clean|hd|4k)[^)\]]*)[)\]]/gi
 const dashFeat = /\s+-\s+(?:feat|ft)\..*$/i
 export const cleanTitle = (raw: string) => raw.replace(noise, '').replace(dashFeat, '').trim()
-
-export type LyricsResult = { status: 'found'; lyrics: Lyrics } | { status: 'instrumental' } | { status: 'none' }
-
-async function lrclib(ep: 'get' | 'search', params: Record<string, string>): Promise<unknown> {
-  const qs = new URLSearchParams({ ep, ...params })
-  const r = await fetch(`/api/lyrics?${qs.toString()}`)
-  if (r.status === 404) return null
-  if (!r.ok) throw new Error(`lyrics ${r.status}`)
-  return r.json()
-}
-
-function toResult(rec: LrclibRecord, durationMs?: number | null): LyricsResult | null {
-  if (rec.syncedLyrics?.trim()) {
-    const l = parseLrc(rec.syncedLyrics, durationMs)
-    if (l) return { status: 'found', lyrics: l }
-  }
-  if (rec.plainLyrics?.trim()) {
-    const l = parseLrc(rec.plainLyrics, durationMs)
-    if (l) return { status: 'found', lyrics: l }
-  }
-  if (rec.instrumental) return { status: 'instrumental' }
-  return null
-}
-
-/** Looks a song up on LRCLIB: exact signature first, then a search preferring synced + closest duration. */
-export async function findLyrics(track: Track): Promise<LyricsResult> {
-  const cacheKey = `lyr|v2|${track.id}`
-  const hit = await idbGet<{ result: LyricsResult; at: number }>(cacheKey, 'cache')
-  if (hit && (hit.result.status === 'found' || Date.now() - hit.at < 3 * 86_400_000)) return hit.result
-  useUsage.getState().bump({ lyricsLookups: 1 })
-  const title = cleanTitle(track.title)
-  const artist = track.artist.split(',')[0].split(' & ')[0].split(' x ')[0].trim()
-  if (!title || !artist) return { status: 'none' }
-  const durSec = track.durationMs ? track.durationMs / 1000 : null
-
-  let result: LyricsResult | null = null
-  if (durSec) {
-    const rec = (await lrclib('get', {
-      track_name: title, artist_name: artist, duration: String(Math.round(durSec)),
-      ...(track.album ? { album_name: track.album } : {}),
-    })) as LrclibRecord | null
-    if (rec) result = toResult(rec, track.durationMs)
-  }
-  if (!result) {
-    const list = ((await lrclib('search', { track_name: title, artist_name: artist })) as LrclibRecord[] | null) ?? []
-    const best = list
-      .filter((c) => (c.syncedLyrics ?? c.plainLyrics)?.trim() || c.instrumental)
-      .filter((c) => durSec == null || c.duration == null || Math.abs(c.duration - durSec) <= 6)
-      .filter((c) => titleSimilarity(cleanTitle(c.trackName ?? ''), title) >= 0.6)
-      .sort((a, b) => Number(!!b.syncedLyrics?.trim()) - Number(!!a.syncedLyrics?.trim()) ||
-        (durSec == null ? 0 : Math.abs((a.duration ?? 1e9) - durSec) - Math.abs((b.duration ?? 1e9) - durSec)))[0]
-    if (best) result = toResult(best, track.durationMs)
-  }
-  const final = result ?? { status: 'none' as const }
-  void idbSet(cacheKey, { result: final, at: Date.now() }, 'cache')
-  return final
-}
-
-/** Saves lyrics written by Arnav AI or pasted by the listener for this song. */
-export async function saveLyrics(track: Track, raw: string, source: string): Promise<Lyrics | null> {
-  const lyrics = parseLrc(raw, track.durationMs, source)
-  if (lyrics) await idbSet(`lyr|v2|${track.id}`, { result: { status: 'found', lyrics }, at: Date.now() }, 'cache')
-  return lyrics
-}

@@ -2,7 +2,7 @@ import { handleApi } from '../server/handlers'
 
 declare const process: { env: Record<string, string | undefined> }
 
-/** Vercel Edge Function — same handler as Cloudflare. */
+/** Vercel Edge Function for every /api/* route — same handler as Cloudflare. (No KV on Vercel: caching falls back to the CDN.) */
 export const config = { runtime: 'edge' }
 
 export default function handler(request: Request): Promise<Response> {

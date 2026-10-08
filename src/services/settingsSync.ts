@@ -46,6 +46,8 @@ export const SETTING_FIELDS: Field[] = [
   { app: 'regionCode', toApp: (s) => s.regionCode, fromApp: (v) => (typeof v === 'string' && /^[A-Za-z]{0,2}$/.test(v) ? { regionCode: v.toUpperCase() } : null) },
   bool('preferVideos'), bool('autoReplaceUnavailable'), bool('endlessRadio'), bool('onlineLyrics'), bool('miniPlayerLyrics'), bool('movingGradient'),
   bool('ambientIdle', 'ambientEdgeGlow'),
+  bool('gapless'), int('crossfadeMs', 0, 12_000), bool('smartTransitions'), bool('beatVisuals'), bool('coverParticles'),
+  { app: 'fadeMs', toApp: (s) => (s.crossfadeOnSkip ? 400 : 0), fromApp: (v) => (typeof v === 'number' ? { crossfadeOnSkip: v > 0 } : null) },
 ]
 
 const byId = new Map(SETTING_FIELDS.map((f) => [`s_${f.app}`, f]))

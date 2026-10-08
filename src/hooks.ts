@@ -81,6 +81,26 @@ export function usePaletteFor(url: string | null | undefined): Palette {
   return p
 }
 
+/**
+ * Per-album colour theme: the cover's colours carried through the whole page (accent, links,
+ * buttons, selection, row hovers and a deep tint), scoped to the page and undone on leave.
+ */
+export function usePageTheme(palette: Palette) {
+  const accentMode = useSettings((s) => s.accentMode)
+  useEffect(() => {
+    const el = document.querySelector<HTMLElement>('.main-scroll')
+    if (!el || palette === DEFAULT_PALETTE) return
+    const vars: Record<string, string> = { '--page-1': palette.bg[0], '--page-2': palette.bg[1], '--page-vivid': palette.vivid }
+    if (accentMode === 'artwork') { vars['--accent'] = palette.accent; vars['--on-accent'] = palette.onAccent }
+    for (const [k, v] of Object.entries(vars)) el.style.setProperty(k, v)
+    el.classList.add('themed')
+    return () => {
+      for (const k of Object.keys(vars)) el.style.removeProperty(k)
+      el.classList.remove('themed')
+    }
+  }, [palette, accentMode])
+}
+
 /** Applies theme, glass, motion and accent to the document root. */
 export function useThemeEffects(palette: Palette) {
   const { themeMode, glass, motion, accentMode, presetAccent, highContrast } = useSettings()

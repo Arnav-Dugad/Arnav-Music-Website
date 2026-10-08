@@ -22,7 +22,7 @@ import { MOMENTS } from '../lib/moments'
 import { authMessage, linkGoogle, resetPassword, signInEmail, signInWithGoogle, signUpEmail } from '../lib/firebase'
 import { refreshAuthUser } from '../services/sync'
 import type { Track } from '../lib/types'
-import { artistKey } from '../lib/types'
+import { artistKey, MOODS, MOOD_KEYS } from '../lib/types'
 
 export async function startRadio(track: Track) {
   toast(`Starting ${track.artist} radio…`)
@@ -101,6 +101,7 @@ export function TrackMenu() {
             <MenuItem icon={liked ? 'heartFill' : 'heart'} label={liked ? 'Remove from Liked Songs' : 'Add to Liked Songs'} onClick={() => lib().toggleLike(t)} />
             {splitArtists(t.artist).map((n, _i, all) => <MenuItem key={n} icon="user" label={`Go to ${n}`} onClick={() => { player().setExpanded(false); nav(artistHref(t, n, all.length === 1)) }} />)}
             {t.album && <MenuItem icon="album" label={`Go to ${t.album}`} onClick={() => { player().setExpanded(false); nav(albumHref(t)) }} />}
+            {t.id.startsWith('yt:') && <MenuItem icon="credits" label="View credits" onClick={() => { player().setExpanded(false); nav(`/credits/${encodeURIComponent(t.id)}`) }} />}
             {menu.playlistId && menu.playlistId.startsWith('arn_') && <MenuItem icon="minus" label="Remove from this playlist" onClick={() => lib().removeFromPlaylist(menu.playlistId!, t.id)} />}
             {menu.queueKey && <MenuItem icon="minus" label="Remove from queue" onClick={() => player().remove(menu.queueKey!)} />}
             <div className="menu-sep" />
@@ -222,6 +223,24 @@ export function CommandPalette() {
     const scored = items.map((i) => ({ i, s: Math.max(matchScore(query, i.label), i.hint ? matchScore(query, i.hint) * 0.7 : 0) })).filter((x) => x.s > 0.4)
     const pls = visiblePlaylists(playlists).map((p) => ({ i: { id: `pl-${p.id}`, group: 'Your library', icon: 'note' as IconName, label: p.name, hint: `${p.trackIds.length} songs`, run: go(`/playlist/${p.id}`) }, s: matchScore(query, p.name) })).filter((x) => x.s > 0.5)
     const known = verified([...likedTracks(), ...trackRegistry.all().slice(-800)])
+    // Go to: singers, albums / films and moods, from everything you've played or searched.
+    const singers = new Map<string, { name: string; n: number; art: string }>()
+    const albums = new Map<string, { name: string; artist: string; n: number; art: string }>()
+    for (const t of known) {
+      for (const n of splitArtists(t.artist)) {
+        const k = n.toLowerCase()
+        const cur = singers.get(k)
+        singers.set(k, { name: n, n: (cur?.n ?? 0) + 1, art: cur?.art ?? artworkFor(t, 'sm') })
+      }
+      if (t.album) {
+        const k = t.album.toLowerCase()
+        const cur = albums.get(k)
+        albums.set(k, { name: t.album, artist: cur?.artist ?? t.artist, n: (cur?.n ?? 0) + 1, art: cur?.art ?? artworkFor(t, 'sm') })
+      }
+    }
+    const goSingers = [...singers.values()].map((a) => ({ i: { id: `ar-${a.name}`, group: 'Singers', icon: 'user' as IconName, label: a.name, hint: `${a.n} ${a.n === 1 ? 'song' : 'songs'}`, art: a.art, run: go(`/artist/${encodeURIComponent(a.name)}`) }, s: matchScore(query, a.name) + Math.min(0.05, a.n / 400) })).filter((x) => x.s >= 0.6).sort((a, b) => b.s - a.s).slice(0, 4)
+    const goAlbums = [...albums.values()].map((a) => ({ i: { id: `al-${a.name}`, group: 'Albums & films', icon: 'album' as IconName, label: a.name, hint: a.artist, art: a.art, run: go(`/album/${encodeURIComponent(a.name)}?a=${encodeURIComponent(a.artist)}`) }, s: matchScore(query, a.name) })).filter((x) => x.s >= 0.6).sort((a, b) => b.s - a.s).slice(0, 4)
+    const goMoods = MOOD_KEYS.map((m) => ({ i: { id: `mood-${m}`, group: 'Moods', icon: 'sparkles' as IconName, label: MOODS[m].label, hint: 'Play a session', run: go(`/ai?q=${encodeURIComponent(`${MOODS[m].label.toLowerCase()} songs`)}`) }, s: matchScore(query, MOODS[m].label) })).filter((x) => x.s >= 0.6).slice(0, 3)
     const seen = new Set<string>()
     const songs = known.filter((t) => (seen.has(t.id) ? false : (seen.add(t.id), true)))
       .map((t) => ({ t, s: Math.max(matchScore(query, t.title), matchScore(query, `${t.title} ${t.artist}`), matchScore(query, t.artist) * 0.8) }))
@@ -231,7 +250,7 @@ export function CommandPalette() {
       { id: 'search', group: 'Search', icon: 'search', label: `Search for “${query}”`, run: go(`/explore?q=${encodeURIComponent(query)}`) },
       { id: 'askai', group: 'Search', icon: 'sparkles', label: `Ask Arnav AI: “${query}”`, run: go(`/ai?q=${encodeURIComponent(query)}`) },
     ]
-    return [...tail.slice(0, 1), ...songs.map((x) => x.i), ...[...scored, ...pls].sort((a, b) => b.s - a.s).map((x) => x.i).slice(0, 8), tail[1]]
+    return [...tail.slice(0, 1), ...goSingers.map((x) => x.i), ...goAlbums.map((x) => x.i), ...songs.map((x) => x.i), ...goMoods.map((x) => x.i), ...[...scored, ...pls].sort((a, b) => b.s - a.s).map((x) => x.i).slice(0, 8), tail[1]]
   }, [q, items, playlists]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => setSel(0), [q])
   const onKey = (e: React.KeyboardEvent) => {

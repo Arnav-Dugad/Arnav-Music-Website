@@ -136,3 +136,6 @@
 .heart-ring { position: absolute; inset: -20%; border-radius: 50%; border: 2px solid var(--accent); }
 .heart-dot { position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px; border-radius: 50%; background: var(--accent); }
 .np .heart-fill { color: #fff; }
+.automix-chip { position: relative; gap: 6px; }
+.automix-chip select { appearance: none; -webkit-appearance: none; background: transparent; border: 0; color: inherit; font: inherit; font-weight: 640; padding-right: 2px; cursor: pointer; }
+.automix-chip select option { color: #000; }

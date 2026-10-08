@@ -6,12 +6,13 @@ import { Icon } from '../components/Icon'
 import { TrackList, TrackRow } from '../components/TrackRow'
 import { MixArt } from '../components/Mix'
 import { PlaylistThumb } from '../components/Shell'
-import { useAsync, usePaletteFor, useRegistryVersion } from '../hooks'
+import { useAsync, usePaletteFor, usePageTheme, useRegistryVersion } from '../hooks'
 import { playlistInfo, playlistTracks } from '../lib/youtube'
 import { SMART, smartPlaylist, type SmartKind } from '../lib/taste'
 import { longDuration, relative } from '../lib/format'
 import { artworkFor } from '../lib/classify'
-import { findLyrics } from '../lib/lyrics'
+import { findLyricsCandidates } from '../services/lyricsEngine'
+import { AutomixPicker } from '../components/AutomixPicker'
 import { MusicError, type Track } from '../lib/types'
 import { likedIds, likedTracks, liveEvents, useLibrary, lib } from '../state/library'
 import { trackRegistry } from '../state/tracks'
@@ -86,6 +87,7 @@ export default function PlaylistPage() {
 
   const coverUrl = view?.artUrl ?? (view?.tracks[0] ? artworkFor(view.tracks[0]) : null)
   const palette = usePaletteFor(coverUrl)
+  usePageTheme(palette)
 
   if (!view) {
     if (remoteId && remote.loading) return <div className="page"><div style={{ height: 320 }} /><SkeletonRows n={10} /></div>
@@ -100,7 +102,7 @@ export default function PlaylistPage() {
     setLyricsJob({ done: 0, total: list.length })
     let found = 0
     for (let i = 0; i < list.length; i++) {
-      try { const r = await findLyrics(list[i]); if (r.status === 'found') found++ } catch { /* keep going */ }
+      try { const r = await findLyricsCandidates(list[i]); if (r.status === 'found') found++ } catch { /* keep going */ }
       setLyricsJob({ done: i + 1, total: list.length })
       await new Promise((r) => setTimeout(r, 250))
     }
@@ -112,7 +114,7 @@ export default function PlaylistPage() {
     <div className="page playlist-page">
       <div className="pl-tint" style={{ ['--t1' as string]: palette.bg[0], ['--t2' as string]: palette.vivid }} />
       <motion.header className="pl-hero" style={{ opacity: heroOpacity }}>
-        <motion.div className="hero-cover" style={{ scale: coverScale, y: coverY }}>
+        <motion.div className="hero-cover" style={{ scale: coverScale, y: coverY, viewTransitionName: 'cover' }}>
           {view.art ?? <div className="hero-cover-inner"><img src={coverUrl ?? ''} alt="" className="hero-img" /></div>}
         </motion.div>
         <div className="pl-hero-text">
@@ -121,8 +123,9 @@ export default function PlaylistPage() {
           {view.description && <p className="t-sub pl-desc clamp-2">{view.description}</p>}
           <div className="t-caption" style={{ marginTop: 8 }}>{view.tracks.length} songs{total ? ` · ${longDuration(total)}` : ''}{view.meta ? ` · ${view.meta}` : ''}</div>
           <div className="row pl-actions">
-            <motion.button whileTap={{ scale: 0.95 }} className="btn btn-primary btn-lg" disabled={!view.tracks.length} onClick={() => player().play(view.tracks, 0, { context: view.title, shuffle: false })}><Icon name="play" size={16} /> Play</motion.button>
-            <motion.button whileTap={{ scale: 0.95 }} className="btn btn-secondary btn-lg" disabled={!view.tracks.length} onClick={() => player().play(view.tracks, Math.floor(Math.random() * view.tracks.length), { context: view.title, shuffle: true })}><Icon name="shuffle" size={16} /> Shuffle</motion.button>
+            <motion.button whileTap={{ scale: 0.95 }} className="btn btn-primary btn-lg" disabled={!view.tracks.length} onClick={() => player().play(view.tracks, 0, { context: view.title, contextId: id, shuffle: false })}><Icon name="play" size={16} /> Play</motion.button>
+            <motion.button whileTap={{ scale: 0.95 }} className="btn btn-secondary btn-lg" disabled={!view.tracks.length} onClick={() => player().play(view.tracks, Math.floor(Math.random() * view.tracks.length), { context: view.title, contextId: id, shuffle: true })}><Icon name="shuffle" size={16} /> Shuffle</motion.button>
+            {view.tracks.length > 1 && <AutomixPicker id={id} />}
             <button className="icon-btn" aria-label="Add all to queue" title="Add all to queue" disabled={!view.tracks.length} onClick={() => { player().addToQueue(view.tracks); toast(`Added ${view.tracks.length} songs to the queue`) }}><Icon name="queue" size={19} /></button>
             {view.kind !== 'local' && view.kind !== 'liked' && view.tracks.length > 0 && (
               <button className="icon-btn" aria-label="Copy to a new playlist" title="Copy to a new playlist" onClick={() => { const nid = lib().createPlaylist(view.title, view.tracks, view.description ?? ''); toast('Copied to your playlists', { label: 'Open', run: () => nav(`/playlist/${nid}`) }) }}><Icon name="plus" size={19} /></button>

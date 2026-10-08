@@ -34,6 +34,8 @@ interface PlayerState {
   resolvingMode: boolean
   /** Context label shown in Now Playing ("Playing from …"). */
   context: string | null
+  /** Playlist / album id the queue came from (per-playlist automix). */
+  contextId: string | null
   /** Incremented to ask the engine to seek. */
   seekRequest: { ms: number; n: number } | null
   radioLoading: boolean
@@ -43,7 +45,7 @@ interface PlayerState {
 }
 
 interface PlayerActions {
-  play: (tracks: Track[], startIndex?: number, opts?: { context?: string; shuffle?: boolean }) => void
+  play: (tracks: Track[], startIndex?: number, opts?: { context?: string; contextId?: string; shuffle?: boolean }) => void
   playNext: (tracks: Track[]) => void
   addToQueue: (tracks: Track[]) => void
   jumpTo: (i: number) => void
@@ -80,7 +82,7 @@ function shuffled<T>(arr: T[]): T[] {
   return a
 }
 
-const saved = ls.get<{ queue: Track[]; index: number; volume: number; muted: boolean; repeat: Repeat; shuffle: boolean; mode: MediaVariant; context: string | null } | null>('arnav.player', null)
+const saved = ls.get<{ queue: Track[]; index: number; volume: number; muted: boolean; repeat: Repeat; shuffle: boolean; mode: MediaVariant; context: string | null; contextId?: string | null } | null>('arnav.player', null)
 
 export const usePlayer = create<PlayerState & PlayerActions>()((set, get) => ({
   queue: saved?.queue?.map((t) => item(t)) ?? [],
@@ -102,6 +104,7 @@ export const usePlayer = create<PlayerState & PlayerActions>()((set, get) => ({
   mode: saved?.mode ?? 'SONG',
   resolvingMode: false,
   context: saved?.context ?? null,
+  contextId: saved?.contextId ?? null,
   seekRequest: null,
   radioLoading: false,
   previewing: null,
@@ -120,7 +123,7 @@ export const usePlayer = create<PlayerState & PlayerActions>()((set, get) => ({
       items = [first, ...shuffled(items.filter((_, i) => i !== index))]
       index = 0
     }
-    set({ queue: items, index, unshuffled, shuffle, wantPlaying: true, issue: null, context: opts.context ?? null, duration: 0, seekRequest: null })
+    set({ queue: items, index, unshuffled, shuffle, wantPlaying: true, issue: null, context: opts.context ?? null, contextId: opts.contextId ?? null, duration: 0, seekRequest: null })
   },
   playNext(tracks) {
     remember(tracks)
@@ -231,7 +234,7 @@ usePlayer.subscribe((s, prev) => {
   persistTimer = setTimeout(() => {
     ls.set('arnav.player', {
       queue: s.queue.slice(0, 500).map((q) => q.track), index: s.index, volume: s.volume, muted: s.muted,
-      repeat: s.repeat, shuffle: s.shuffle, mode: s.mode, context: s.context,
+      repeat: s.repeat, shuffle: s.shuffle, mode: s.mode, context: s.context, contextId: s.contextId,
     })
   }, 500)
 })

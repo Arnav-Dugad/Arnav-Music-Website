@@ -5,7 +5,7 @@ import { Artwork, Card, Notice, Shelf, SkeletonRows, Spinner } from '../componen
 import { Icon } from '../components/Icon'
 import { TrackList } from '../components/TrackRow'
 import { startRadio } from '../components/Overlays'
-import { useAsync, usePaletteFor, useRegistryVersion } from '../hooks'
+import { useAsync, usePaletteFor, usePageTheme, useRegistryVersion } from '../hooks'
 import { cachedSearch, channelInfo, search } from '../lib/youtube'
 import { artworkFor, isSingle, rankForListening } from '../lib/classify'
 import { compactCount, longDuration, relative } from '../lib/format'
@@ -18,6 +18,7 @@ import { coListenedArtists } from '../services/recs'
 import { verified } from '../services/catalog'
 import { credited } from '../lib/trust'
 import { albumHref } from '../components/TrackRow'
+import { artistOverlap, itunesAlbums } from '../lib/meta'
 
 export default function ArtistPage() {
   const { name: raw = '' } = useParams()
@@ -100,9 +101,21 @@ export default function ArtistPage() {
     return [...m.values()].sort((a, b) => b.tracks.length - a.tracks.length).slice(0, 12)
   }, [topTracks])
 
+  // The discography from Apple Music (albums, singles, soundtracks), for any artist and label.
+  const disco = useAsync(async () => {
+    const all = await itunesAlbums(name, 60)
+    const seen = new Set<string>()
+    return all
+      .filter((a) => a.title && a.artist && artistOverlap(a.artist, name) && a.collectionId)
+      .filter((a) => { const k = (a.title ?? '').toLowerCase().replace(/\s*-\s*(single|ep)$/, ''); if (seen.has(k)) return false; seen.add(k); return true })
+      .sort((a, b) => (b.releaseDate ?? '').localeCompare(a.releaseDate ?? ''))
+  }, [name])
+  const discoAlbums = (disco.data ?? []).filter((a) => (a.trackCount ?? 0) > 3)
+  const discoSingles = (disco.data ?? []).filter((a) => (a.trackCount ?? 0) <= 3)
   const similar = useMemo(() => coListenedArtists(key, 8), [key, events]) // eslint-disable-line react-hooks/exhaustive-deps
   const avatar = channel.data?.avatar ?? mine?.tops[0]?.artworkUrl ?? topTracks[0]?.artworkUrl ?? null
   const palette = usePaletteFor(avatar)
+  usePageTheme(palette)
   const displayName = channel.data?.name || name
   const playable = topTracks.length ? topTracks : mine?.tops ?? []
   const maxMonth = Math.max(1, ...(mine?.months.map((m) => m.minutes) ?? [1]))
@@ -137,7 +150,23 @@ export default function ArtistPage() {
         ) : topTracks.length ? <TrackList tracks={topTracks} context={displayName} /> : <div className="t-sub">No songs found.</div>}
       </section>
 
-      {albums.length > 0 && (
+      {discoAlbums.length > 0 && (
+        <Shelf title="Albums & soundtracks" subtitle="Discography · Apple Music">
+          {discoAlbums.slice(0, 20).map((a) => (
+            <Card key={a.collectionId} title={a.title!.replace(/\s*\((?:original\s+)?(?:motion\s+picture\s+)?soundtrack\)\s*$/i, '')} subtitle={`${a.releaseDate?.slice(0, 4) ?? ''}${a.trackCount ? ` · ${a.trackCount} songs` : ''}`} art={a.artwork}
+              onOpen={() => nav(`/album/${encodeURIComponent(a.title!)}?a=${encodeURIComponent(a.artist ?? name)}&it=${a.collectionId}`)} />
+          ))}
+        </Shelf>
+      )}
+      {discoSingles.length > 0 && (
+        <Shelf title="Singles & EPs" subtitle="Newest first">
+          {discoSingles.slice(0, 20).map((a) => (
+            <Card key={a.collectionId} title={a.title!.replace(/\s*-\s*(single|ep)$/i, '')} subtitle={a.releaseDate?.slice(0, 4) ?? ''} art={a.artwork}
+              onOpen={() => nav(`/album/${encodeURIComponent(a.title!)}?a=${encodeURIComponent(a.artist ?? name)}&it=${a.collectionId}`)} />
+          ))}
+        </Shelf>
+      )}
+      {albums.length > 0 && !discoAlbums.length && (
         <Shelf title="Albums & films" subtitle="Grouped from official uploads">
           {albums.map((a) => (
             <Card key={a.name} title={a.name} subtitle={`${a.tracks.length} ${a.tracks.length === 1 ? 'song' : 'songs'}`} art={artworkFor(a.tracks[0])}

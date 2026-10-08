@@ -2,21 +2,22 @@
  * Arnav Music edge API — one implementation shared by Cloudflare Workers, Cloudflare Pages
  * Functions and Vercel Edge Functions. Uses only Web-standard Request/Response/fetch.
  *
- *   GET /api/health                 → { ok, youtube }
- *   GET /api/yt?ep=search&…         → YouTube Data API v3 (key stays on the server)
- *   GET /api/img?u=<ytimg url>      → artwork with CORS headers (for on-device colour extraction)
- *   GET /api/lyrics?ep=get|search&… → LRCLIB (open lyrics database), identified with a User-Agent
+ *   GET  /api/health                 → { ok, youtube }
+ *   GET  /api/yt?ep=search&…         → YouTube Data API v3 (key stays on the server); `videos`
+ *                                      responses carry `arnav`, the shared clean parse of each title
+ *   GET  /api/img?u=<ytimg url>      → artwork with CORS headers (for on-device colour extraction)
+ *   GET  /api/lyrics?ep=get|search&… → LRCLIB (open lyrics database), identified with a User-Agent
+ *   GET  /api/meta?src=…&ep=…        → iTunes / MusicBrainz / Wikidata / Deezer / NetEase (see meta.ts)
+ *   GET  /api/credits?v=<id>         → song credits from every free source, cached for everyone
+ *   GET|POST /api/community          → lyrics version + timing fixes listeners agreed on
+ *   GET  /api/known                  → artist + film names learned from YouTube Topic data
  */
+import { cached, json, USER_AGENT, type ApiEnv, type WaitUntil } from './util'
+import { creditsApi, communityApi, knownApi, metaApi } from './meta'
+import { flushKnown, knownSets, learnFromYouTube, nameKey } from './known'
+import { parseYouTubeTitle, PARSE_V } from '../src/lib/format'
 
-export interface ApiEnv {
-  /** YouTube Data API v3 key. Set as a secret: `wrangler secret put YOUTUBE_API_KEY` / Vercel env. */
-  YOUTUBE_API_KEY?: string
-  /** Optional: only for keys restricted to the Android app (same headers the Android app sends). */
-  YOUTUBE_ANDROID_PACKAGE?: string
-  YOUTUBE_ANDROID_CERT?: string
-  /** Optional KV namespace (Cloudflare) used as a shared response cache to save quota. */
-  YT_CACHE?: KVNamespace
-}
+export type { ApiEnv } from './util'
 
 interface Endpoint {
   path: string
@@ -38,65 +39,73 @@ const YT_ENDPOINTS: Record<string, Endpoint> = {
   channels: { path: 'channels', params: ['part', 'id', 'forHandle', 'maxResults'], ttl: 24 * 3600 },
 }
 
-const IMG_HOSTS = new Set(['i.ytimg.com', 'i1.ytimg.com', 'i2.ytimg.com', 'i3.ytimg.com', 'i4.ytimg.com', 'i9.ytimg.com', 'yt3.ggpht.com', 'yt3.googleusercontent.com', 'lh3.googleusercontent.com'])
-const USER_AGENT = 'ArnavMusicWeb/1.0 (+https://github.com/Arnav-Dugad/Arnav-Music-Website)'
+const IMG_HOSTS = new Set(['i.ytimg.com', 'i1.ytimg.com', 'i2.ytimg.com', 'i3.ytimg.com', 'i4.ytimg.com', 'i9.ytimg.com', 'yt3.ggpht.com', 'yt3.googleusercontent.com', 'lh3.googleusercontent.com', 'is1-ssl.mzstatic.com', 'is2-ssl.mzstatic.com', 'is3-ssl.mzstatic.com', 'is4-ssl.mzstatic.com', 'is5-ssl.mzstatic.com'])
 
-const json = (body: unknown, status = 200, extra: Record<string, string> = {}) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { 'content-type': 'application/json; charset=utf-8', 'access-control-allow-origin': '*', ...extra },
-  })
-
-export async function handleApi(request: Request, env: ApiEnv, waitUntil?: (p: Promise<unknown>) => void): Promise<Response> {
+export async function handleApi(request: Request, env: ApiEnv, waitUntil?: WaitUntil): Promise<Response> {
   const url = new URL(request.url)
   if (request.method === 'OPTIONS') {
     return new Response(null, {
       status: 204,
       headers: {
         'access-control-allow-origin': '*',
-        'access-control-allow-methods': 'GET, OPTIONS',
+        'access-control-allow-methods': 'GET, POST, OPTIONS',
         'access-control-allow-headers': 'content-type, x-yt-key',
         'access-control-max-age': '86400',
       },
     })
   }
-  if (request.method !== 'GET') return json({ error: 'method_not_allowed' }, 405)
-
   const route = url.pathname.replace(/\/+$/, '')
+  if (request.method !== 'GET' && !(request.method === 'POST' && route === '/api/community')) return json({ error: 'method_not_allowed' }, 405)
+
   try {
     switch (route) {
       case '/api/health':
-        return json({ ok: true, youtube: Boolean(env.YOUTUBE_API_KEY), androidRestricted: Boolean(env.YOUTUBE_ANDROID_PACKAGE && env.YOUTUBE_ANDROID_CERT), time: Date.now() }, 200, { 'cache-control': 'no-store' })
+        return json({ ok: true, youtube: Boolean(env.YOUTUBE_API_KEY), androidRestricted: Boolean(env.YOUTUBE_ANDROID_PACKAGE && env.YOUTUBE_ANDROID_CERT), parseV: PARSE_V, time: Date.now() }, 200, { 'cache-control': 'no-store' })
       case '/api/yt':
         return await youtube(url, request, env, waitUntil)
       case '/api/img':
         return await image(url)
       case '/api/lyrics':
         return await lyrics(url, env, waitUntil)
+      case '/api/meta':
+        return await metaApi(url, env, waitUntil)
+      case '/api/credits':
+        return await creditsApi(url, env, waitUntil)
+      case '/api/community':
+        return await communityApi(request, url, env)
+      case '/api/known':
+        return await knownApi(env)
       default:
         return json({ error: 'not_found' }, 404)
     }
   } catch (e) {
     return json({ error: 'upstream_failed', message: e instanceof Error ? e.message.slice(0, 200) : 'unknown' }, 502)
+  } finally {
+    flushKnown(env, waitUntil)
   }
 }
 
-async function cached(env: ApiEnv, key: string, ttl: number, load: () => Promise<{ status: number; body: string }>, waitUntil?: (p: Promise<unknown>) => void) {
-  const kv = env.YT_CACHE
-  if (kv) {
-    const hit = await kv.get(key)
-    if (hit !== null) return { status: 200, body: hit, hit: true }
-  }
-  const fresh = await load()
-  if (kv && fresh.status === 200 && fresh.body.length < 2_000_000) {
-    const put = kv.put(key, fresh.body, { expirationTtl: Math.max(60, ttl) })
-    if (waitUntil) waitUntil(put)
-    else await put
-  }
-  return { ...fresh, hit: false }
-}
+interface YtItem { id?: string | { videoId?: string }; snippet?: { title?: string; channelTitle?: string }; arnav?: unknown }
 
-async function youtube(url: URL, request: Request, env: ApiEnv, waitUntil?: (p: Promise<unknown>) => void): Promise<Response> {
+/** Adds the shared parse of every title, so all visitors see the same clean metadata. */
+async function withParse(body: string, env: ApiEnv): Promise<string> {
+  let data: { items?: YtItem[] }
+  try { data = JSON.parse(body) } catch { return body }
+  if (!data.items?.length) return body
+  const known = await knownSets(env)
+  const ctx = { isKnownArtist: (n: string) => known.artists.has(nameKey(n)), isKnownFilm: (n: string) => known.films.has(nameKey(n)) }
+  for (const it of data.items) {
+    const t = it.snippet?.title
+    if (!t) continue
+    const raw = decode(t)
+    const p = parseYouTubeTitle(raw, decode(it.snippet?.channelTitle ?? ''), ctx)
+    it.arnav = { v: PARSE_V, title: p.title, artist: p.artist, album: p.album, credits: p.credits, fromChannel: p.fromChannel }
+  }
+  return JSON.stringify(data)
+}
+const decode = (s: string) => s.replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n))).replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+
+async function youtube(url: URL, request: Request, env: ApiEnv, waitUntil?: WaitUntil): Promise<Response> {
   const ep = YT_ENDPOINTS[url.searchParams.get('ep') ?? '']
   if (!ep) return json({ error: 'bad_endpoint' }, 400)
   const userKey = request.headers.get('x-yt-key')?.trim()
@@ -118,13 +127,18 @@ async function youtube(url: URL, request: Request, env: ApiEnv, waitUntil?: (p: 
     const r = await fetch(upstream.toString(), { headers })
     return { status: r.status, body: await r.text() }
   }, waitUntil)
-  return new Response(result.body, {
+  let body = result.body
+  if (result.status === 200) {
+    if (!result.hit) learnFromYouTube(body)
+    if (ep.path === 'videos' || ep.path === 'search' || ep.path === 'playlistItems') body = await withParse(body, env)
+  }
+  return new Response(body, {
     status: result.status,
     headers: {
       'content-type': 'application/json; charset=utf-8',
       'access-control-allow-origin': '*',
       // Shared CDN caching for public data (Vercel honours s-maxage); never cache errors.
-      'cache-control': result.status === 200 ? `public, max-age=300, s-maxage=${ep.ttl}` : 'no-store',
+      'cache-control': result.status === 200 ? `public, max-age=300, s-maxage=${Math.min(ep.ttl, 3600)}` : 'no-store',
       'x-arnav-cache': result.hit ? 'hit' : 'miss',
     },
   })
@@ -148,13 +162,17 @@ async function image(url: URL): Promise<Response> {
   })
 }
 
-async function lyrics(url: URL, env: ApiEnv, waitUntil?: (p: Promise<unknown>) => void): Promise<Response> {
+async function lyrics(url: URL, env: ApiEnv, waitUntil?: WaitUntil): Promise<Response> {
   const ep = url.searchParams.get('ep')
-  if (ep !== 'get' && ep !== 'search') return json({ error: 'bad_endpoint' }, 400)
-  const upstream = new URL(`https://lrclib.net/api/${ep}`)
-  for (const k of ['track_name', 'artist_name', 'album_name', 'duration', 'q']) {
-    const v = url.searchParams.get(k)
-    if (v) upstream.searchParams.set(k, v.slice(0, 200))
+  if (ep !== 'get' && ep !== 'search' && ep !== 'id') return json({ error: 'bad_endpoint' }, 400)
+  const id = url.searchParams.get('id') ?? ''
+  if (ep === 'id' && !/^\d{1,12}$/.test(id)) return json({ error: 'bad_id' }, 400)
+  const upstream = new URL(ep === 'id' ? `https://lrclib.net/api/get/${id}` : `https://lrclib.net/api/${ep}`)
+  if (ep !== 'id') {
+    for (const k of ['track_name', 'artist_name', 'album_name', 'duration', 'q']) {
+      const v = url.searchParams.get(k)
+      if (v) upstream.searchParams.set(k, v.slice(0, 200))
+    }
   }
   const cacheKey = `lrc:v1:${upstream.pathname}?${upstream.searchParams.toString()}`
   const result = await cached(env, cacheKey, 7 * 86400, async () => {

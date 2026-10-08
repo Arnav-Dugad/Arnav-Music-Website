@@ -14,6 +14,7 @@ import { useSettings } from './state/settings'
 import { usePlayer } from './state/player'
 import { Spinner } from './components/ui'
 import { PageBoundary } from './components/ErrorBoundary'
+import { isMorphing } from './lib/reveal'
 import Home from './pages/Home'
 
 const Explore = lazy(() => import('./pages/Explore'))
@@ -21,6 +22,7 @@ const Library = lazy(() => import('./pages/Library'))
 const PlaylistPage = lazy(() => import('./pages/Playlist'))
 const ArtistPage = lazy(() => import('./pages/Artist'))
 const AlbumPage = lazy(() => import('./pages/Album'))
+const CreditsPage = lazy(() => import('./pages/Credits'))
 const AiPage = lazy(() => import('./pages/Ai'))
 const MomentsPage = lazy(() => import('./pages/Moments'))
 const MomentPage = lazy(() => import('./pages/Moment'))
@@ -33,7 +35,8 @@ const NotFound = lazy(() => import('./pages/NotFound'))
 function Page({ children }: { children: React.ReactNode }) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 14, filter: 'blur(6px)' }}
+      // A cover morph (View Transition) already animates the change; don't fade the page under it.
+      initial={isMorphing() ? false : { opacity: 0, y: 14, filter: 'blur(6px)' }}
       animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
       exit={{ opacity: 0, y: -8, filter: 'blur(4px)', transition: { duration: 0.16 } }}
       transition={{ type: 'spring', stiffness: 260, damping: 30 }}
@@ -86,6 +89,7 @@ export default function App() {
                 <Route path="/playlist/:id" element={<Page><PlaylistPage /></Page>} />
                 <Route path="/artist/:name" element={<Page><ArtistPage /></Page>} />
                 <Route path="/album/:name" element={<Page><AlbumPage /></Page>} />
+                <Route path="/credits/:id" element={<Page><CreditsPage /></Page>} />
                 <Route path="/ai" element={<Page><AiPage /></Page>} />
                 <Route path="/moments" element={<Page><MomentsPage /></Page>} />
                 <Route path="/moment/:id" element={<MomentPage />} />

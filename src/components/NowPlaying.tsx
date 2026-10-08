@@ -10,6 +10,8 @@ import { LyricsPanel } from './Lyrics'
 import { QueuePanel } from './Queue'
 import { useVideoSlot } from '../player/VideoHost'
 import { CoverParticles } from './CoverParticles'
+import { BeatShader } from './BeatShader'
+import { useCurrentPalette } from '../hooks'
 import { rescue, setMode } from '../player/controller'
 import { errorCopy } from '../player/youtube'
 import { usePlayer, player, useProgress } from '../state/player'
@@ -59,6 +61,7 @@ function SleepBadge() {
 /** The artwork: breathes while playing, settles when paused; songs swap with a depth transition. */
 function Cover({ track, playing, showVideo }: { track: Track; playing: boolean; showVideo: boolean }) {
   const breathing = useSettings((s) => s.coverBreathing && s.motion !== 'off')
+  const vinyl = useSettings((s) => s.vinylMode)
   const [ripple, setRipple] = useState<{ side: 'l' | 'r'; n: number; secs: number } | null>(null)
   const lastTap = useRef<{ t: number; side: 'l' | 'r'; secs: number }>({ t: 0, side: 'l', secs: 0 })
   const x = useMotionValue(0)
@@ -106,6 +109,17 @@ function Cover({ track, playing, showVideo }: { track: Track; playing: boolean; 
             onDragEnd={onDragEnd}
             onClick={onTap}
           >
+            {vinyl && (
+              // The record slides out of its sleeve and spins (33⅓ rpm) while the song plays.
+              <motion.div className={`vinyl ${playing ? 'spin' : ''}`} initial={false} animate={{ x: playing ? '30%' : '0%', opacity: 1 }} transition={{ type: 'spring', stiffness: 90, damping: 16 }} aria-hidden>
+                <div className="vinyl-spin">
+                  <div className="vinyl-grooves" />
+                  <div className="vinyl-label"><Artwork src={artworkFor(track, 'sm')} seed={track.artist} /></div>
+                  <div className="vinyl-hole" />
+                </div>
+              </motion.div>
+            )}
+            <motion.div className="vinyl-sleeve" initial={false} animate={{ x: vinyl && playing ? '-16%' : '0%', rotate: vinyl && playing ? -2 : 0 }} transition={{ type: 'spring', stiffness: 90, damping: 16 }}>
             <motion.div layoutId="np-art" className="np-cover" transition={spring}>
               <AnimatePresence mode="popLayout" initial={false}>
                 <motion.div
@@ -119,6 +133,7 @@ function Cover({ track, playing, showVideo }: { track: Track; playing: boolean; 
                   <Artwork src={artworkFor(track)} seed={track.artist} eager hi />
                 </motion.div>
               </AnimatePresence>
+            </motion.div>
             </motion.div>
             <CoverParticles id={track.id} art={artworkFor(track, 'sm')} />
             <div className={`np-cover-glow ${playing ? 'on' : ''}`} />
@@ -164,6 +179,7 @@ export function NowPlaying() {
 }
 
 function NowPlayingView({ track }: { track: Track }) {
+  const palette = useCurrentPalette()
   const nav = useNavigate()
   const desktop = useIsDesktop()
   const playing = usePlayer((s) => s.wantPlaying)
@@ -226,6 +242,7 @@ function NowPlayingView({ track }: { track: Track }) {
     >
       <div className={`np-bg living ${movingGradient ? '' : 'static'}`}>
         <div className="blob b1" /><div className="blob b2" /><div className="blob b3" />
+        <BeatShader track={track} palette={palette} />
         <AnimatePresence initial={false}>
           <motion.img key={track.id} className="np-bg-art" src={artworkFor(track)} alt="" initial={{ opacity: 0 }} animate={{ opacity: 0.55 }} exit={{ opacity: 0 }} transition={{ duration: 1.2 }} />
         </AnimatePresence>

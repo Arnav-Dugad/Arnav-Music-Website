@@ -1,7 +1,7 @@
-import { parseIsoDuration, parseYouTubeTitle, decodeEntities, tidyTitle } from './format'
+import { parseIsoDuration, parseYouTubeTitle, decodeEntities, tidyTitle, PARSE_V } from './format'
 import type { MediaVariant, Track } from './types'
 import { ytId } from './types'
-import { addKnownArtist, isKnownArtist } from './knownArtists'
+import { addKnownArtist, isKnownArtist, isKnownFilm } from './knownArtists'
 
 /** Port of the app's TrackClassifier: keeps recommendations to real singles. */
 const compilationPatterns = [
@@ -139,6 +139,8 @@ export interface YtVideo {
   contentDetails?: { duration?: string }
   status?: { embeddable?: boolean; privacyStatus?: string }
   statistics?: { viewCount?: string }
+  /** The edge API's shared parse of the title (same parser, every visitor's learned names). */
+  arnav?: { v: number; title: string; artist: string; album: string | null; credits: string | null; fromChannel: boolean }
 }
 
 export const bestThumb = (t?: YtThumbs) => (t?.maxres ?? t?.standard ?? t?.high ?? t?.medium ?? t?.default)?.url
@@ -146,7 +148,7 @@ export const smallThumb = (t?: YtThumbs) => (t?.medium ?? t?.high ?? t?.default)
 
 /** Maps a videos.list item to an Arnav track (label-title parsing, Song/Video variant, compilation flag). */
 /** Bump when title parsing changes: saved tracks are re-parsed from their original YouTube title. */
-export const PARSE_V = 9
+export { PARSE_V }
 
 /** Re-reads title/artist/album/credits from the original YouTube title with today's parser. */
 export function reparse(t: Track): Track {
@@ -155,7 +157,7 @@ export function reparse(t: Track): Track {
     return title === t.title ? t : { ...t, title }
   }
   if (t.parseV === PARSE_V) return t
-  const p = parseYouTubeTitle(t.rawTitle, t.channelTitle, { isKnownArtist })
+  const p = parseYouTubeTitle(t.rawTitle, t.channelTitle, { isKnownArtist, isKnownFilm })
   return { ...t, title: p.title, artist: p.artist, album: p.album, credits: p.credits, artistFromChannel: p.fromChannel, parseV: PARSE_V }
 }
 
@@ -165,7 +167,11 @@ export function videoToTrack(v: YtVideo, query?: string): Track {
   const channel = decodeEntities(sn.channelTitle ?? '')
   // "- Topic" channels are YouTube's official auto-generated artist channels.
   if (/\s-\s*Topic$/i.test(channel)) addKnownArtist(channel.replace(/\s*-\s*Topic$/i, ''))
-  const parsed = parseYouTubeTitle(rawTitle, channel, { isKnownArtist, query })
+  const local = parseYouTubeTitle(rawTitle, channel, { isKnownArtist, isKnownFilm, query })
+  // The server's parse is the same everywhere; this device's wins only when it found the singer
+  // where the server fell back to the channel (a name you searched for, your own picks).
+  const shared = v.arnav && v.arnav.v === PARSE_V ? v.arnav : null
+  const parsed = shared && !(shared.fromChannel && !local.fromChannel) ? shared : local
   const tags = sn.tags ?? []
   const genres = genresFor(rawTitle, tags, sn.description ?? '')
   const dur = parseIsoDuration(v.contentDetails?.duration)

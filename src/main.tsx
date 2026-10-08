@@ -9,7 +9,8 @@ import { useLibrary } from './state/library'
 import { startSync } from './services/sync'
 import { startDj } from './services/dj'
 import { useSettings } from './state/settings'
-import { addKnownArtist } from './lib/knownArtists'
+import { addKnownArtist, mergeSharedNames } from './lib/knownArtists'
+import { fetchKnownNames } from './lib/meta'
 import { pruneStaleCache } from './lib/youtube'
 import './state/lyrics'
 import './styles/global.css'
@@ -35,6 +36,8 @@ async function boot() {
   ])
   pruneRegistry(referenced)
   void pruneStaleCache()
+  // Names every visitor's YouTube Topic results taught the server (artists, films).
+  void fetchKnownNames().then((r) => { if (r) mergeSharedNames(r) })
   startSync()
   for (const a of useSettings.getState().seedArtists) addKnownArtist(a)
   startDj()

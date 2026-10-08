@@ -4,6 +4,7 @@ import { Icon, type IconName } from './Icon'
 import { hashHue } from '../lib/color'
 import { usePreviewHold } from '../player/usePreviewHold'
 import type { Track } from '../lib/types'
+import { morphTo } from '../lib/reveal'
 
 export const spring = { type: 'spring', stiffness: 420, damping: 36, mass: 0.9 } as const
 export const softSpring = { type: 'spring', stiffness: 260, damping: 30 } as const
@@ -56,7 +57,7 @@ export function Artwork({ src: original, alt = '', className = '', style, round 
 }
 
 /** Cards tilt toward the pointer while hovered/pressed (the app's "tactile covers"). */
-export function Tilt({ children, className = '', max = 7, style }: { children: ReactNode; className?: string; max?: number; style?: CSSProperties }) {
+export function Tilt({ children, className = '', max = 7, style, innerRef }: { children: ReactNode; className?: string; max?: number; style?: CSSProperties; innerRef?: React.Ref<HTMLDivElement> }) {
   const x = useMotionValue(0)
   const y = useMotionValue(0)
   const rx = useSpring(useTransform(y, [-0.5, 0.5], [max, -max]), { stiffness: 300, damping: 26 })
@@ -68,7 +69,7 @@ export function Tilt({ children, className = '', max = 7, style }: { children: R
     y.set((e.clientY - r.top) / r.height - 0.5)
   }
   return (
-    <motion.div className={className} style={{ rotateX: rx, rotateY: ry, transformPerspective: 900, ...style }} onPointerMove={onMove} onPointerLeave={() => { x.set(0); y.set(0) }}>
+    <motion.div ref={innerRef} className={className} style={{ rotateX: rx, rotateY: ry, transformPerspective: 900, ...style }} onPointerMove={onMove} onPointerLeave={() => { x.set(0); y.set(0) }}>
       {children}
     </motion.div>
   )
@@ -96,9 +97,12 @@ export function Card({ title, subtitle, art, round, onOpen, onPlay, playing, bad
   preview?: Track
 }) {
   const hold = usePreviewHold(preview)
+  const artRef = useRef<HTMLDivElement>(null)
+  // Opening morphs this cover into the next page's hero.
+  const open = onOpen ? () => morphTo(artRef.current, onOpen) : undefined
   return (
-    <div className={`card ${wide ? 'wide' : ''}`} onClick={hold.guard(onOpen)} role={onOpen ? 'link' : undefined} tabIndex={onOpen ? 0 : -1} onKeyDown={(e) => { if (e.key === 'Enter') onOpen?.() }} {...hold.handlers}>
-      <Tilt className="card-art-wrap">
+    <div className={`card ${wide ? 'wide' : ''}`} onClick={hold.guard(open)} role={onOpen ? 'link' : undefined} tabIndex={onOpen ? 0 : -1} onKeyDown={(e) => { if (e.key === 'Enter') open?.() }} {...hold.handlers}>
+      <Tilt className="card-art-wrap" innerRef={artRef}>
         {custom ?? <Artwork src={art} round={round} seed={seed ?? title} letterbox={letterbox} icon={icon} className="card-art" />}
         {badge && <div className="card-badge">{badge}</div>}
         {onPlay && <div className="card-fab"><PlayFab onClick={onPlay} playing={playing} size={44} /></div>}

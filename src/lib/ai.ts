@@ -206,6 +206,40 @@ Rules:
   return { ok: true, text: lrcLines.join('\n'), model: r.model }
 }
 
+/**
+ * "Fix timing with Arnav AI": Gemini listens to the video and says when a dozen distinctive lyric
+ * lines start. The caller fits a straight line through those anchors (offset + tempo scale).
+ */
+export async function alignLyricsAi(track: Track, lines: { start: number; text: string }[]): Promise<{ ok: true; points: { lrc: number; video: number }[] } | { ok: false; reason: string }> {
+  const url = `https://www.youtube.com/watch?v=${track.playbackRef}`
+  if (!/^https:\/\/www\.youtube\.com\/watch\?v=[A-Za-z0-9_-]{11}$/.test(url)) return { ok: false, reason: 'input' }
+  // Lines sung once are unambiguous anchors; spread them over the whole song.
+  const counts = new Map<string, number>()
+  for (const l of lines) counts.set(l.text.toLowerCase(), (counts.get(l.text.toLowerCase()) ?? 0) + 1)
+  const unique = lines.filter((l) => l.text.trim().split(/\s+/).length >= 3 && counts.get(l.text.toLowerCase()) === 1)
+  const pool = unique.length >= 6 ? unique : lines.filter((l) => l.text.trim())
+  const n = Math.min(12, pool.length)
+  if (n < 4) return { ok: false, reason: 'too short' }
+  const picks = Array.from({ length: n }, (_, i) => pool[Math.round((i * (pool.length - 1)) / Math.max(1, n - 1))])
+  const list = picks.map((l, i) => `${i + 1}. ${l.text.slice(0, 120)}`).join('\n')
+  const instruction = `Listen to this recording ("${track.title.slice(0, 100)}" by ${track.artist.slice(0, 60)}).
+For each numbered lyric line below, give the time in seconds from the start of the video when the singer starts singing that line.
+Lines are listed in the order they are sung. If you can't hear a line, leave it out.
+Reply with JSON only: {"times":[{"n":1,"s":12.4}]}
+
+${list}`
+  const parts: Part[] = [{ type: 'fileData', fileData: { mimeType: 'video/mp4', fileUri: url } }, { type: 'text', text: instruction }]
+  const r = await generate(parts, 'align-v1', { json: true, maxOutputTokens: 1200, timeoutMs: 120000, temperature: 0, cacheTtlMs: 365 * 86_400_000, skipThrottle: true })
+  if (!r.ok) return { ok: false, reason: r.reason }
+  try {
+    const parsed = JSON.parse(r.text.replace(/```[a-z]*\n?|```/g, '')) as { times?: { n?: number; s?: number }[] }
+    const points = (parsed.times ?? [])
+      .filter((t) => typeof t.n === 'number' && typeof t.s === 'number' && t.n >= 1 && t.n <= n && t.s >= 0)
+      .map((t) => ({ lrc: picks[(t.n as number) - 1].start, video: Math.round((t.s as number) * 1000) }))
+    return points.length >= 4 ? { ok: true, points } : { ok: false, reason: 'too few' }
+  } catch { return { ok: false, reason: 'MALFORMED' } }
+}
+
 /** One-line, fact-bound explanation for a recommendation (cached for a week). */
 export async function explain(track: Track, signals: string[]): Promise<string | null> {
   const prompt = `In one short sentence (max 14 words), explain to a listener why "${track.title}" by ${track.artist} was suggested.

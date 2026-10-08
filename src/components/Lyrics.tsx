@@ -22,7 +22,7 @@ function usePositionClock() {
   }
 }
 
-export function SyncedLyrics({ lines, translation, romanized, size }: { lines: LyricLine[]; translation?: string[] | null; romanized?: string[] | null; size: 'lg' | 'md' | 'xl' }) {
+export function SyncedLyrics({ lines, translation, romanized, size, dual = false }: { lines: LyricLine[]; translation?: string[] | null; romanized?: string[] | null; size: 'lg' | 'md' | 'xl'; dual?: boolean }) {
   const box = useRef<HTMLDivElement>(null)
   const lineRefs = useRef<(HTMLDivElement | null)[]>([])
   const wordRefs = useRef<Map<number, HTMLSpanElement[]>>(new Map())
@@ -77,13 +77,21 @@ export function SyncedLyrics({ lines, translation, romanized, size }: { lines: L
         layout(a)
         // Reset the previous line's fill so re-entering looks right.
         if (lastWordLine >= 0 && lastWordLine !== a) {
-          wordRefs.current.get(lastWordLine)?.forEach((w) => w.style.setProperty('--p', '1'))
+          wordRefs.current.get(lastWordLine)?.forEach((w) => { w.style.setProperty('--p', '1'); w.dataset.s = 'done' })
         }
       }
       if (a >= 0) {
         const ln = lines[a]
         const words = wordRefs.current.get(a)
-        if (words) ln.words.forEach((w, i) => words[i]?.style.setProperty('--p', String(progress(w.start, w.end, pos))))
+        if (words) ln.words.forEach((w, i) => {
+          const el = words[i]
+          if (!el) return
+          const p = progress(w.start, w.end, pos)
+          el.style.setProperty('--p', String(p))
+          // Apple-style: each word rises and sharpens as it's sung.
+          const st = p <= 0 ? '' : p >= 1 ? 'done' : 'on'
+          if (el.dataset.s !== st) { el.dataset.s = st }
+        })
         // A light pulse as each new word is sung — the rhythm of the vocal line.
         let wi = -1
         for (let i = 0; i < ln.words.length; i++) if (ln.words[i].start <= pos) wi = i
@@ -128,7 +136,7 @@ export function SyncedLyrics({ lines, translation, romanized, size }: { lines: L
   return (
     <div
       ref={box}
-      className={`lyr synced ${size}`}
+      className={`lyr synced ${size} ${dual ? 'dual' : ''}`}
       onWheel={(e) => enterFree(-e.deltaY)}
       onTouchStart={(e) => { touch.current = e.touches[0].clientY }}
       onTouchMove={(e) => { if (touch.current != null) { const y = e.touches[0].clientY; enterFree(y - touch.current); touch.current = y } }}
@@ -150,7 +158,7 @@ export function SyncedLyrics({ lines, translation, romanized, size }: { lines: L
                 <>
                   {ln.text && (
                     <span className="lyr-main" ref={(el) => { if (el) wordRefs.current.set(i, [...el.querySelectorAll('.w')] as HTMLSpanElement[]) }}>
-                      {ln.words.length ? ln.words.map((w, j) => <span key={j} className="w">{w.text}{j < ln.words.length - 1 ? ' ' : ''}</span>) : <span className="w">{ln.text}</span>}
+                      {ln.words.length ? ln.words.map((w, j) => <span key={j}><span className="w">{w.text}</span>{j < ln.words.length - 1 ? ' ' : ''}</span>) : <span className="w">{ln.text}</span>}
                     </span>
                   )}
                   {ln.background && <span className="lyr-bg" ref={(el) => { if (el) bgRefs.current.set(i, el) }}>{ln.background}</span>}
@@ -189,9 +197,97 @@ function defaultLanguage() {
   } catch { return 'English' }
 }
 
-export function LyricsPanel({ size = 'lg' }: { size?: 'lg' | 'md' | 'xl' }) {
-  const { status, lyrics, translation, showTranslation, translating, generating } = useLyrics()
+const SOURCE_LABEL: Record<string, string> = { LRCLIB: 'LRCLIB', NetEase: 'NetEase', 'YouTube description': 'From the uploader', 'Arnav AI': 'Written by Arnav AI', You: 'Your lyrics' }
+
+function timingLabel(t: { offsetMs: number; scale: number; source: string }): string | null {
+  const s = `${t.offsetMs >= 0 ? '+' : '−'}${(Math.abs(t.offsetMs) / 1000).toFixed(1)} s`
+  if (t.source === 'you') return `Your timing · ${s}`
+  if (t.source === 'community') return `Timing from listeners · ${s}`
+  if (t.source === 'auto') return `Aligned to this video · ${s}`
+  return null
+}
+
+/** "Fix lyrics": timing nudges, tap-to-sync, Arnav AI alignment and every other version found. */
+function FixSheet({ onClose }: { onClose: () => void }) {
+  const { pick, chosen, timing, lyrics, aligning, official } = useLyrics()
+  const [tapping, setTapping] = useState(false)
+  const pos = useProgress((s) => s.position)
+  const synced = lyrics?.kind === 'synced'
+  const lines = synced ? lyrics.lines : []
+  const cur = synced ? activeIndex(lines, pos) : -1
+  // The next sung line: tap the moment you hear it start.
+  let next = cur + 1
+  while (next < lines.length && isInstrumental(lines[next])) next++
+  const label = timingLabel(timing)
+  const s = useLyrics.getState()
+  return (
+    <motion.div className="lyr-fix glass-thick" initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12 }} transition={{ type: 'spring', stiffness: 380, damping: 32 }}>
+      <div className="row" style={{ justifyContent: 'space-between' }}>
+        <div className="t-title">Fix lyrics</div>
+        <button className="icon-btn sm" aria-label="Close" onClick={onClose}><Icon name="close" size={14} /></button>
+      </div>
+      {synced && (
+        <section>
+          <div className="lyr-fix-h">Timing <span className="t-caption">{label ?? 'As published'}</span></div>
+          {tapping ? (
+            <div className="lyr-tap">
+              <div className="t-caption">Tap the moment you hear</div>
+              <div className="lyr-tap-line">{lines[next]?.text ?? '—'}</div>
+              <div className="row" style={{ justifyContent: 'center' }}>
+                <motion.button whileTap={{ scale: 0.92 }} className="btn btn-primary" disabled={next >= lines.length} onClick={() => s.tapSync(next)}>It starts now</motion.button>
+                <button className="btn btn-ghost btn-sm" onClick={() => setTapping(false)}>Done</button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="lyr-nudge">
+                <button className="chip" onClick={() => s.nudge(-500)} title="Lyrics earlier">−0.5 s</button>
+                <button className="chip" onClick={() => s.nudge(-100)}>−0.1</button>
+                <span className="lyr-nudge-v">{timing.offsetMs >= 0 ? '+' : '−'}{(Math.abs(timing.offsetMs) / 1000).toFixed(1)} s</span>
+                <button className="chip" onClick={() => s.nudge(100)}>+0.1</button>
+                <button className="chip" onClick={() => s.nudge(500)} title="Lyrics later">+0.5 s</button>
+              </div>
+              <div className="row" style={{ flexWrap: 'wrap' }}>
+                <button className="chip" onClick={() => setTapping(true)}><Icon name="hand" size={14} /> Tap to sync</button>
+                <button className="chip" disabled={aligning || !!aiAvailability()} onClick={() => void s.alignAi()}>{aligning ? <Spinner size={13} /> : <Icon name="sparkles" size={14} />} Fix with Arnav AI</button>
+                {timing.source !== 'none' && <button className="chip" onClick={() => s.resetTiming()}>Reset</button>}
+              </div>
+              <div className="t-caption">Fixes you make are shared, so the next listener gets this song right.</div>
+            </>
+          )}
+        </section>
+      )}
+      {(pick?.candidates.length ?? 0) > 0 && (
+        <section>
+          <div className="lyr-fix-h">Versions <span className="t-caption">{pick!.candidates.length} found</span></div>
+          <div className="lyr-versions">
+            {pick!.candidates.slice(0, 8).map((c) => (
+              <button key={c.key} className={`lyr-version ${chosen?.key === c.key ? 'on' : ''}`} onClick={() => s.choose(c.key)}>
+                <span className="lyr-version-t ellipsis">{c.title} <span className="t-caption">· {c.artist}</span></span>
+                <span className="t-caption ellipsis">
+                  {c.source}{c.durationMs ? ` · ${Math.floor(c.durationMs / 60000)}:${String(Math.round((c.durationMs % 60000) / 1000)).padStart(2, '0')}` : ''}{c.synced ? ' · synced' : ' · plain'}{c.reasons.length ? ` · ${c.reasons.slice(0, 2).join(', ')}` : ''}
+                </span>
+                {chosen?.key === c.key && <Icon name="check" size={15} />}
+              </button>
+            ))}
+            {official && (
+              <button className={`lyr-version ${chosen?.key === 'desc' ? 'on' : ''}`} onClick={() => s.useOfficial()}>
+                <span className="lyr-version-t">Official lyrics</span>
+                <span className="t-caption">From the uploader’s description · plain</span>
+                {chosen?.key === 'desc' && <Icon name="check" size={15} />}
+              </button>
+            )}
+          </div>
+        </section>
+      )}
+    </motion.div>
+  )
+}
+
+export function LyricsPanel({ size = 'lg', dual = false }: { size?: 'lg' | 'md' | 'xl'; dual?: boolean }) {
+  const { status, lyrics, translation, showTranslation, translating, generating, chosen, timing, pick } = useLyrics()
   const [pasting, setPasting] = useState(false)
+  const [fixing, setFixing] = useState(false)
   const [text, setText] = useState('')
   const [lang, setLang] = useState(defaultLanguage)
   const [notes, setNotes] = useState<{ id: string; text: string } | null>(null)
@@ -209,7 +305,7 @@ export function LyricsPanel({ size = 'lg' }: { size?: 'lg' | 'md' | 'xl' }) {
   }
   const tr = showTranslation ? translation : null
   const body = useMemo(() => {
-    if (status === 'loading' || status === 'idle') return <div className="lyr-state"><Spinner size={22} /></div>
+    if (status === 'loading' || status === 'idle') return <div className="lyr-state"><Spinner size={22} /><div className="t-caption">Finding the best lyrics…</div></div>
     if (status === 'off') return <div className="lyr-state"><Icon name="lyrics" size={28} /><div className="t-title">Online lyrics are off</div><div className="t-sub">Turn them on in Settings → Lyrics.</div></div>
     if (status === 'instrumental') return <div className="lyr-state"><Icon name="note" size={28} /><div className="t-title">Instrumental</div><div className="t-sub">Just the music — enjoy.</div></div>
     if ((status === 'none' || status === 'error') && !pasting) {
@@ -217,12 +313,13 @@ export function LyricsPanel({ size = 'lg' }: { size?: 'lg' | 'md' | 'xl' }) {
         <div className="lyr-state">
           <Icon name="lyrics" size={28} />
           <div className="t-title">{status === 'error' ? 'Lyrics couldn’t load' : 'No lyrics for this song yet'}</div>
-          <div className="t-sub" style={{ maxWidth: 360 }}>LRCLIB doesn’t have this one. Arnav AI can write them from the song itself, labelled as AI-written.</div>
+          <div className="t-sub" style={{ maxWidth: 360 }}>LRCLIB, NetEase and the uploader don’t have this one. Arnav AI can write them from the song itself, labelled as AI-written.</div>
           <div className="row" style={{ marginTop: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
             <button className="btn btn-primary btn-sm" disabled={generating || !!aiAvailability()} onClick={() => void useLyrics.getState().generate()}>
               {generating ? <Spinner size={14} /> : <Icon name="sparkles" size={15} />} Generate with Arnav AI
             </button>
             <button className="btn btn-secondary btn-sm" onClick={() => setPasting(true)}><Icon name="edit" size={15} /> Paste lyrics</button>
+            {(pick?.candidates.length ?? 0) > 0 && <button className="btn btn-ghost btn-sm" onClick={() => setFixing(true)}>See {pick!.candidates.length} possible matches</button>}
             {status === 'error' && <button className="btn btn-ghost btn-sm" onClick={() => void useLyrics.getState().load(true)}>Retry</button>}
           </div>
         </div>
@@ -243,10 +340,12 @@ export function LyricsPanel({ size = 'lg' }: { size?: 'lg' | 'md' | 'xl' }) {
     }
     if (!lyrics) return null
     return lyrics.kind === 'synced'
-      ? <SyncedLyrics lines={lyrics.lines} translation={tr?.lines} romanized={tr?.romanized} size={size} />
+      ? <SyncedLyrics lines={lyrics.lines} translation={tr?.lines} romanized={tr?.romanized} size={size} dual={dual && !!tr} />
       : <PlainLyrics lines={lyrics.lines} translation={tr?.lines} size={size} />
-  }, [status, lyrics, tr, size, pasting, text, generating])
+  }, [status, lyrics, tr, size, pasting, text, generating, pick, dual])
 
+  const src = chosen ? SOURCE_LABEL[chosen.source] ?? chosen.source : 'Lyrics'
+  const tl = timingLabel(timing)
   return (
     <div className="lyr-panel">
       {body}
@@ -257,10 +356,13 @@ export function LyricsPanel({ size = 'lg' }: { size?: 'lg' | 'md' | 'xl' }) {
             <p>{notes.text}</p>
           </motion.div>
         )}
+        {fixing && <FixSheet onClose={() => setFixing(false)} />}
       </AnimatePresence>
       {status === 'found' && lyrics && (
         <div className="lyr-bar">
-          <span className={`badge ${lyrics.source === 'Arnav AI' ? 'ai' : ''}`}>{lyrics.source === 'Arnav AI' ? 'Written by Arnav AI' : lyrics.source === 'You' ? 'Your lyrics' : 'Lyrics · LRCLIB'}</span>
+          <button className={`chip lyr-src ${chosen?.source === 'Arnav AI' ? 'ai' : ''} ${fixing ? 'on' : ''}`} onClick={() => setFixing((f) => !f)} title="Timing off or wrong lyrics? Fix them">
+            <Icon name="tune" size={14} /> {src}{tl ? <span className="lyr-src-t"> · {tl.split(' · ')[1]}</span> : null}
+          </button>
           <span className="grow" />
           {size !== 'xl' && <button className="chip" onClick={() => useLyrics.getState().set({ cinematic: true })} title="Cinematic full screen"><Icon name="expand" size={14} /> Cinematic</button>}
           <button className={`chip ${notes ? 'on' : ''}`} disabled={notesBusy || !!aiAvailability()} onClick={() => void about()}>{notesBusy ? <Spinner size={13} /> : <Icon name="info" size={14} />} About</button>

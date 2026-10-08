@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { motion } from 'motion/react'
 import { Icon, Logo, type IconName } from '../components/Icon'
 import { Notice, PageHeader, Segmented, Sheet, Spinner, Toggle } from '../components/ui'
-import { useSettings, regionCode, type Settings } from '../state/settings'
+import { useSettings, regionCode, defaultAutomix, automixPatch, type Settings, type AutomixStyle, type PlayerBarPreset } from '../state/settings'
 import { useAuth } from '../state/auth'
 import { ui, toast } from '../state/ui'
 import { useLibrary } from '../state/library'
@@ -139,14 +139,41 @@ function Appearance() {
         <Bool k="coverBreathing" title="Cover breathing" sub="Artwork settles back when paused" />
         <Bool k="ambientIdle" title="Ambient idle" sub="Now Playing fades to just the music after a few seconds" />
         <Bool k="coverParticles" title="Cover particles" sub="The old cover dissolves into particles as the new one forms" />
+        <Bool k="vinylMode" title="Vinyl" sub="The record slides out of its sleeve and spins while the song plays" />
+        <Bool k="beatVisuals" title="Beat visuals" sub="A living background that moves with the song's energy and tempo (synced with the app)" />
+        <PlayerBarRow />
         <Bool k="dockedPlayer" title="Docked Now Playing (desktop)" sub="Keep the cover, lyrics and queue in a panel beside the page" />
       </Group>
     </>
   )
 }
 
+export const AUTOMIX_OPTIONS: { value: AutomixStyle; label: string; sub: string }[] = [
+  { value: 'smart', label: 'Smart', sub: 'Each pair of songs gets its own blend: short for big mood changes, long and soft for calm ones, gapless inside an album, early before a music video’s outro.' },
+  { value: 'crossfade', label: 'Crossfade', sub: 'Every song fades into the next over the same length.' },
+  { value: 'gapless', label: 'Gapless', sub: 'The next song starts the moment this one ends — no silence.' },
+  { value: 'off', label: 'Off', sub: 'Songs play one after another.' },
+]
+
 function Playback() {
+  const s = useSettings()
+  const style = defaultAutomix(s)
+  const iOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
   return (
+    <>
+    <Group title="Automix">
+      <Row title="Transitions" sub={`${AUTOMIX_OPTIONS.find((o) => o.value === style)?.sub ?? ''}${iOS ? ' On iPhone and iPad only one video can play at a time, so songs hand over without a blend.' : ''} Synced with the app. Playlists can have their own.`}>
+        <Segmented id="automix" size="sm" value={style} onChange={(v) => s.update(automixPatch(v, s))} options={AUTOMIX_OPTIONS.map((o) => ({ value: o.value, label: o.label }))} />
+      </Row>
+      {(style === 'crossfade' || style === 'smart') && (
+        <Row title="Crossfade length" sub={style === 'smart' ? 'The starting point — Smart lengthens or shortens it for each pair.' : undefined}>
+          <div className="row" style={{ gap: 10 }}>
+            <input type="range" className="range" min={1000} max={12000} step={500} value={s.crossfadeMs || 6000} onChange={(e) => s.update({ crossfadeMs: Number(e.target.value) })} aria-label="Crossfade length" style={{ width: 160 }} />
+            <span className="t-caption" style={{ minWidth: 36 }}>{((s.crossfadeMs || 6000) / 1000).toFixed(1)} s</span>
+          </div>
+        </Row>
+      )}
+    </Group>
     <Group>
       <Bool k="verifiedOnly" title="Verified music only" sub="Official uploads only: YouTube Topic art tracks, VEVO, record labels, artists' own channels and established channels. Covers, karaoke, reactions, slowed/8D edits and Shorts are always left out." />
       <Bool k="endlessRadio" title="Endless radio" sub="When the queue ends, keep playing similar songs" />
@@ -154,15 +181,37 @@ function Playback() {
       <Bool k="crossfadeOnSkip" title="Smooth transitions" sub="Fade out and in when you skip" />
       <Bool k="explanations" title="Show why" sub="One honest line under each recommendation" />
     </Group>
+    </>
   )
 }
 
 function Lyrics() {
   return (
     <Group>
-      <Bool k="onlineLyrics" title="Online lyrics" sub="Time-synced lyrics from LRCLIB, the open lyrics database. Cached in this browser." />
+      <Bool k="onlineLyrics" title="Online lyrics" sub="Time-synced lyrics from LRCLIB and NetEase, checked against the song’s real length (Apple Music), the uploader’s own lyrics and what other listeners picked. Cached in this browser." />
+      <Bool k="autoAlignLyrics" title="Fit lyrics to music videos" sub="Lyrics are timed to the audio release; when a video has extra scenes first, shift them to match." />
+      <LyricsScript />
       <Bool k="miniPlayerLyrics" title="Lyrics in the player bar" sub="The line being sung, under the song title" />
     </Group>
+  )
+}
+
+function PlayerBarRow() {
+  const s = useSettings()
+  const opts: { value: PlayerBarPreset; label: string }[] = [{ value: 'compact', label: 'Compact' }, { value: 'wide', label: 'Wide' }, { value: 'studio', label: 'Studio' }]
+  return (
+    <Row title="Player bar (desktop)" sub="Studio adds a song map you can scrub, and shows the automix style.">
+      <Segmented id="pbar" size="sm" value={s.playerBar} onChange={(v) => s.update({ playerBar: v })} options={opts} />
+    </Row>
+  )
+}
+
+function LyricsScript() {
+  const s = useSettings()
+  return (
+    <Row title="Lyrics script" sub="When a song has lyrics in more than one script (e.g. Hindi in Devanagari and in Latin letters).">
+      <Segmented id="lyr-script" size="sm" value={s.lyricsScript} onChange={(v) => s.update({ lyricsScript: v })} options={[{ value: 'auto', label: 'Like the title' }, { value: 'latin', label: 'Latin' }, { value: 'original', label: 'Original' }]} />
+    </Row>
   )
 }
 

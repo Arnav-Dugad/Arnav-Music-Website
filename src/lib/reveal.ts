@@ -30,3 +30,37 @@ export function setThemeWithReveal(mode: ThemeMode) {
     )
   }).catch(() => undefined)
 }
+
+type VT = { finished: Promise<void>; ready: Promise<void> }
+type VTDoc = Document & { startViewTransition?: (cb: () => void | Promise<void>) => VT }
+
+/**
+ * Shared-element morph: the tapped cover flies into the next page's hero cover (any element named
+ * `view-transition-name: cover`). [run] performs the navigation. Falls back to a plain navigation.
+ */
+export function morphTo(from: HTMLElement | null, run: () => void) {
+  const doc = document as VTDoc
+  if (!from || !doc.startViewTransition || settings().motion !== 'full') { run(); return }
+  const root = document.documentElement
+  from.style.setProperty('view-transition-name', 'cover')
+  root.classList.add('vt-morph')
+  const t = doc.startViewTransition(async () => {
+    from.style.removeProperty('view-transition-name')
+    const before = new Set(document.querySelectorAll('.hero-cover, .artist-avatar'))
+    run()
+    // Wait for the next page's hero (after the old page's exit; maybe a lazy chunk), briefly.
+    const until = performance.now() + 900
+    await new Promise<void>((resolve) => {
+      const check = () => {
+        const fresh = [...document.querySelectorAll('.hero-cover, .artist-avatar')].some((el) => !before.has(el))
+        if (fresh || performance.now() > until) resolve()
+        else requestAnimationFrame(check)
+      }
+      requestAnimationFrame(check)
+    })
+  })
+  void t.finished.catch(() => undefined).finally(() => { root.classList.remove('vt-morph'); from.style.removeProperty('view-transition-name') })
+}
+
+/** True while a cover morph runs (pages skip their own cover entrance so the morph lands). */
+export const isMorphing = () => typeof document !== 'undefined' && document.documentElement.classList.contains('vt-morph')

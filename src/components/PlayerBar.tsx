@@ -10,6 +10,13 @@ import { useSettings } from '../state/settings'
 import { activeIndex } from '../lib/lyrics'
 import { artworkFor } from '../lib/classify'
 import { openPopOut, popOutSupported } from './PopOut'
+import { Waveform, WaveTimes } from './Waveform'
+import { automixStyle } from '../player/controller'
+import type { PlayerBarPreset } from '../state/settings'
+
+const PRESETS: PlayerBarPreset[] = ['compact', 'wide', 'studio']
+const PRESET_LABEL: Record<PlayerBarPreset, string> = { compact: 'Compact', wide: 'Wide', studio: 'Studio' }
+const AUTOMIX_LABEL = { off: 'Automix off', gapless: 'Gapless', crossfade: 'Crossfade', smart: 'Smart automix' } as const
 
 // Play and pause drawn with the same commands (two quads each), so the shapes morph into each other.
 const PAUSE_D = 'M6.6 4.8 L10.4 4.8 L10.4 19.2 L6.6 19.2 Z M13.6 4.8 L17.4 4.8 L17.4 19.2 L13.6 19.2 Z'
@@ -79,13 +86,16 @@ export function PlayerBar() {
   const repeat = usePlayer((s) => s.repeat)
   const panel = usePlayer((s) => s.panel)
   const docked = useSettings((s) => s.dockedPlayer)
+  const preset = useSettings((s) => s.playerBar)
+  useSettings((s) => [s.gapless, s.crossfadeMs, s.smartTransitions].join())
   if (!track) return null
+  const nextPreset = PRESETS[(PRESETS.indexOf(preset) + 1) % PRESETS.length]
   const open = (p?: 'lyrics' | 'queue') => {
     player().setExpanded(true)
     if (p && player().panel !== p) player().setPanel(p)
   }
   return (
-    <motion.div className="pbar glass-thick" initial={{ y: 120, opacity: 0 }} animate={{ y: expanded ? 140 : 0, opacity: expanded ? 0 : 1 }} transition={spring}>
+    <motion.div className={`pbar glass-thick preset-${preset}`} initial={{ y: 120, opacity: 0 }} animate={{ y: expanded ? 140 : 0, opacity: expanded ? 0 : 1 }} transition={spring}>
       <div className="pb-left">
         <button className="pb-art" onClick={() => open()} aria-label="Open Now Playing">
           {!expanded ? (
@@ -115,14 +125,16 @@ export function PlayerBar() {
             {repeat === 'one' && <span className="rep1">1</span>}
           </button>
         </div>
-        <Progress variant="bar" />
+        {preset === 'studio' ? <div className="pb-wave"><Waveform track={track} /><WaveTimes /></div> : <Progress variant="bar" />}
       </div>
       <div className="pb-right">
         <button className={`icon-btn sm dock-dup ${panel === 'lyrics' && expanded ? 'on' : ''}`} aria-label="Lyrics" onClick={() => open('lyrics')}><Icon name="lyrics" size={18} /></button>
         <button className={`icon-btn sm dock-dup ${panel === 'queue' && expanded ? 'on' : ''}`} aria-label="Queue" onClick={() => open('queue')}><Icon name="queue" size={18} /></button>
-        <VolumeSlider />
+        {preset === 'studio' && <span className="pb-automix t-caption" title="How songs hand over (Settings → Playback, or per playlist)"><Icon name="wave" size={14} /> {AUTOMIX_LABEL[automixStyle()]}</span>}
+        {preset !== 'compact' && <VolumeSlider />}
         {popOutSupported() && <button className="icon-btn sm" aria-label="Pop out mini player" title="Pop out mini player" onClick={() => void openPopOut()}><Icon name="minimize" size={17} /></button>}
         <button className={`icon-btn sm ${docked ? 'on' : ''}`} aria-label={docked ? 'Undock Now Playing' : 'Dock Now Playing beside the page'} title="Dock Now Playing" onClick={() => useSettings.getState().update({ dockedPlayer: !docked })}><Icon name="dock" size={18} /></button>
+        <button className="icon-btn sm" aria-label={`Player bar: ${PRESET_LABEL[preset]} (switch to ${PRESET_LABEL[nextPreset]})`} title={`Player bar: ${PRESET_LABEL[preset]} — switch to ${PRESET_LABEL[nextPreset]}`} onClick={() => useSettings.getState().update({ playerBar: nextPreset })}><Icon name={preset === 'studio' ? 'wave' : preset === 'compact' ? 'minus' : 'grid'} size={17} /></button>
         <button className="icon-btn sm" aria-label="More" onClick={(e) => openTrackMenu(e, track)}><Icon name="more" size={18} /></button>
       </div>
     </motion.div>

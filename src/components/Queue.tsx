@@ -1,4 +1,4 @@
-import { Reorder, useDragControls, AnimatePresence, motion } from 'motion/react'
+import { Reorder, useDragControls, AnimatePresence, motion, useMotionValue, useSpring, useTransform, useVelocity } from 'motion/react'
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Icon } from './Icon'
@@ -15,17 +15,34 @@ import { QueueChat } from './QueueChat'
 function Row({ item, onRemove, eta }: { item: QueueItem; onRemove: () => void; eta?: string }) {
   const controls = useDragControls()
   const t = item.track
+  // Liquid drag: the row stretches with its speed and two soft echoes trail behind it.
+  const y = useMotionValue(0)
+  const vel = useVelocity(y)
+  const scaleY = useTransform(vel, [-1800, 0, 1800], [1.08, 1, 1.08])
+  const scaleX = useTransform(vel, [-1800, 0, 1800], [0.97, 1, 0.97])
+  const lag1 = useSpring(y, { stiffness: 300, damping: 26 })
+  const lag2 = useSpring(y, { stiffness: 150, damping: 20 })
+  const echo1 = useTransform(() => lag1.get() - y.get())
+  const echo2 = useTransform(() => lag2.get() - y.get())
+  const [dragging, setDragging] = useState(false)
   return (
     <Reorder.Item
       value={item}
       dragListener={false}
       dragControls={controls}
-      className="q-row"
-      whileDrag={{ scale: 1.03, boxShadow: '0 18px 50px rgba(0,0,0,.45)', zIndex: 5, background: 'var(--surface-raised)' }}
-      transition={{ type: 'spring', stiffness: 500, damping: 40 }}
+      className={`q-row ${dragging ? 'dragging' : ''}`}
+      style={{ y, scaleY, scaleX }}
+      whileDrag={{ scale: 1.035, rotate: -0.6, boxShadow: '0 22px 60px rgba(0,0,0,.5)', zIndex: 5, background: 'var(--surface-raised)' }}
+      transition={{ type: 'spring', stiffness: 420, damping: 28, mass: 0.8 }}
       layout="position"
+      onDragStart={() => setDragging(true)}
+      onDragEnd={() => setDragging(false)}
       onContextMenu={(e) => openTrackMenu(e, t, { queueKey: item.key })}
     >
+      {dragging && <>
+        <motion.span className="q-echo e2" style={{ y: echo2 }} aria-hidden />
+        <motion.span className="q-echo e1" style={{ y: echo1 }} aria-hidden />
+      </>}
       <button className="q-main" onClick={() => { const i = player().queue.findIndex((q) => q.key === item.key); player().jumpTo(i) }}>
         <Artwork src={artworkFor(t, 'sm')} seed={t.artist} className="q-art" />
         <span className="grow" style={{ minWidth: 0 }}>

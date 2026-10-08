@@ -80,7 +80,12 @@ export interface ParsedTitle {
  * Label uploads chain context: "Narayanamma Lyric Video I Aadarsha Kutumbam I Venkatesh, Shriya"
  * → title Narayanamma, album Aadarsha Kutumbam, credits Venkatesh, Shriya (artist = channel).
  */
+/** Bumped whenever parsing changes, so cached tracks are read again (shared with the edge API). */
+export const PARSE_V = 10
+
 export interface ParseContext {
+  /** Film / album names learned from Topic descriptions and iTunes soundtracks. */
+  isKnownFilm?: (name: string) => boolean
   /** Names known to be artists (Topic channels, artist channels, your library). */
   isKnownArtist?: (name: string) => boolean
   /** The search that found the upload: a name you searched for is probably the artist. */
@@ -162,7 +167,7 @@ export function parseYouTubeTitle(raw: string, channel: string, ctx: ParseContex
   const mentioned = (s: string) => extras.some((e) => /,|\s&\s/.test(e) && e.split(/\s*,\s*|\s+&\s+/).some((n) => squash(n) === squash(s)))
   const knownArtist = (s: string) => {
     const k = squash(s)
-    return k.length >= 3 && (!!ctx.isKnownArtist?.(s) || (q.length > 0 && q.includes(k)) || mentioned(s))
+    return k.length >= 3 && !ctx.isKnownFilm?.(s) && (!!ctx.isKnownArtist?.(s) || (q.length > 0 && q.includes(k)) || mentioned(s))
   }
   // "Song | Singer | Singer | Actor | Composer": a credits list, not an album.
   const singleNames = extraSegs.filter((s) => !s.film && !/,|\s&\s/.test(s.text) && nameLike(s.text)).map((s) => s.text)
@@ -223,7 +228,7 @@ export function parseYouTubeTitle(raw: string, channel: string, ctx: ParseContex
   // A segment that names a known artist (or the singer) is a credit, not an album. In a
   // credits-style title only a segment marked as a film ("… Movie Songs") is an album.
   // T-Series style "Song | Film | Cast A, Cast B | Singers": the segment right after the song is the film.
-  const strictKnown = (s: string) => !!ctx.isKnownArtist?.(s) || mentioned(s)
+  const strictKnown = (s: string) => !ctx.isKnownFilm?.(s) && (!!ctx.isKnownArtist?.(s) || mentioned(s))
   const filmFirst = label && !labelAlbum && !colonFilm && extraSegs.length >= 2 && !extraSegs[0].film && !extraSegs[0].text.includes(',') &&
     !FEAT.test(extraSegs[0].text) && !strictKnown(extraSegs[0].text) && extraSegs.slice(1).some((s) => s.text.includes(',') || FEAT.test(s.text))
   if (colonFilm) labelAlbum = colonFilm

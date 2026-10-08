@@ -4,6 +4,9 @@ import type { Mood } from '../lib/types'
 
 export type ThemeMode = 'system' | 'dark' | 'light'
 export type MotionLevel = 'full' | 'reduced' | 'off'
+/** How one song hands over to the next (per playlist, or the default). */
+export type AutomixStyle = 'off' | 'gapless' | 'crossfade' | 'smart'
+export type PlayerBarPreset = 'compact' | 'wide' | 'studio'
 
 export interface Settings {
   onboardingDone: boolean
@@ -21,6 +24,21 @@ export interface Settings {
   autoReplaceUnavailable: boolean
   endlessRadio: boolean
   crossfadeOnSkip: boolean
+  /** App fields (synced): next song starts without a gap. */
+  gapless: boolean
+  /** App field (synced): crossfade length between songs; 0 = none. */
+  crossfadeMs: number
+  /** App field (synced): fade length follows each pair of songs (energy, tempo, intros). */
+  smartTransitions: boolean
+  /** App field (synced): visuals move with the beat (shader background, lyric pulse). */
+  beatVisuals: boolean
+  playerBar: PlayerBarPreset
+  /** The record slides out of its sleeve and spins while playing. */
+  vinylMode: boolean
+  /** Which script to prefer when a song has lyrics in several ("auto" follows the song title). */
+  lyricsScript: 'auto' | 'original' | 'latin'
+  /** Shift lyrics to fit the video (intro scenes) when the timing source is the audio release. */
+  autoAlignLyrics: boolean
   ambientIdle: boolean
   coverBreathing: boolean
   movingGradient: boolean
@@ -69,6 +87,14 @@ export const DEFAULT_SETTINGS: Settings = {
   autoReplaceUnavailable: true,
   endlessRadio: true,
   crossfadeOnSkip: true,
+  gapless: true,
+  crossfadeMs: 6000,
+  smartTransitions: true,
+  beatVisuals: true,
+  playerBar: 'wide',
+  vinylMode: false,
+  lyricsScript: 'auto',
+  autoAlignLyrics: true,
   ambientIdle: true,
   coverBreathing: true,
   movingGradient: true,
@@ -116,6 +142,18 @@ export const useSettings = create<SettingsStore>()(
 )
 
 export const settings = () => useSettings.getState()
+
+/** The default hand-over style, from the app-compatible fields. */
+export function defaultAutomix(s: Settings = settings()): AutomixStyle {
+  if (s.crossfadeMs > 0) return s.smartTransitions ? 'smart' : 'crossfade'
+  return s.gapless ? 'gapless' : 'off'
+}
+export function automixPatch(style: AutomixStyle, s: Settings = settings()): Partial<Settings> {
+  const fade = s.crossfadeMs > 0 ? s.crossfadeMs : 6000
+  if (style === 'off') return { gapless: false, crossfadeMs: 0 }
+  if (style === 'gapless') return { gapless: true, crossfadeMs: 0 }
+  return { gapless: true, crossfadeMs: fade, smartTransitions: style === 'smart' }
+}
 
 /** Region for charts: explicit setting, else the browser's locale region. */
 export function regionCode(): string {
