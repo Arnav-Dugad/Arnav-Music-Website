@@ -14,6 +14,9 @@
   "observability": { "enabled": true },
   // Shared response cache for YouTube + LRCLIB (saves quota across all visitors).
   // Forks: create your own with `npx wrangler kv namespace create YT_CACHE` and replace the id.
-  "kv_namespaces": [{ "binding": "YT_CACHE", "id": "dff3779a9544425a9aa0666f12b96512" }]
+  "kv_namespaces": [{ "binding": "YT_CACHE", "id": "dff3779a9544425a9aa0666f12b96512" }],
+  // Listen together rooms (WebSocket). Free plan: SQLite-backed Durable Objects.
+  "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "ListeningRoom" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ListeningRoom"] }]
   // Secret (never committed): npx wrangler secret put YOUTUBE_API_KEY
 }

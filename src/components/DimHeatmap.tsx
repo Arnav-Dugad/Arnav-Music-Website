@@ -22,7 +22,7 @@ async function readFacts(tracks: Track[]): Promise<Map<string, { year: number | 
   await Promise.all(tracks.map(async (t) => {
     const [it, cr] = await Promise.all([
       idbGet<{ item: ItunesItem | null }>(`itm|v3|${t.id}`, 'cache'),
-      idbGet<{ r: CreditsResult }>(`cr|v4|${t.playbackRef}`, 'cache'),
+      idbGet<{ r: CreditsResult }>(`cr|v11|${t.playbackRef}`, 'cache'),
     ])
     const year = it?.item?.releaseDate ? Number(it.item.releaseDate.slice(0, 4)) : cr?.r.film?.year ?? t.year ?? null
     const composers = (cr?.r.entries ?? []).filter((e) => e.group === 'WRITTEN' && /composer|music director/i.test(e.role)).map((e) => e.name).slice(0, 2)

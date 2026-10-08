@@ -11,6 +11,9 @@ import { QueuePanel } from './Queue'
 import { useVideoSlot } from '../player/VideoHost'
 import { CoverParticles } from './CoverParticles'
 import { BeatShader } from './BeatShader'
+import { RoomReactBar } from './TogetherLayer'
+import { ChorusButton, SectionStrip } from './SongMap'
+import { useMoodPick } from '../services/moodAutomix'
 import { useCurrentPalette } from '../hooks'
 import { rescue, setMode } from '../player/controller'
 import { errorCopy } from '../player/youtube'
@@ -59,11 +62,12 @@ function SleepBadge() {
 }
 
 /** The artwork: breathes while playing, settles when paused; songs swap with a depth transition. */
-function Cover({ track, playing, showVideo }: { track: Track; playing: boolean; showVideo: boolean }) {
+function Cover({ track, playing, showVideo, compact = false }: { track: Track; playing: boolean; showVideo: boolean; compact?: boolean }) {
   const breathing = useSettings((s) => s.coverBreathing && s.motion !== 'off')
   const vinyl = useSettings((s) => s.vinylMode)
   // On a phone the record peeks out less, so the cover stays on screen.
-  const narrow = typeof window !== 'undefined' && window.innerWidth < 640
+  // On a phone, or beside the lyrics/queue, the record peeks out less so nothing overlaps.
+  const narrow = compact || (typeof window !== 'undefined' && window.innerWidth < 640)
   const [ripple, setRipple] = useState<{ side: 'l' | 'r'; n: number; secs: number } | null>(null)
   const lastTap = useRef<{ t: number; side: 'l' | 'r'; secs: number }>({ t: 0, side: 'l', secs: 0 })
   const x = useMotionValue(0)
@@ -113,7 +117,7 @@ function Cover({ track, playing, showVideo }: { track: Track; playing: boolean; 
           >
             {vinyl && (
               // The record slides out of its sleeve and spins (33⅓ rpm) while the song plays.
-              <motion.div className={`vinyl ${playing ? 'spin' : ''}`} initial={false} animate={{ x: playing ? (narrow ? '20%' : '30%') : '0%', opacity: 1 }} transition={{ type: 'spring', stiffness: 90, damping: 16 }} aria-hidden>
+              <motion.div className={`vinyl ${playing ? 'spin' : ''}`} initial={false} animate={{ x: playing ? (compact ? '7%' : narrow ? '20%' : '30%') : '0%', opacity: 1 }} transition={{ type: 'spring', stiffness: 90, damping: 16 }} aria-hidden>
                 <div className="vinyl-spin">
                   <div className="vinyl-grooves" />
                   <div className="vinyl-label"><Artwork src={artworkFor(track, 'sm')} seed={track.artist} /></div>
@@ -121,7 +125,22 @@ function Cover({ track, playing, showVideo }: { track: Track; playing: boolean; 
                 </div>
               </motion.div>
             )}
-            <motion.div className="vinyl-sleeve" initial={false} animate={{ x: vinyl && playing ? (narrow ? '-9%' : '-16%') : '0%', rotate: vinyl && playing ? -2 : 0, scale: vinyl && narrow ? 0.9 : 1 }} transition={{ type: 'spring', stiffness: 90, damping: 16 }}>
+            {vinyl && (
+              // The tonearm lowers onto the record on play and lifts away on pause.
+              <motion.svg className={`tonearm ${narrow ? 'narrow' : ''}`} viewBox="0 0 100 220" aria-hidden initial={false}
+                animate={{ rotate: playing ? 0 : -26, scale: playing ? 1 : 1.03, filter: playing ? 'drop-shadow(0 6px 8px rgba(0,0,0,.45))' : 'drop-shadow(0 16px 18px rgba(0,0,0,.35))' }}
+                transition={{ type: 'spring', stiffness: 70, damping: 14, mass: 1.1, delay: playing ? 0.35 : 0 }}>
+                <defs>
+                  <linearGradient id="arm-metal" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="#b9bcc4" /><stop offset=".5" stopColor="#f4f5f8" /><stop offset="1" stopColor="#8d9099" /></linearGradient>
+                </defs>
+                <circle cx="78" cy="16" r="14" fill="#1b1c20" stroke="#3a3c43" strokeWidth="2" />
+                <circle cx="78" cy="16" r="6" fill="url(#arm-metal)" />
+                <path d="M78 22 L74 120 Q72 150 52 176" fill="none" stroke="url(#arm-metal)" strokeWidth="5" strokeLinecap="round" />
+                <rect x="36" y="168" width="24" height="34" rx="5" transform="rotate(38 48 185)" fill="#26272c" stroke="#55575f" strokeWidth="1.5" />
+                <rect x="88" y="4" width="10" height="24" rx="3" fill="#2a2b30" />
+              </motion.svg>
+            )}
+            <motion.div className="vinyl-sleeve" initial={false} animate={{ x: vinyl && playing ? (compact ? '-3%' : narrow ? '-9%' : '-16%') : '0%', rotate: vinyl && playing ? -2 : 0, scale: vinyl && narrow && !compact ? 0.9 : 1 }} transition={{ type: 'spring', stiffness: 90, damping: 16 }}>
             <motion.div layoutId="np-art" className="np-cover" transition={spring}>
               <AnimatePresence mode="popLayout" initial={false}>
                 <motion.div
@@ -181,6 +200,7 @@ export function NowPlaying() {
 }
 
 function NowPlayingView({ track }: { track: Track }) {
+  const moodPick = useMoodPick()
   const palette = useCurrentPalette()
   const nav = useNavigate()
   const desktop = useIsDesktop()
@@ -271,7 +291,7 @@ function NowPlayingView({ track }: { track: Track }) {
 
       <div className="np-body">
         <section className="np-stage">
-          <Cover track={track} playing={playing} showVideo={showVideo} />
+          <Cover track={track} playing={playing} showVideo={showVideo} compact={split} />
           <div className="np-info">
             <div className="np-meta">
               <AnimatePresence mode="wait" initial={false}>
@@ -283,7 +303,7 @@ function NowPlayingView({ track }: { track: Track }) {
             </div>
             <LikeButton track={track} size={22} className="np-like" />
           </div>
-          <div className="np-progress"><Progress /></div>
+          <div className="np-progress"><SectionStrip /><Progress /></div>
           <div className="np-controls">
             <button className={`icon-btn ${shuffle ? 'on' : ''}`} aria-label="Shuffle" aria-pressed={shuffle} onClick={() => player().toggleShuffle()}><Icon name="shuffle" size={21} /></button>
             <motion.button whileTap={{ scale: 0.85 }} className="np-skip" aria-label="Previous" onClick={() => player().prev(useProgress.getState().position)}><Icon name="prevFill" size={34} /></motion.button>
@@ -300,6 +320,7 @@ function NowPlayingView({ track }: { track: Track }) {
             <div className="row" style={{ gap: 2 }}>
               <button className={`icon-btn ${panel === 'lyrics' ? 'on' : ''}`} aria-label="Lyrics" onClick={() => player().setPanel('lyrics')}><Icon name="lyrics" size={20} /></button>
               <button className={`icon-btn ${panel === 'queue' ? 'on' : ''}`} aria-label="Up next" onClick={() => player().setPanel('queue')}><Icon name="queue" size={20} /></button>
+              <ChorusButton />
               <button className="icon-btn" aria-label="Sleep timer" onClick={() => setSleepOpen(true)}><Icon name="moon" size={19} /></button>
               <button className="icon-btn" aria-label={`Speed ${rate}×`} title="Playback speed" onClick={() => { const rates = [1, 1.25, 1.5, 0.75]; player().setRate(rates[(rates.indexOf(rate) + 1) % rates.length]) }}>
                 {rate === 1 ? <Icon name="speed" size={19} /> : <span style={{ fontSize: 12, fontWeight: 700 }}>{rate}×</span>}
@@ -307,10 +328,11 @@ function NowPlayingView({ track }: { track: Track }) {
             </div>
           </div>
           <div className="np-foot">
+            <RoomReactBar />
             <SleepBadge />
             {upNext && !split && (
               <button className="np-upnext glass-thin" onClick={() => player().setPanel('queue')}>
-                <span className="t-eyebrow" style={{ color: 'rgba(255,255,255,.55)' }}>Up next</span>
+                <span className="t-eyebrow" style={{ color: 'rgba(255,255,255,.55)' }}>Up next{moodPick.trackId === upNext.id && moodPick.why ? ` · ${moodPick.why}` : ''}</span>
                 <span className="ellipsis">{upNext.title} · <span style={{ opacity: 0.65 }}>{upNext.artist}</span></span>
               </button>
             )}

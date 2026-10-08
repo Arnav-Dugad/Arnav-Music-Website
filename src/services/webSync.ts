@@ -23,7 +23,7 @@ interface Family {
 }
 
 /** Settings only the web has (the shared ones sync as the app's own `s_*` records). */
-const WEB_SETTINGS: (keyof Settings)[] = ['playerBar', 'vinylMode', 'lyricsScript', 'autoAlignLyrics', 'verifiedOnly', 'dockedPlayer', 'weatherMoods', 'aiDj', 'homeLayout', 'ambientIdle', 'coverBreathing']
+const WEB_SETTINGS: (keyof Settings)[] = ['playerBar', 'moodAutomix', 'vinylMode', 'lyricsScript', 'autoAlignLyrics', 'verifiedOnly', 'dockedPlayer', 'weatherMoods', 'aiDj', 'homeLayout', 'ambientIdle', 'coverBreathing']
 const pick = (s: Settings) => Object.fromEntries(WEB_SETTINGS.map((k) => [k, s[k]]))
 const sameJson = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 

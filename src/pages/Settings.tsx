@@ -166,6 +166,11 @@ function Playback() {
       <Row title="Transitions" sub={`${AUTOMIX_OPTIONS.find((o) => o.value === style)?.sub ?? ''}${iOS ? ' On iPhone and iPad only one video can play at a time, so songs hand over without a blend.' : ''} Synced with the app. Playlists can have their own.`}>
         <Segmented id="automix" size="sm" value={style} onChange={(v) => s.update(automixPatch(v, s))} options={AUTOMIX_OPTIONS.map((o) => ({ value: o.value, label: o.label }))} />
       </Row>
+      {style === 'smart' && (
+        <Row title="Pick the next song by mood" sub="When the order isn't the point (shuffle, radio, mixes and AI sessions), Smart automix chooses which of the next songs fits the moment — energy, tempo and genre, with Arnav AI's pick when it's on. Playlists and albums keep their order.">
+          <Toggle on={s.moodAutomix} onChange={(v) => s.update({ moodAutomix: v })} label="Pick the next song by mood" />
+        </Row>
+      )}
       {(style === 'crossfade' || style === 'smart') && (
         <Row title="Crossfade length" sub={style === 'smart' ? 'The starting point — Smart lengthens or shortens it for each pair.' : undefined}>
           <div className="row" style={{ gap: 10 }}>

@@ -4,6 +4,9 @@ import { motion } from 'motion/react'
 import { Artwork, Notice, SkeletonRows } from '../components/ui'
 import { Icon } from '../components/Icon'
 import { ArtistLinks } from '../components/TrackRow'
+import { ReplayCard } from '../components/SongMap'
+import { FilmMusicAi } from '../components/FilmMusicAi'
+import { SongIdentity } from '../components/SongIdentity'
 import { useAsync, usePaletteFor, usePageTheme } from '../hooks'
 import { artworkFor } from '../lib/classify'
 import { fetchCredits, type CreditsResult } from '../lib/meta'
@@ -79,7 +82,7 @@ export default function CreditsPage() {
 
       {film && (
         <motion.section className="section film-card glass" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}>
-          <div className="film-poster">{film.image ? <img src={film.image} alt="" loading="lazy" /> : <Icon name="film" size={34} />}</div>
+          <div className="film-poster">{film.image ? <img src={film.image} alt="" loading="lazy" /> : cover ? <><img src={cover} alt="" className="film-poster-blur" /><Icon name="film" size={30} /></> : <Icon name="film" size={34} />}</div>
           <div className="film-body">
             <div className="t-eyebrow">From the film</div>
             <div className="film-title">{film.title}{film.year ? <span className="t-caption"> · {film.year}</span> : null}</div>
@@ -95,13 +98,19 @@ export default function CreditsPage() {
               </div>
             )}
             {filmCredits.filter((e) => !/director|cast/i.test(e.role)).length > 0 && (
-              <div className="film-line t-caption">{filmCredits.filter((e) => !/director|cast/i.test(e.role)).map((e) => `${e.role}: ${e.name}`).join(' · ')}</div>
+              <div className="film-line t-caption">
+                {[...new Set(filmCredits.filter((e) => !/director|cast/i.test(e.role)).map((e) => e.role))].map((role) => {
+                  const names = filmCredits.filter((e) => e.role === role).map((e) => e.name)
+                  return <div key={role}><b>{names.length > 1 ? `${role}s` : role}</b> · {names.join(', ')}</div>
+                })}
+              </div>
             )}
             <div className="row" style={{ marginTop: 12, flexWrap: 'wrap' }}>
               <button className="btn btn-secondary btn-sm" onClick={() => nav(`/album/${encodeURIComponent(film.title)}?a=${encodeURIComponent(track.artist)}`)}><Icon name="album" size={15} /> Soundtrack</button>
               {film.wiki && <a className="btn btn-ghost btn-sm" href={film.wiki} target="_blank" rel="noreferrer">Wikipedia <Icon name="external" size={13} /></a>}
               {film.imdb && <a className="btn btn-ghost btn-sm" href={film.imdb} target="_blank" rel="noreferrer">IMDb <Icon name="external" size={13} /></a>}
             </div>
+            <FilmMusicAi film={{ title: film.title, year: film.year, composers: [...new Set([...film.composer.map((p) => p.name), ...(data.data?.entries ?? []).filter((e) => e.group === 'WRITTEN' && /composer|music director/i.test(e.role)).map((e) => e.name)])].slice(0, 3), director: film.director[0]?.name ?? null, songs: [title] }} />
           </div>
         </motion.section>
       )}
@@ -112,6 +121,9 @@ export default function CreditsPage() {
           <div className="cr-list">{g.entries.map((e) => <Person key={`${e.role}|${e.name}`} e={e} />)}</div>
         </motion.section>
       ))}
+
+      <SongIdentity track={track} credits={data.data ?? null} />
+      <ReplayCard track={track} />
 
       {data.data && (
         <section className="section">

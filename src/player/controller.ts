@@ -10,6 +10,8 @@ import { artworkFor } from '../lib/classify'
 import { toast } from '../state/ui'
 import { tuner } from '../lib/tuner'
 import { setDeckView } from './VideoHost'
+import { recordHeard, recordPlay, recordRewind, recordSkip } from '../lib/replayMap'
+import { maybePickNext } from '../services/moodAutomix'
 
 /** Two decks: the active one plays the current song; the other preloads the next for automix. */
 const decks: (YTPlayer | null)[] = [null, null]
@@ -26,6 +28,8 @@ const failedRefs = new Set<string>()
 /** Song ↔ Video pairs found by the resolver, so switching back is free. */
 const altPairs = new Map<string, Track>()
 let positionSavedAt = 0
+/** Last known position of the current song (replay map). */
+let lastPos = 0
 let started = false
 
 /** iOS plays one media element at a time: there, songs hand over on a single deck. */
@@ -68,6 +72,7 @@ function finishSession(skipped: boolean) {
   if (listened < 5000) return
   const duration = s.track.durationMs ?? (usePlayer.getState().duration || null)
   const completed = endedNaturally || (duration != null && listened >= duration * 0.8)
+  if (skipped && !completed && duration) recordSkip(s.track.id, lastPos, duration)
   tuner.observe(s.track.id, completed, skipped && !completed && listened < 30_000 + (duration ?? 0) / 3)
   lib().recordPlay({
     trackId: s.track.id,
@@ -83,6 +88,8 @@ function finishSession(skipped: boolean) {
 
 function beginSession(track: Track) {
   session = { track, startedAt: Date.now(), listened: 0 }
+  lastPos = 0
+  recordPlay(track.id)
   lastTick = performance.now()
 }
 
@@ -209,6 +216,8 @@ function planAutomix(pos: number, d: number) {
   if (!cur || !next) { if (mix && mix.phase !== 'mixing') cancelMix(); return }
   if (mix?.phase === 'mixing') return
   const plan = transitionPlan(cur, next.track, style, d)
+  // Smart: before preloading, let mood-matching choose which song comes next.
+  if (style === 'smart' && !mix && pos >= plan.startAt - 38_000 && pos < plan.startAt - 26_000) { void maybePickNext(); return }
   if (mix && mix.key !== next.key) cancelMix() // the queue changed under us
   if (!mix && pos >= plan.startAt - 25_000 && pos < plan.startAt) preload(next, plan)
   if (mix) { mix.startAt = plan.startAt; mix.fadeMs = plan.fadeMs }
@@ -462,7 +471,12 @@ function tick() {
   const frac = yt.getVideoLoadedFraction?.() ?? 0
   if (p.isPlaying) useProgress.getState().set(pos, frac)
   else if (Math.abs(useProgress.getState().position - pos) > 400 && pos > 0) useProgress.getState().set(pos, frac)
-  if (p.isPlaying && !p.isBuffering && session) session.listened += dt * p.rate
+  if (p.isPlaying && !p.isBuffering && session) {
+    session.listened += dt * p.rate
+    const dur = (yt.getDuration?.() ?? 0) * 1000 || p.duration
+    if (dur > 0 && Math.abs(pos - lastPos) < 4000) recordHeard(session.track.id, pos, dur, dt * p.rate)
+  }
+  if (pos > 0) lastPos = pos
   if (p.isPlaying && p.issue && pos > 0) p.patch({ issue: null })
   let yd = 0
   try { yd = (yt.getDuration?.() ?? 0) * 1000 } catch { /* not ready */ }
@@ -583,6 +597,7 @@ export async function startController(hostA: HTMLElement, hostB: HTMLElement) {
       } else { settleMix(); yt.pauseVideo() }
     }
     if (st.seekRequest && st.seekRequest !== prev.seekRequest && yt) {
+      if (session && st.seekRequest.ms < lastPos - 3000) recordRewind(session.track.id, lastPos, st.seekRequest.ms, st.duration || session.track.durationMs || 0)
       settleMix()
       yt.seekTo(st.seekRequest.ms / 1000, true)
       useProgress.getState().set(st.seekRequest.ms)

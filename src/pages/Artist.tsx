@@ -19,6 +19,7 @@ import { verified } from '../services/catalog'
 import { credited } from '../lib/trust'
 import { albumHref } from '../components/TrackRow'
 import { artistOverlap, itunesAlbums } from '../lib/meta'
+import { ArtistEras } from '../components/ArtistEras'
 
 export default function ArtistPage() {
   const { name: raw = '' } = useParams()
@@ -166,6 +167,7 @@ export default function ArtistPage() {
           ))}
         </Shelf>
       )}
+      {(disco.data?.length ?? 0) > 1 && <ArtistEras name={displayName} disco={disco.data ?? []} />}
       {albums.length > 0 && !discoAlbums.length && (
         <Shelf title="Albums & films" subtitle="Grouped from official uploads">
           {albums.map((a) => (

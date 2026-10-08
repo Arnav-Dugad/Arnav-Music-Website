@@ -16,7 +16,7 @@ export function appIntentUrl(videoId: string): string {
   return `intent://track/${videoId}#Intent;scheme=arnavmusic;package=com.arnav.music;S.browser_fallback_url=${encodeURIComponent(fallback)};end`
 }
 
-function Qr({ text }: { text: string }) {
+export function Qr({ text }: { text: string }) {
   const svg = useMemo(() => {
     const qr = qrcode(0, 'M')
     qr.addData(text)

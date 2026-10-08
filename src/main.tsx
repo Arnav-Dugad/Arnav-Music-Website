@@ -18,6 +18,8 @@ import './styles/components.css'
 import './styles/shell.css'
 import './styles/player.css'
 import './styles/pages.css'
+// Last: phone and detail polish that must win over the page styles.
+import './styles/polish.css'
 
 // A newer deploy replaced the code chunks this tab was using: reload once to pick them up.
 window.addEventListener('vite:preloadError', (e) => {
@@ -36,6 +38,8 @@ async function boot() {
   ])
   pruneRegistry(referenced)
   void pruneStaleCache()
+  // Back in your listening room after a reload.
+  void import('./services/together').then((m) => m.rejoinAfterReload())
   // Names every visitor's YouTube Topic results taught the server (artists, films).
   void fetchKnownNames().then((r) => { if (r) mergeSharedNames(r) })
   startSync()

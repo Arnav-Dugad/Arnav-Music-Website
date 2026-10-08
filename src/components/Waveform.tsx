@@ -4,6 +4,11 @@ import { useLyrics } from '../state/lyrics'
 import { duration as fmt } from '../lib/format'
 import type { Lyrics } from '../lib/lyrics'
 import type { Track } from '../lib/types'
+import { useSections } from '../state/sections'
+import { loadReplay, type ReplayMap } from '../lib/replayMap'
+import type { Section } from '../lib/sections'
+
+const NO_SECTIONS: Section[] = []
 
 /** Deterministic noise per song, so the same song always draws the same shape. */
 function seeded(seed: string) {
@@ -63,6 +68,11 @@ export function Waveform({ track, bars = 140 }: { track: Track; bars?: number })
   const shape = useMemo(() => songShape(track, lyrics, durationMs || 200_000, bars), [track, lyrics, durationMs, bars])
   const [hover, setHover] = useState<number | null>(null)
   const drag = useRef(false)
+  const allSections = useSections((s) => s.sections)
+  const sectionsFor = useSections((s) => s.trackId)
+  const sections = sectionsFor === track.id ? allSections : NO_SECTIONS
+  const [replay, setReplay] = useState<ReplayMap | null>(null)
+  useEffect(() => { void loadReplay(track.id).then(setReplay) }, [track.id])
 
   useEffect(() => {
     let raf = 0
@@ -88,6 +98,21 @@ export function Waveform({ track, bars = 140 }: { track: Track; bars?: number })
       const gap = 2
       const bw = Math.max(1.5, w / shape.length - gap)
       const now = performance.now() / 1000
+      // Choruses: a soft band behind the bars.
+      if (durationMs) for (const s of sections) {
+        if (s.kind !== 'chorus') continue
+        const x0 = (s.start / durationMs) * w
+        const x1 = (s.end / durationMs) * w
+        g.fillStyle = 'rgba(255,255,255,0.07)'
+        g.beginPath(); g.roundRect(x0, 0, Math.max(2, x1 - x0), h, 6); g.fill()
+      }
+      // Your replay map: a thin heat line under the song (where you listen most).
+      if (replay) {
+        const peak = Math.max(1, ...replay.heard)
+        const seg = w / replay.heard.length
+        replay.heard.forEach((v, i) => { if (v > 0) { g.globalAlpha = 0.15 + 0.85 * (v / peak); g.fillStyle = accent; g.fillRect(i * seg, h - 2, seg - 1, 2) } })
+        g.globalAlpha = 1
+      }
       for (let i = 0; i < shape.length; i++) {
         const x = i * (bw + gap)
         const frac = (i + 0.5) / shape.length
@@ -104,7 +129,7 @@ export function Waveform({ track, bars = 140 }: { track: Track; bars?: number })
     }
     raf = requestAnimationFrame(draw)
     return () => cancelAnimationFrame(raf)
-  }, [shape, durationMs, playing, hover])
+  }, [shape, durationMs, playing, hover, sections, replay])
 
   const at = (clientX: number) => {
     const r = box.current!.getBoundingClientRect()
@@ -136,8 +161,8 @@ export function Waveform({ track, bars = 140 }: { track: Track; bars?: number })
   )
 }
 
-export function WaveTimes() {
+export function WaveTimes({ middle }: { middle?: React.ReactNode }) {
   const pos = useProgress((s) => s.position)
   const d = usePlayer((s) => s.duration)
-  return <div className="wave-times"><span>{fmt(pos)}</span><span>-{fmt(Math.max(0, d - pos))}</span></div>
+  return <div className="wave-times"><span>{fmt(pos)}</span>{middle}<span>-{fmt(Math.max(0, d - pos))}</span></div>
 }

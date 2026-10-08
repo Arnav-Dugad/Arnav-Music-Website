@@ -18,6 +18,7 @@ import { lib, useLibrary } from '../state/library'
 import { toast } from '../state/ui'
 import { verified } from '../services/catalog'
 import { isMorphing } from '../lib/reveal'
+import { FilmMusicAi } from '../components/FilmMusicAi'
 
 const SOUNDTRACK = /\s*[([](?:original\s+)?(?:motion\s+picture\s+)?(?:soundtrack|ost)[^)\]]*[)\]]\s*$/i
 const albumBase = (s: string) => s.replace(SOUNDTRACK, '').replace(/\s*-\s*(single|ep)$/i, '').trim()
@@ -176,6 +177,11 @@ export default function AlbumPage() {
           </div>
         </div>
       </header>
+      {soundtrack && rows.length > 0 && (
+        <section className="section" style={{ marginTop: 18 }}>
+          <FilmMusicAi film={{ title, year: year ? Number(year) : null, composers: singers.slice(0, 2), director: null, songs: rows.slice(0, 12).map((t) => t.title) }} />
+        </section>
+      )}
       <section className="section" style={{ marginTop: 28 }}>
         {loading ? <SkeletonRows n={8} /> : found.error && !rows.length ? (
           <Notice tone="warn">{found.error instanceof MusicError ? found.error.message : 'This album couldn’t load.'}</Notice>

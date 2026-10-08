@@ -52,6 +52,11 @@ export function Sidebar() {
           <Icon name="chart" size={19} />
           <span>Taste DNA</span>
         </NavLink>
+        <NavLink to="/together" className={`sb-link ${loc.pathname.startsWith('/together') ? 'active' : ''}`}>
+          {loc.pathname.startsWith('/together') && <motion.span layoutId="sb-active" className="sb-pill" transition={spring} />}
+          <Icon name="radio" size={19} />
+          <span>Listen together</span>
+        </NavLink>
       </nav>
       <div className="sb-section">
         <div className="sb-section-head">

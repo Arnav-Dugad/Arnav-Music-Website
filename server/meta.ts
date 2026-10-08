@@ -116,6 +116,28 @@ async function deezerIsrc(env: ApiEnv, isrc: string, waitUntil?: WaitUntil) {
   return { id: t.id, title: t.title, bpm: t.bpm && t.bpm > 0 ? t.bpm : null, gainDb: t.gain ?? null, durationMs: t.duration ? t.duration * 1000 : null, released: t.release_date ?? null, link: t.link ?? null }
 }
 
+/** A recording on Deezer by title + artist (+ length): its id and ISRC. */
+async function deezerFind(env: ApiEnv, title: string, artist: string, durationMs: number | null, waitUntil?: WaitUntil): Promise<{ id: number; isrc: string | null } | null> {
+  const q = `${artist.replace(/"/g, '')} ${title.replace(/"/g, '')}`
+  const u = `https://api.deezer.com/search?q=${encodeURIComponent(q)}&limit=10`
+  const data = await cachedJson<{ data?: { id: number; title: string; duration: number; artist?: { name: string } }[] }>(env, `dz:v1:${u}`, 30 * DAY, u, {}, waitUntil)
+  const best = (data?.data ?? [])
+    .filter((t) => similarity(t.title, title) >= 0.75 && similarity(t.artist?.name ?? '', artist) >= 0.4)
+    .filter((t) => !durationMs || Math.abs(t.duration * 1000 - durationMs) <= 40_000)
+    .sort((a, b) => (durationMs ? Math.abs(a.duration * 1000 - durationMs) - Math.abs(b.duration * 1000 - durationMs) : 0))[0]
+  if (!best) return null
+  const tu = `https://api.deezer.com/track/${best.id}`
+  const t = await cachedJson<{ id?: number; isrc?: string }>(env, `dz:v1:${tu}`, 30 * DAY, tu, {}, waitUntil)
+  return { id: best.id, isrc: t?.isrc && /^[A-Z]{2}[A-Z0-9]{3}\d{7}$/.test(t.isrc) ? t.isrc : null }
+}
+
+/** The same recording on MusicBrainz, looked up by ISRC. */
+async function mbIsrc(env: ApiEnv, isrc: string, waitUntil?: WaitUntil): Promise<string | null> {
+  const u = `https://musicbrainz.org/ws/2/isrc/${isrc}?fmt=json`
+  const d = await cachedJson<{ recordings?: { id: string }[] }>(env, `mb:v1:${u}`, 30 * DAY, u, MB_HEADERS, waitUntil)
+  return d?.recordings?.[0]?.id ?? null
+}
+
 // ── MusicBrainz (writers, producers, ISRC) ───────────────────────────────────
 const MB_HEADERS = { 'User-Agent': `${USER_AGENT} ( arnav music web )` }
 const tokens = (s: string) => s.toLowerCase().normalize('NFKD').replace(/\p{M}+/gu, '').replace(/\(.*?\)|\[.*?\]/g, ' ').replace(/[^\p{L}\p{N}]+/gu, ' ').trim().split(' ').filter(Boolean)
@@ -142,8 +164,8 @@ async function mbSearch(env: ApiEnv, title: string, artist: string, waitUntil?: 
 }
 
 interface MbRel { type: string; artist?: { name: string; id: string }; attributes?: string[]; work?: { title: string; relations?: MbRel[] } }
-async function mbCredits(env: ApiEnv, title: string, artist: string, durationMs: number | null, waitUntil?: WaitUntil): Promise<{ entries: CreditEntry[]; isrc: string | null; mbid: string | null }> {
-  const empty = { entries: [], isrc: null, mbid: null }
+async function mbCredits(env: ApiEnv, title: string, artist: string, durationMs: number | null, waitUntil?: WaitUntil): Promise<{ entries: CreditEntry[]; isrc: string | null; isrcs: string[]; mbid: string | null }> {
+  const empty = { entries: [], isrc: null, isrcs: [] as string[], mbid: null }
   const results = await mbSearch(env, title, artist, waitUntil)
   const best = results
     .filter((r) => r.score >= 80 && similarity(r.title, title) >= 0.6 && (!artist || similarity(r.artist, artist) >= 0.3))
@@ -173,7 +195,7 @@ async function mbCredits(env: ApiEnv, title: string, artist: string, durationMs:
         : t === 'instrument' ? ['PERFORMED', (r.attributes?.[0] ?? 'Instruments').replace(/^./, (c) => c.toUpperCase())] : null
     if (entry) b.add({ group: entry[0] as CreditEntry['group'], role: entry[1], name: r.artist.name, person: true, source: 'MusicBrainz', link: link(r.artist.id) })
   }
-  return { entries: b.entries, isrc: rec.isrcs?.[0] ?? null, mbid: best.id }
+  return { entries: b.entries, isrc: rec.isrcs?.[0] ?? null, isrcs: rec.isrcs ?? [], mbid: best.id }
 }
 
 // ── Wikidata (films) ─────────────────────────────────────────────────────────
@@ -229,7 +251,7 @@ function yearScore(desc: string | undefined, year: number | null): number {
 }
 
 // ── Credits aggregate ────────────────────────────────────────────────────────
-const CREDITS_V = 4
+const CREDITS_V = 11
 interface YtSnippet { title?: string; channelTitle?: string; description?: string; publishedAt?: string }
 
 async function ytSnippet(env: ApiEnv, id: string, waitUntil?: WaitUntil): Promise<YtSnippet | null> {
@@ -278,7 +300,7 @@ export async function creditsApi(url: URL, env: ApiEnv, waitUntil?: WaitUntil): 
   const filmish = label || fromDescription.some((e) => e.group === 'FILM') || /\b(movie|film|soundtrack)\b/i.test(sn?.description ?? '')
   const year = sn?.publishedAt ? Number(sn.publishedAt.slice(0, 4)) : null
   const [mb, film] = await Promise.all([
-    hasWriters && fromDescription.some((e) => e.role === 'ISRC') ? Promise.resolve({ entries: [] as CreditEntry[], isrc: null, mbid: null }) : mbCredits(env, title, artist.split(',')[0] ?? '', durationMs, waitUntil).catch(() => ({ entries: [] as CreditEntry[], isrc: null, mbid: null })),
+    hasWriters && fromDescription.some((e) => e.role === 'ISRC') ? Promise.resolve({ entries: [] as CreditEntry[], isrc: null, isrcs: [] as string[], mbid: null }) : mbCredits(env, title, artist.split(',')[0] ?? '', durationMs, waitUntil).catch(() => ({ entries: [] as CreditEntry[], isrc: null, isrcs: [] as string[], mbid: null })),
     album && filmish ? wikidataFilm(env, album, year, waitUntil).catch(() => null) : Promise.resolve(null),
   ])
   if (mb.entries.length || mb.isrc) sources.add('MusicBrainz')
@@ -291,10 +313,27 @@ export async function creditsApi(url: URL, env: ApiEnv, waitUntil?: WaitUntil): 
     // The film's composer only stands in when the song itself names none.
     if (!hasWriters && !mb.entries.some((e) => e.group === 'WRITTEN')) for (const p of film.composer) filmEntries.push({ group: 'WRITTEN', role: 'Music director (film)', name: p.name, person: true, source: 'Wikidata', link: p.wiki ?? undefined })
   }
-  const isrc = fromDescription.find((e) => e.role === 'ISRC')?.name ?? mb.isrc
-  const isrcEntry: CreditEntry[] = isrc && !fromDescription.some((e) => e.role === 'ISRC') ? [{ group: 'IDENTIFIERS', role: 'ISRC', name: isrc, person: false, source: 'MusicBrainz' }] : []
-  const audio = isrc ? await deezerIsrc(env, isrc, waitUntil).catch(() => null) : null
+  let isrc = fromDescription.find((e) => e.role === 'ISRC')?.name ?? mb.isrc
+  const isrcFrom = fromDescription.some((e) => e.role === 'ISRC') ? 'YouTube description' : mb.isrc ? 'MusicBrainz' : null
+  // No ISRC yet: find the recording on Deezer (title, artist, length) and take its ISRC.
+  let deezerFound: { id: number; isrc: string | null } | null = null
+  if (!isrc && title && artist) deezerFound = await deezerFind(env, title, artist.split(',')[0] ?? '', durationMs, waitUntil).catch(() => null)
+  if (!isrc && deezerFound?.isrc) isrc = deezerFound.isrc
+  let audio = isrc ? await deezerIsrc(env, isrc, waitUntil).catch(() => null) : null
+  // That ISRC may be a re-release Deezer doesn't carry: try the recording's other ISRCs, then Deezer's own search.
+  for (const alt of mb.isrcs.slice(1, 6)) {
+    if (audio) break
+    const a2 = await deezerIsrc(env, alt, waitUntil).catch(() => null)
+    if (a2) { audio = a2; isrc = alt }
+  }
+  if (!audio && !deezerFound && title && artist) {
+    deezerFound = await deezerFind(env, title, artist.split(',')[0] ?? '', durationMs, waitUntil).catch(() => null)
+    if (deezerFound?.isrc) { audio = await deezerIsrc(env, deezerFound.isrc, waitUntil).catch(() => null); if (audio) isrc = deezerFound.isrc }
+  }
   if (audio) sources.add('Deezer')
+  const isrcEntry: CreditEntry[] = isrc && !fromDescription.some((e) => e.role === 'ISRC') ? [{ group: 'IDENTIFIERS', role: 'ISRC', name: isrc, person: false, source: mb.isrcs.includes(isrc) ? 'MusicBrainz' : 'Deezer' }] : []
+  // The same recording on MusicBrainz, by ISRC (exact identity, not a title guess).
+  const mbByIsrc = isrc && !mb.mbid ? await mbIsrc(env, isrc, waitUntil).catch(() => null) : null
 
   const body = JSON.stringify({
     v: CREDITS_V,
@@ -303,6 +342,12 @@ export async function creditsApi(url: URL, env: ApiEnv, waitUntil?: WaitUntil): 
     entries: mergeCredits(fromDescription, fromTitle.entries, mb.entries, filmEntries, isrcEntry),
     film,
     audio: audio ? { bpm: audio.bpm, gainDb: audio.gainDb, link: audio.link } : null,
+    identity: isrc ? {
+      isrc,
+      from: isrcFrom ?? (deezerFound?.isrc ? 'Deezer' : null),
+      deezer: audio ? { id: audio.id, link: audio.link, durationMs: audio.durationMs, title: audio.title } : null,
+      musicbrainz: mb.mbid ?? mbByIsrc,
+    } : null,
     mbid: mb.mbid,
     lyrics: sn?.description ? descriptionLyrics(sn.description) : null,
     sources: [...sources],

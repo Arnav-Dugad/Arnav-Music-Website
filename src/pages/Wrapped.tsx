@@ -6,8 +6,8 @@ import { Empty, Spinner } from '../components/ui'
 import { useLibrary, liveEvents } from '../state/library'
 import { trackRegistry } from '../state/tracks'
 import { toast } from '../state/ui'
-import { buildWrapped, monthKey, wrappedMonths } from '../lib/wrapped'
-import { drawSlide, loadWrappedAssets, recordWrapped, SLIDE_MS, type WrappedAssets } from '../lib/wrappedVideo'
+import { buildWrapped, monthKey, wrappedMonths, wrappedYears } from '../lib/wrapped'
+import { drawSlide, loadWrappedAssets, recordWrapped, slidesFor, type WrappedAssets } from '../lib/wrappedVideo'
 import { hashHue } from '../lib/color'
 
 /** Your month in music as a story — and as a video you can share. */
@@ -17,9 +17,11 @@ export default function WrappedPage() {
   const events = useLibrary((s) => s.events)
   const live = useMemo(() => liveEvents(events), [events])
   const months = useMemo(() => wrappedMonths(live), [live])
-  const key = month && /^\d{4}-\d{2}$/.test(month) ? month : months[0] ?? monthKey(Date.now())
+  const years = useMemo(() => wrappedYears(live), [live])
+  const key = month && /^\d{4}(-\d{2})?$/.test(month) ? month : months[0] ?? monthKey(Date.now())
   const w = useMemo(() => buildWrapped(key, live, (id) => trackRegistry.get(id)), [key, live])
   const hue = w?.songs[0] ? hashHue(w.songs[0].track.artist) : 260
+  const slides = useMemo(() => (w ? slidesFor(w) : []), [w])
   const canvas = useRef<HTMLCanvasElement>(null)
   const [assets, setAssets] = useState<WrappedAssets | null>(null)
   const [slide, setSlide] = useState(0)
@@ -42,18 +44,19 @@ export default function WrappedPage() {
     const frame = () => {
       raf = requestAnimationFrame(frame)
       const now = paused ? clock.current.pausedAt : performance.now()
-      const t = (now - clock.current.start) / SLIDE_MS[slide]
-      drawSlide(g, w, assets, slide, Math.min(1, t), hue)
+      const cur = slides[Math.min(slide, slides.length - 1)]
+      const t = (now - clock.current.start) / cur.ms
+      drawSlide(g, w, assets, cur.id, slide, Math.min(1, t), hue)
       if (t >= 1 && !paused) {
-        if (slide < SLIDE_MS.length - 1) { clock.current.start = performance.now(); setSlide(slide + 1) } else setPaused(true)
+        if (slide < slides.length - 1) { clock.current.start = performance.now(); setSlide(slide + 1) } else setPaused(true)
       }
     }
     raf = requestAnimationFrame(frame)
     return () => cancelAnimationFrame(raf)
-  }, [w, assets, slide, paused, hue])
+  }, [w, assets, slide, paused, hue, slides])
 
   const go = (d: number) => {
-    const n = Math.max(0, Math.min(SLIDE_MS.length - 1, slide + d))
+    const n = Math.max(0, Math.min(slides.length - 1, slide + d))
     clock.current = { start: performance.now(), pausedAt: performance.now() }
     setPaused(false)
     setSlide(n)
@@ -95,7 +98,8 @@ export default function WrappedPage() {
       <div className="wrapped-top">
         <button className="icon-btn" aria-label="Close" onClick={() => nav(-1)}><Icon name="close" size={20} /></button>
         <select className="lyr-select" value={key} onChange={(e) => nav(`/wrapped/${e.target.value}`)} aria-label="Month">
-          {(months.length ? months : [key]).map((m) => <option key={m} value={m}>{new Date(Number(m.slice(0, 4)), Number(m.slice(5)) - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</option>)}
+          {years.length > 0 && <optgroup label="Years">{years.map((y) => <option key={y} value={y}>{y} — the whole year</option>)}</optgroup>}
+          <optgroup label="Months">{(months.length ? months : [key]).filter((m) => m.length === 7).map((m) => <option key={m} value={m}>{new Date(Number(m.slice(0, 4)), Number(m.slice(5)) - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</option>)}</optgroup>
         </select>
         <span className="grow" />
         <button className="btn btn-primary btn-sm" disabled={recording != null} onClick={() => void share()}>
@@ -104,7 +108,7 @@ export default function WrappedPage() {
       </div>
       <motion.div className="wrapped-stage" initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ type: 'spring', stiffness: 200, damping: 24 }}>
         <div className="wrapped-bars">
-          {SLIDE_MS.map((_, i) => <span key={i} className={i < slide ? 'done' : i === slide ? 'on' : ''} style={i === slide ? { animationDuration: `${SLIDE_MS[i]}ms`, animationPlayState: paused ? 'paused' : 'running' } : undefined} />)}
+          {slides.map((sl, i) => <span key={`${key}-${i}`} className={i < slide ? 'done' : i === slide ? 'on' : ''} style={i === slide ? { animationDuration: `${sl.ms}ms`, animationPlayState: paused ? 'paused' : 'running' } : undefined} />)}
         </div>
         <canvas ref={canvas} width={720} height={1280} aria-label={`${w.label} in music`} />
         {!assets && <div className="wrapped-loading"><Spinner size={26} /></div>}

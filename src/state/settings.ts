@@ -33,6 +33,8 @@ export interface Settings {
   /** App field (synced): visuals move with the beat (shader background, lyric pulse). */
   beatVisuals: boolean
   playerBar: PlayerBarPreset
+  /** Smart automix may pick which upcoming song plays next, to fit the mood (shuffle, radio, mixes). */
+  moodAutomix: boolean
   /** The record slides out of its sleeve and spins while playing. */
   vinylMode: boolean
   /** Which script to prefer when a song has lyrics in several ("auto" follows the song title). */
@@ -92,6 +94,7 @@ export const DEFAULT_SETTINGS: Settings = {
   smartTransitions: true,
   beatVisuals: true,
   playerBar: 'wide',
+  moodAutomix: true,
   vinylMode: false,
   lyricsScript: 'auto',
   autoAlignLyrics: true,

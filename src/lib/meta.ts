@@ -156,10 +156,12 @@ export interface CreditsResult {
   mbid: string | null
   lyrics: string | null
   sources: string[]
+  /** Exact song identity by ISRC across services. */
+  identity: { isrc: string; from: string | null; deezer: { id: number; link: string | null; durationMs: number | null; title?: string } | null; musicbrainz: string | null } | null
 }
 
 export async function fetchCredits(t: Track): Promise<CreditsResult | null> {
-  const key = `cr|v4|${t.playbackRef}`
+  const key = `cr|v11|${t.playbackRef}`
   const hit = await idbGet<{ r: CreditsResult; at: number }>(key, 'cache')
   if (hit && Date.now() - hit.at < 14 * 86_400_000) return hit.r
   const qs = new URLSearchParams({ v: t.playbackRef, t: t.title, a: t.artist, ...(t.album ? { al: t.album } : {}), ...(t.durationMs ? { d: String(Math.round(t.durationMs)) } : {}) })

@@ -36,6 +36,12 @@ A premium, Apple-style music web app: YouTube discovery through the official API
 - **Automix**: a two-deck player for gapless playback, crossfade and smart transitions (fade length per pair; gapless within an album; earlier before a video's outro). Synced with the app's `gapless` / `crossfadeMs` / `smartTransitions`; playlists can have their own style.
 - **Look & motion**: player-bar presets (compact, wide, studio with a scrubbable song map), vinyl mode, a WebGL background that follows the song's energy and beat, per-album colour themes across the page, a card-to-cover morph (View Transitions), liquid queue reordering, a 3D album wall (`/wall`), and a monthly **Wrapped** story that exports as a shareable video (`/wrapped`).
 - **Taste DNA**: a heatmap of your last 12 months by film/album, era and composer.
+- **Listen together** (`/together`): start a room and share the link or QR code. Everyone hears the host's music at the same moment: the server stamps the host's position with its clock, and guests correct any drift over 1.2 s. Reactions fly across every screen, guests can suggest songs, the host role passes on, and a reload keeps you in the room. It runs on a Cloudflare Durable Object over WebSocket, so it needs the Cloudflare Workers host.
+- **Song sections**: choruses detected from the synced lyrics, or labelled by Arnav AI from the lyrics or by listening. Shown as a tappable strip above the progress bar and as bands on the studio song map, with **Skip to chorus** (key C).
+- **Replay map**: per song, which parts you hear most, where you skip away and what you rewind to (on the credits page and as a heat line on the song map).
+- **Mood-matched automix**: Smart automix picks which upcoming song fits the moment (energy, Deezer tempo, genre, Arnav AI's pick), only for shuffle, radio, mixes and AI sessions.
+- **Song identity**: ISRC links each upload to Deezer and MusicBrainz exactly, and to Apple Music when the length matches.
+- **Artist eras**, **Arnav AI on a film's music**, **yearly Wrapped** with year-over-year comparisons and cover-burst transitions, **constellations** on the album wall, a swinging **vinyl tonearm** and lyrics that **swell and glow on held notes**.
 - **Everywhere**: ⌘K command palette, keyboard shortcuts (`?`), Media Session (hardware keys / OS media controls), sleep timer, speed, endless radio, unplayable-video rescue, Start radio / Not interested / Don't recommend artist, sharing (`/track/<id>`), PWA manifest, light/dark/auto, artwork-tinted or fixed accent, glass on/off, three motion levels, high contrast, and responsive layouts (sidebar + floating player on desktop; tab bar + mini player on phones).
 
 ## Architecture
@@ -49,7 +55,7 @@ src/                 React 19 + TypeScript + Motion (Vite)
   components/ pages/ UI
 server/handlers.ts   One edge API for every host: /api/yt (YouTube, key stays server-side),
                      /api/img (artwork with CORS for colour extraction), /api/lyrics (LRCLIB), /api/health
-worker/              Cloudflare Workers entry (static assets + API)
+worker/              Cloudflare Workers entry (static assets + API) and room.ts (Listen together Durable Object)
 functions/           Cloudflare Pages Functions entry
 api/                 Vercel Edge Functions entry
 tests/               Unit tests ported from the Android app's core/domain tests

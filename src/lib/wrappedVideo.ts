@@ -9,7 +9,15 @@ import { clockLine, type Wrapped } from './wrapped'
 
 const W = 720
 const H = 1280
-export const SLIDE_MS = [3200, 3600, 4200, 3600, 4000, 3200, 3400, 3200, 4600]
+export type SlideId = 'intro' | 'song' | 'songs' | 'artist' | 'artists' | 'months' | 'yoy' | 'clock' | 'new' | 'mood' | 'summary'
+const MS: Record<SlideId, number> = { intro: 3200, song: 3600, songs: 4200, artist: 3600, artists: 4000, months: 4400, yoy: 4000, clock: 3200, new: 3400, mood: 3200, summary: 4600 }
+/** The story for a month, or for a whole year (built from its months). */
+export function slidesFor(w: Wrapped): { id: SlideId; ms: number }[] {
+  const ids: SlideId[] = w.kind === 'year'
+    ? ['intro', 'song', 'songs', 'artist', 'artists', 'months', ...(w.prev ? ['yoy' as const] : []), 'clock', 'new', 'mood', 'summary']
+    : ['intro', 'song', 'songs', 'artist', 'artists', 'clock', 'new', 'mood', 'summary']
+  return ids.map((id) => ({ id, ms: MS[id] }))
+}
 
 const corsUrl = (u: string | null | undefined) => (u ? (/^https:\/\/(i\d?\.ytimg\.com|yt3\.|lh3\.|is\d-ssl\.mzstatic\.com)/.test(u) ? `/api/img?u=${encodeURIComponent(u)}` : u) : null)
 
@@ -103,7 +111,7 @@ function text(g: CanvasRenderingContext2D, s: string, x: number, y: number, size
   g.restore()
 }
 
-export interface WrappedAssets { songs: (HTMLImageElement | null)[]; artists: (HTMLImageElement | null)[]; album: HTMLImageElement | null }
+export interface WrappedAssets { songs: (HTMLImageElement | null)[]; artists: (HTMLImageElement | null)[]; album: HTMLImageElement | null; colors: string[] }
 export async function loadWrappedAssets(w: Wrapped): Promise<WrappedAssets> {
   await Promise.all([document.fonts.load('80px "Instrument Serif"'), document.fonts.load('700 40px Inter')]).catch(() => undefined)
   const [songs, artists, album] = await Promise.all([
@@ -111,11 +119,65 @@ export async function loadWrappedAssets(w: Wrapped): Promise<WrappedAssets> {
     Promise.all(w.artists.map((a) => loadImage(a.art))),
     loadImage(w.album?.art),
   ])
-  return { songs, artists, album }
+  return { songs, artists, album, colors: coverColors([songs[0], artists[0], album, songs[1]]) }
 }
 
-/** Draws slide [i] at progress [t] (0..1). */
-export function drawSlide(g: CanvasRenderingContext2D, w: Wrapped, a: WrappedAssets, i: number, t: number, hue: number) {
+/** A handful of colours from the covers, for the burst between slides. */
+function coverColors(imgs: (HTMLImageElement | null)[]): string[] {
+  const out: string[] = []
+  const c = document.createElement('canvas')
+  c.width = 6
+  c.height = 6
+  const g = c.getContext('2d', { willReadFrequently: true })
+  for (const img of imgs) {
+    if (!img || !g) continue
+    try {
+      g.drawImage(img, 0, 0, 6, 6)
+      const d = g.getImageData(0, 0, 6, 6).data
+      for (let i = 0; i < d.length; i += 16) {
+        const [r, gg, b] = [d[i], d[i + 1], d[i + 2]]
+        if (r + gg + b > 60) out.push(`rgb(${r},${gg},${b})`)
+      }
+    } catch { /* tainted: skip */ }
+  }
+  return out.length ? out : ['#ffffff', '#b9aeff', '#52d6c3']
+}
+
+/** Cover burst: as a slide begins, pieces of the covers fly out from the centre and fade. */
+function burst(g: CanvasRenderingContext2D, a: WrappedAssets, index: number, t: number) {
+  const k = t / 0.32
+  if (index === 0 || k >= 1) return
+  const n = 96
+  for (let i = 0; i < n; i++) {
+    const seed = Math.sin((i + 1) * 12.9898 + index * 78.233) * 43758.5453
+    const r1 = seed - Math.floor(seed)
+    const r2 = seed * 7.13 - Math.floor(seed * 7.13)
+    const ang = r1 * Math.PI * 2
+    const speed = 260 + r2 * 520
+    const dist = (1 - Math.pow(1 - k, 2)) * speed
+    const x = W / 2 + Math.cos(ang) * dist
+    const y = H * 0.42 + Math.sin(ang) * dist - 120 * k * k
+    const size = (18 + r2 * 46) * (1 - k * 0.55)
+    g.save()
+    g.globalAlpha = Math.min(1, (1 - k) * 1.3)
+    g.fillStyle = a.colors[i % a.colors.length]
+    g.translate(x, y)
+    g.rotate(ang + k * 4 * (r1 - 0.5))
+    g.beginPath()
+    g.roundRect(-size / 2, -size / 2, size, size, size * 0.22)
+    g.fill()
+    g.restore()
+  }
+  // A soft flash at the very start of the cut.
+  g.save()
+  g.globalAlpha = Math.max(0, 0.35 * (1 - k * 3))
+  g.fillStyle = '#fff'
+  g.fillRect(0, 0, W, H)
+  g.restore()
+}
+
+/** Draws slide [id] (the [i]th of the story) at progress [t] (0..1). */
+export function drawSlide(g: CanvasRenderingContext2D, w: Wrapped, a: WrappedAssets, id: SlideId, i: number, t: number, hue: number) {
   // Background: a slow gradient that turns a little each slide.
   const h1 = (hue + i * 24) % 360
   const grad = g.createLinearGradient(0, 0, W * 0.4, H)
@@ -131,30 +193,30 @@ export function drawSlide(g: CanvasRenderingContext2D, w: Wrapped, a: WrappedAss
   g.fillRect(0, 0, W, H)
   const L = 64
   text(g, `ARNAV MUSIC · ${w.label.toUpperCase()}`, L, 110, 22, { weight: 760, alpha: 0.7 * fade(t), color: '#fff' })
-  switch (i) {
-    case 0: {
+  switch (id) {
+    case 'intro': {
       text(g, 'Your', L, 430, 96, { font: 'serif', alpha: fade(t, 0.05) })
-      text(g, new Date(w.start).toLocaleDateString(undefined, { month: 'long' }), L, 540, 140, { font: 'serif', alpha: fade(t, 0.12) })
+      text(g, w.kind === 'year' ? w.key : new Date(w.start).toLocaleDateString(undefined, { month: 'long' }), L, 540, 140, { font: 'serif', alpha: fade(t, 0.12) })
       text(g, 'in music', L, 640, 96, { font: 'serif', alpha: fade(t, 0.2) })
       const n = Math.round(w.minutes * ease((t - 0.3) / 0.5))
       text(g, `${n.toLocaleString()}`, L, 900, 120, { weight: 820, alpha: fade(t, 0.3) })
       text(g, 'minutes of music', L, 960, 34, { weight: 600, alpha: 0.75 * fade(t, 0.35) })
-      if (w.change != null) text(g, `${w.change >= 0 ? '+' : ''}${w.change}% vs last month`, L, 1020, 28, { weight: 600, alpha: 0.6 * fade(t, 0.45) })
+      if (w.change != null) text(g, `${w.change >= 0 ? '+' : ''}${w.change}% vs last ${w.kind === 'year' ? 'year' : 'month'}`, L, 1020, 28, { weight: 600, alpha: 0.6 * fade(t, 0.45) })
       break
     }
-    case 1: {
+    case 'song': {
       const s = w.songs[0]
       if (!s) break
       const k = 0.9 + 0.1 * ease(t / 0.4)
       const size = 520 * k
       cover(g, a.songs[0], (W - size) / 2, 240 + (520 - size) / 2, size, 36)
-      text(g, 'Your song of the month', L, 900, 30, { weight: 650, alpha: 0.75 * fade(t, 0.2) })
+      text(g, w.kind === 'year' ? 'Your song of the year' : 'Your song of the month', L, 900, 30, { weight: 650, alpha: 0.75 * fade(t, 0.2) })
       text(g, s.track.title, L, 990, 70, { font: 'serif', alpha: fade(t, 0.28), max: W - L * 2 })
       text(g, s.track.artist, L, 1045, 34, { weight: 600, alpha: 0.8 * fade(t, 0.35), max: W - L * 2 })
       text(g, `Played ${s.plays} ${s.plays === 1 ? 'time' : 'times'}`, L, 1110, 28, { weight: 600, alpha: 0.6 * fade(t, 0.45) })
       break
     }
-    case 2: {
+    case 'songs': {
       text(g, 'Top songs', L, 260, 92, { font: 'serif', alpha: fade(t) })
       w.songs.forEach((s, j) => {
         const y = 360 + j * 170
@@ -168,7 +230,7 @@ export function drawSlide(g: CanvasRenderingContext2D, w: Wrapped, a: WrappedAss
       })
       break
     }
-    case 3: {
+    case 'artist': {
       const ar = w.artists[0]
       if (!ar) break
       const r = 230 * (0.9 + 0.1 * ease(t / 0.4))
@@ -181,7 +243,7 @@ export function drawSlide(g: CanvasRenderingContext2D, w: Wrapped, a: WrappedAss
       text(g, `${ar.minutes.toLocaleString()} minutes together`, W / 2, 1030, 32, { weight: 600, alpha: 0.75 * fade(t, 0.4), align: 'center' })
       break
     }
-    case 4: {
+    case 'artists': {
       text(g, 'Top artists', L, 260, 92, { font: 'serif', alpha: fade(t) })
       w.artists.forEach((ar, j) => {
         const y = 380 + j * 160
@@ -198,7 +260,7 @@ export function drawSlide(g: CanvasRenderingContext2D, w: Wrapped, a: WrappedAss
       })
       break
     }
-    case 5: {
+    case 'clock': {
       text(g, 'When you listen', L, 260, 80, { font: 'serif', alpha: fade(t) })
       // A 24-hour clock with your peak highlighted.
       const cx = W / 2
@@ -217,19 +279,60 @@ export function drawSlide(g: CanvasRenderingContext2D, w: Wrapped, a: WrappedAss
       if (w.streak > 1) text(g, `${w.streak} days in a row with music`, L, 1066, 28, { weight: 560, alpha: 0.65 * fade(t, 0.6) })
       break
     }
-    case 6: {
+    case 'new': {
       text(g, String(w.newArtists.length), L, 470, 200, { weight: 840, alpha: fade(t) })
       text(g, w.newArtists.length === 1 ? 'new artist found you' : 'new artists found you', L, 545, 40, { weight: 650, alpha: 0.85 * fade(t, 0.15) })
       w.newArtists.slice(0, 6).forEach((n, j) => text(g, n, L, 660 + j * 64, 44, { font: 'serif', alpha: fade(t, 0.25 + j * 0.06), max: W - L * 2 }))
       break
     }
-    case 7: {
+    case 'mood': {
       const m = MOODS[w.mood]
       g.fillStyle = `hsla(${m.hue}, 80%, 55%, ${0.35 * fade(t)})`
       g.beginPath(); g.arc(W / 2, 560, 280 + 20 * Math.sin(t * Math.PI * 4), 0, Math.PI * 2); g.fill()
       text(g, 'This month felt', W / 2, 520, 40, { weight: 650, align: 'center', alpha: fade(t, 0.1) })
       text(g, m.label, W / 2, 640, 120, { font: 'serif', align: 'center', alpha: fade(t, 0.2) })
       if (w.album) text(g, `On repeat: ${w.album.name}`, W / 2, 1000, 32, { weight: 600, align: 'center', alpha: 0.8 * fade(t, 0.4), max: W - 80 })
+      break
+    }
+    case 'months': {
+      text(g, 'Your year,', L, 230, 80, { font: 'serif', alpha: fade(t) })
+      text(g, 'month by month', L, 310, 80, { font: 'serif', alpha: fade(t, 0.06) })
+      const max = Math.max(1, ...w.months.map((m) => m.minutes))
+      const peak = w.months.reduce((b, m) => (m.minutes > b.minutes ? m : b), w.months[0])
+      const top = 420
+      const h = 520
+      const bw = (W - L * 2) / 12
+      w.months.forEach((m, j) => {
+        const p = fade(t, 0.1 + j * 0.04, 0.3)
+        const bh = Math.max(4, (m.minutes / max) * h * p)
+        g.fillStyle = m.key === peak.key ? '#fff' : 'rgba(255,255,255,0.32)'
+        g.beginPath(); g.roundRect(L + j * bw + 5, top + h - bh, bw - 10, bh, 8); g.fill()
+        text(g, m.label.slice(0, 1), L + j * bw + bw / 2, top + h + 40, 24, { weight: 700, align: 'center', alpha: 0.7 })
+      })
+      text(g, `Biggest month: ${new Date(Number(peak.key.slice(0, 4)), Number(peak.key.slice(5)) - 1, 1).toLocaleDateString(undefined, { month: 'long' })}`, L, 1080, 36, { weight: 720, alpha: fade(t, 0.55) })
+      if (peak.topArtist) text(g, `mostly ${peak.topArtist}`, L, 1130, 30, { weight: 560, alpha: 0.7 * fade(t, 0.6), max: W - L * 2 })
+      break
+    }
+    case 'yoy': {
+      const pr = w.prev
+      if (!pr) break
+      text(g, `${w.key} vs ${Number(w.key) - 1}`, L, 250, 80, { font: 'serif', alpha: fade(t) })
+      const rows: [string, string, string][] = [
+        ['Minutes', pr.minutes.toLocaleString(), w.minutes.toLocaleString()],
+        ['Artists', String(pr.artists), String(w.artistsCount)],
+        ['Top artist', pr.topArtist ?? '—', w.artists[0]?.name ?? '—'],
+        ['Top song', pr.topSong ?? '—', w.songs[0]?.track.title ?? '—'],
+      ]
+      text(g, String(Number(w.key) - 1), W * 0.45, 360, 26, { weight: 700, alpha: 0.55 * fade(t, 0.1) })
+      text(g, w.key, W * 0.72, 360, 26, { weight: 800, alpha: fade(t, 0.1) })
+      rows.forEach(([k, a2, b2], j) => {
+        const y = 450 + j * 150
+        const p = fade(t, 0.15 + j * 0.08)
+        text(g, k, L, y, 28, { weight: 600, alpha: 0.6 * p })
+        text(g, a2, W * 0.45, y + 50, 34, { weight: 600, alpha: 0.55 * p, max: W * 0.25 })
+        text(g, b2, W * 0.72, y + 50, 38, { weight: 800, alpha: p, max: W * 0.25 })
+      })
+      if (w.change != null) text(g, w.change >= 0 ? `You listened ${w.change}% more this year.` : `A quieter year: ${Math.abs(w.change)}% less listening.`, L, 1110, 34, { weight: 700, alpha: fade(t, 0.55), max: W - L * 2 })
       break
     }
     default: {
@@ -251,6 +354,7 @@ export function drawSlide(g: CanvasRenderingContext2D, w: Wrapped, a: WrappedAss
       text(g, 'arnav-music · made on your device', L, 1180, 24, { weight: 600, alpha: 0.55 * fade(t, 0.5) })
     }
   }
+  burst(g, a, i, t)
 }
 
 /** Records the whole story. [onProgress] gets 0..1. Resolves with the video file. */
@@ -267,8 +371,9 @@ export async function recordWrapped(w: Wrapped, hue: number, onProgress: (p: num
   const chunks: Blob[] = []
   rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data) }
   const done = new Promise<void>((r) => { rec.onstop = () => r() })
-  const total = SLIDE_MS.reduce((x, y) => x + y, 0)
-  drawSlide(g, w, assets, 0, 0, hue)
+  const slides = slidesFor(w)
+  const total = slides.reduce((x, y) => x + y.ms, 0)
+  drawSlide(g, w, assets, slides[0].id, 0, 0, hue)
   rec.start(500)
   const t0 = performance.now()
   await new Promise<void>((resolve) => {
@@ -277,8 +382,8 @@ export async function recordWrapped(w: Wrapped, hue: number, onProgress: (p: num
       if (el >= total) { resolve(); return }
       let acc = 0
       let i = 0
-      while (i < SLIDE_MS.length - 1 && el >= acc + SLIDE_MS[i]) { acc += SLIDE_MS[i]; i++ }
-      drawSlide(g, w, assets, i, (el - acc) / SLIDE_MS[i], hue)
+      while (i < slides.length - 1 && el >= acc + slides[i].ms) { acc += slides[i].ms; i++ }
+      drawSlide(g, w, assets, slides[i].id, i, (el - acc) / slides[i].ms, hue)
       onProgress(el / total)
       requestAnimationFrame(frame)
     }

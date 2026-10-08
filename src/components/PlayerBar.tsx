@@ -11,6 +11,7 @@ import { activeIndex } from '../lib/lyrics'
 import { artworkFor } from '../lib/classify'
 import { openPopOut, popOutSupported } from './PopOut'
 import { Waveform, WaveTimes } from './Waveform'
+import { ChorusButton } from './SongMap'
 import { automixStyle } from '../player/controller'
 import type { PlayerBarPreset } from '../state/settings'
 
@@ -125,12 +126,12 @@ export function PlayerBar() {
             {repeat === 'one' && <span className="rep1">1</span>}
           </button>
         </div>
-        {preset === 'studio' ? <div className="pb-wave"><Waveform track={track} /><WaveTimes /></div> : <Progress variant="bar" />}
+        {preset === 'studio' ? <div className="pb-wave"><Waveform track={track} /><WaveTimes middle={<span className="pb-automix" title="How songs hand over (Settings → Playback, or per playlist)"><Icon name="wave" size={12} /> {AUTOMIX_LABEL[automixStyle()]}</span>} /></div> : <Progress variant="bar" />}
       </div>
       <div className="pb-right">
         <button className={`icon-btn sm dock-dup ${panel === 'lyrics' && expanded ? 'on' : ''}`} aria-label="Lyrics" onClick={() => open('lyrics')}><Icon name="lyrics" size={18} /></button>
         <button className={`icon-btn sm dock-dup ${panel === 'queue' && expanded ? 'on' : ''}`} aria-label="Queue" onClick={() => open('queue')}><Icon name="queue" size={18} /></button>
-        {preset === 'studio' && <span className="pb-automix t-caption" title="How songs hand over (Settings → Playback, or per playlist)"><Icon name="wave" size={14} /> {AUTOMIX_LABEL[automixStyle()]}</span>}
+        {preset === 'studio' && <ChorusButton compact />}
         {preset !== 'compact' && <VolumeSlider />}
         {popOutSupported() && <button className="icon-btn sm" aria-label="Pop out mini player" title="Pop out mini player" onClick={() => void openPopOut()}><Icon name="minimize" size={17} /></button>}
         <button className={`icon-btn sm ${docked ? 'on' : ''}`} aria-label={docked ? 'Undock Now Playing' : 'Dock Now Playing beside the page'} title="Dock Now Playing" onClick={() => useSettings.getState().update({ dockedPlayer: !docked })}><Icon name="dock" size={18} /></button>

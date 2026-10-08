@@ -15,6 +15,7 @@ import { usePlayer } from './state/player'
 import { Spinner } from './components/ui'
 import { PageBoundary } from './components/ErrorBoundary'
 import { isMorphing } from './lib/reveal'
+import { TogetherLayer } from './components/TogetherLayer'
 import Home from './pages/Home'
 
 const Explore = lazy(() => import('./pages/Explore'))
@@ -25,6 +26,7 @@ const AlbumPage = lazy(() => import('./pages/Album'))
 const CreditsPage = lazy(() => import('./pages/Credits'))
 const WrappedPage = lazy(() => import('./pages/Wrapped'))
 const WallPage = lazy(() => import('./pages/Wall'))
+const TogetherPage = lazy(() => import('./pages/Together'))
 const AiPage = lazy(() => import('./pages/Ai'))
 const MomentsPage = lazy(() => import('./pages/Moments'))
 const MomentPage = lazy(() => import('./pages/Moment'))
@@ -67,7 +69,8 @@ export default function App() {
   const docked = useSettings((s) => s.dockedPlayer) && desktop && hasTrack
 
   useEffect(() => {
-    if (!onboardingDone && !loc.pathname.startsWith('/welcome') && !loc.pathname.startsWith('/track/')) nav('/welcome', { replace: true })
+    // Shared links (a song, a listening room) open straight away, even on a first visit.
+    if (!onboardingDone && !/^\/(welcome|track\/|together\/)/.test(loc.pathname)) nav('/welcome', { replace: true })
   }, [onboardingDone, loc.pathname, nav])
   useEffect(() => { scroller.current?.scrollTo({ top: 0 }) }, [loc.pathname])
   useEffect(() => { if (expanded) usePlayer.getState().setExpanded(false) }, [loc.pathname]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -95,6 +98,8 @@ export default function App() {
                 <Route path="/wrapped" element={<WrappedPage />} />
                 <Route path="/wrapped/:month" element={<WrappedPage />} />
                 <Route path="/wall" element={<WallPage />} />
+                <Route path="/together" element={<Page><TogetherPage /></Page>} />
+                <Route path="/together/:code" element={<Page><TogetherPage /></Page>} />
                 <Route path="/ai" element={<Page><AiPage /></Page>} />
                 <Route path="/moments" element={<Page><MomentsPage /></Page>} />
                 <Route path="/moment/:id" element={<MomentPage />} />
@@ -122,6 +127,7 @@ export default function App() {
         <PhoneSheet />
         <Toasts />
         <PreviewPill />
+        <TogetherLayer />
       </div>
     </MotionConfig>
   )

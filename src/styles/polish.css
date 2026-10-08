@@ -1,0 +1,76 @@
+/*
+ * Detail polish. Loaded last, so these rules win over page styles of the same specificity.
+ * Phone rules first (≤ 700px), then small refinements for every size.
+ */
+
+@media (max-width: 700px) {
+  /* Explore: two genre tiles per row. */
+  .genre-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .genre-tile { height: 84px; font-size: 16.5px; padding: 13px 14px; border-radius: 16px; }
+  .genre-tile::after { width: 64px; height: 64px; right: -14px; bottom: -18px; border-radius: 16px; }
+
+  /* Settings: the account card stacks — logo and title, text full width, then the button. */
+  .set-hero { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px 14px; align-items: center; padding: 18px; }
+  .set-hero > .grow { min-width: 0; }
+  .set-hero > .btn, .set-hero > .row { grid-column: 1 / -1; justify-self: stretch; }
+  .set-hero > .btn { width: 100%; }
+  .set-hero .t-sub { margin-top: 4px; }
+  .set-nav { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); padding-right: 24px; }
+
+  /* Playlist / album actions: Play + Shuffle share the first row, everything else the second. */
+  .pl-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .pl-actions > .btn-lg { flex: 1 1 calc(50% - 5px); justify-content: center; }
+  .pl-actions .automix-chip .automix-label { display: none; }
+  .pl-hero { gap: 18px; }
+  .hero-cover { width: min(62vw, 260px); }
+
+  /* Listen together: code field and Join line up. */
+  .together-join { align-items: stretch; }
+  .together-join .field.code { flex: 1; max-width: none; height: 52px; }
+  .together-join .btn { height: 52px; }
+  .together-card { padding: 20px; }
+
+  /* Rows breathe a little less on phones; titles never collide with the menu. */
+  .track-row { gap: 12px; }
+  .section-head h2 { font-size: 22px; }
+  .t-large { font-size: clamp(30px, 8.6vw, 38px); }
+
+  /* Credits & identity on phones. */
+  .cr-list { grid-template-columns: 1fr; }
+  .ident-row { padding: 10px 6px; }
+  .replay-bars { height: 72px; }
+  .film-card .row .btn { flex: 1 1 auto; }
+}
+
+@media (max-width: 380px) {
+  .genre-tile { font-size: 15px; height: 76px; }
+  .pl-actions > .btn-lg { flex-basis: 100%; }
+}
+
+/* ── Every size ─────────────────────────────────────────────────────────── */
+/* Keyboard focus is always visible, never on mouse clicks. */
+:where(button, a, [role='button'], [role='tab'], [role='switch'], input, select, textarea):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 10px; }
+/* Numbers in lists and timers don't jiggle. */
+.tr-dur, .q-dur, .prog-time, .wave-times, .tabular, .dimheat-table, .together-code { font-variant-numeric: tabular-nums; }
+/* Text selection matches the accent. */
+::selection { background: color-mix(in srgb, var(--accent) 45%, transparent); }
+/* Long names wrap instead of breaking the layout. */
+.t-title, .t-sub, .cr-name, .film-title, .together-title { overflow-wrap: anywhere; }
+/* Disabled controls look disabled. */
+button:disabled, .btn:disabled, .chip:disabled { cursor: not-allowed; }
+
+/* Tonearm stays on screen on phones; form controls share one baseline. */
+@media (max-width: 700px) { .tonearm.narrow { right: -2%; top: -6%; width: 26%; height: 64%; } }
+.together-join > * { margin: 0; }
+.wave-times { align-items: center; }
+.wave-times .pb-automix { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-3); padding: 0; }
+.film-poster { position: relative; }
+.film-poster-blur { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: blur(14px) saturate(1.3) brightness(.7); transform: scale(1.2); }
+.film-poster > svg { position: relative; color: rgba(255,255,255,.9); }
+.film-line b { font-weight: 650; color: var(--text-2); }
+.together-join .field.code, .together-join .btn { height: 50px; }
+.together-join .btn { padding: 0 22px; }
+.app.immersive .sidebar { display: none !important; }
+.app.immersive .main-scroll { margin-left: 0 !important; }
+/* Beside lyrics or the queue, the tonearm tucks in over the record. */
+.np.split .tonearm { display: none; }

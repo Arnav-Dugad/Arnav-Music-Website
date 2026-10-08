@@ -280,3 +280,29 @@ html.vt-morph::view-transition-new(root) { animation: vt-in .38s .06s ease both;
 .q-echo.e1 { opacity: 0.32; filter: blur(1px); }
 .q-echo.e2 { opacity: 0.16; filter: blur(3px); }
 .q-row.dragging { cursor: grabbing; }
+.np-reacts { display: flex; gap: 4px; justify-content: center; }
+.np-reacts button { font-size: 22px; width: 42px; height: 42px; border-radius: 14px; display: grid; place-items: center; background: rgba(255,255,255,0.08); }
+.np-reacts button:hover { background: rgba(255,255,255,0.16); }
+/* Held notes: the word swells, its letters stretch with the vocal, and it glows while held. */
+.lyr-line[data-state='active'] .w[data-held] {
+  transform: translateY(calc(-0.035em * var(--hold, 0))) scale(calc(1 + 0.075 * var(--hold, 0)));
+  letter-spacing: calc(0.045em * var(--hold, 0));
+  text-shadow: 0 0 calc(30px * var(--hold, 0)) rgba(255, 255, 255, calc(0.6 * var(--hold, 0)));
+  transform-origin: 50% 70%;
+  transition: transform .18s linear, letter-spacing .18s linear, text-shadow .3s ease, filter .5s ease;
+}
+.lyr-line[data-state='active'] .w[data-held][data-s='done'] { --hold: 0; transition: transform .9s cubic-bezier(0.2, 0.8, 0.2, 1), letter-spacing .9s cubic-bezier(0.2, 0.8, 0.2, 1), text-shadow 1s ease; }
+:root[data-motion='off'] .lyr-line .w[data-held] { transform: none !important; letter-spacing: 0 !important; text-shadow: none !important; }
+.tonearm { position: absolute; z-index: 3; top: -9%; right: -24%; width: 34%; height: 75%; transform-origin: 78% 7%; pointer-events: none; overflow: visible; }
+.tonearm.narrow { right: -12%; width: 30%; }
+:root[data-motion='off'] .tonearm { transition: none; }
+
+/* ── Song sections & replay map ───────────────────────────────────────── */
+.np-progress { position: relative; }
+.sec-strip { position: relative; height: 6px; margin: 0 0 8px; }
+.sec-strip .sec { position: absolute; top: 0; height: 6px; border-radius: 3px; background: rgba(255,255,255,0.14); padding: 0; transition: background .2s, transform .2s; }
+.sec-strip .sec:hover { transform: scaleY(1.6); background: rgba(255,255,255,0.32); }
+.sec-strip .sec.chorus { background: color-mix(in srgb, var(--np-vivid, #fff) 70%, #fff 30%); opacity: .9; }
+.sec-strip .sec.bridge { background: rgba(255,255,255,0.32); }
+.sec-strip .sec.intro, .sec-strip .sec.outro, .sec-strip .sec.instrumental { background: rgba(255,255,255,0.06); }
+.chorus-btn:disabled { opacity: .6; }

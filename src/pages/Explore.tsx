@@ -305,7 +305,7 @@ export default function Explore() {
         <h1 className="t-large">{q ? 'Search' : 'Explore'}</h1>
         <div className="search-box glass">
           <Icon name="search" size={19} />
-          <input ref={input} value={text} onChange={(e) => onChange(e.target.value)} placeholder="Songs, artists, playlists — or paste a YouTube link" aria-label="Search" autoComplete="off" spellCheck={false} />
+          <input ref={input} value={text} onChange={(e) => onChange(e.target.value)} placeholder={typeof window !== 'undefined' && window.innerWidth < 600 ? 'Songs, artists or a YouTube link' : 'Songs, artists, playlists — or paste a YouTube link'} aria-label="Search" autoComplete="off" spellCheck={false} />
           {voice.supported && <button className={`icon-btn sm ${voice.listening ? 'on recording' : ''}`} aria-label="Search by voice" onClick={voice.toggle}><Icon name="mic" size={16} /></button>}
           <AnimatePresence>{text && <motion.button initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="icon-btn sm" aria-label="Clear" onClick={() => onChange('')}><Icon name="close" size={16} /></motion.button>}</AnimatePresence>
         </div>

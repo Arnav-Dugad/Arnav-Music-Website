@@ -11,6 +11,16 @@ import { songNotes } from '../lib/aiFeatures'
 
 const LEAD_MS = 140
 
+/** A word sung long enough to be a held note (≥ 0.75 s, or far longer than the line's other words). */
+function isHeld(ln: LyricLine, j: number): boolean {
+  const w = ln.words[j]
+  const d = w.end - w.start
+  if (d >= 750) return true
+  if (ln.words.length < 3) return false
+  const avg = ln.words.reduce((a, x) => a + (x.end - x.start), 0) / ln.words.length
+  return d >= 520 && d > avg * 1.8
+}
+
 /** Smoothly interpolated playback position (the store ticks at 4 Hz; lyrics animate at 60 fps). */
 function usePositionClock() {
   const ref = useRef({ pos: useProgress.getState().position, at: performance.now() })
@@ -91,6 +101,8 @@ export function SyncedLyrics({ lines, translation, romanized, size, dual = false
           // Apple-style: each word rises and sharpens as it's sung.
           const st = p <= 0 ? '' : p >= 1 ? 'done' : 'on'
           if (el.dataset.s !== st) { el.dataset.s = st }
+          // A held note swells and glows while it's held, then settles.
+          if (el.dataset.held) el.style.setProperty('--hold', st === 'on' ? String(Math.min(1, p * 1.35)) : '0')
         })
         // A light pulse as each new word is sung — the rhythm of the vocal line.
         let wi = -1
@@ -158,7 +170,7 @@ export function SyncedLyrics({ lines, translation, romanized, size, dual = false
                 <>
                   {ln.text && (
                     <span className="lyr-main" ref={(el) => { if (el) wordRefs.current.set(i, [...el.querySelectorAll('.w')] as HTMLSpanElement[]) }}>
-                      {ln.words.length ? ln.words.map((w, j) => <span key={j}><span className="w">{w.text}</span>{j < ln.words.length - 1 ? ' ' : ''}</span>) : <span className="w">{ln.text}</span>}
+                      {ln.words.length ? ln.words.map((w, j) => <span key={j}><span className="w" data-held={isHeld(ln, j) || undefined}>{w.text}</span>{j < ln.words.length - 1 ? ' ' : ''}</span>) : <span className="w">{ln.text}</span>}
                     </span>
                   )}
                   {ln.background && <span className="lyr-bg" ref={(el) => { if (el) bgRefs.current.set(i, el) }}>{ln.background}</span>}

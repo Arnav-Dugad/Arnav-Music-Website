@@ -240,6 +240,41 @@ ${list}`
   } catch { return { ok: false, reason: 'MALFORMED' } }
 }
 
+/** Arnav AI labels song sections from numbered lyric lines (verse / chorus / bridge…). */
+export async function labelSectionsAi(track: Track, lines: string[]): Promise<{ from: number; to: number; kind: string }[] | null> {
+  const list = lines.slice(0, 140).map((l, i) => `${i + 1}. ${l.slice(0, 100)}`).join('\n')
+  const prompt = `These are the lyric lines of "${track.title.slice(0, 100)}" by ${track.artist.slice(0, 60)}, in order.
+Group them into song sections. Use only these kinds: verse, chorus, prechorus, bridge, hook, outro.
+The chorus is the part that repeats with the same words. Reply with JSON only:
+{"sections":[{"from":1,"to":4,"kind":"verse"}]}  (line numbers inclusive, every line in exactly one section)
+
+${list}`
+  const r = await generate(prompt, 'sections-v1', { json: true, maxOutputTokens: 1500, temperature: 0, cacheTtlMs: 365 * 86_400_000 })
+  if (!r.ok) return null
+  try {
+    const parsed = JSON.parse(r.text.replace(/```[a-z]*\n?|```/g, '')) as { sections?: { from?: number; to?: number; kind?: string }[] }
+    const out = (parsed.sections ?? []).filter((x) => typeof x.from === 'number' && typeof x.to === 'number' && x.from >= 1 && x.to >= x.from && x.to <= lines.length && typeof x.kind === 'string')
+    return out.length ? (out as { from: number; to: number; kind: string }[]) : null
+  } catch { return null }
+}
+
+/** No synced lyrics: Arnav AI listens and marks the sections (start/end seconds). */
+export async function sectionsFromAudioAi(track: Track): Promise<{ start: number; end: number; kind: string }[] | null> {
+  const url = `https://www.youtube.com/watch?v=${track.playbackRef}`
+  if (!/^https:\/\/www\.youtube\.com\/watch\?v=[A-Za-z0-9_-]{11}$/.test(url)) return null
+  const instruction = `Listen to this recording ("${track.title.slice(0, 100)}" by ${track.artist.slice(0, 60)}) and mark its sections in time order.
+Use only these kinds: intro, verse, chorus, bridge, instrumental, outro. The chorus is the part that repeats and lifts.
+Reply with JSON only: {"sections":[{"start":0,"end":14.5,"kind":"intro"}]} (seconds from the start of the video)`
+  const parts: Part[] = [{ type: 'fileData', fileData: { mimeType: 'video/mp4', fileUri: url } }, { type: 'text', text: instruction }]
+  const r = await generate(parts, 'sections-audio-v1', { json: true, maxOutputTokens: 1500, timeoutMs: 120000, temperature: 0, cacheTtlMs: 365 * 86_400_000, skipThrottle: true })
+  if (!r.ok) return null
+  try {
+    const parsed = JSON.parse(r.text.replace(/```[a-z]*\n?|```/g, '')) as { sections?: { start?: number; end?: number; kind?: string }[] }
+    const out = (parsed.sections ?? []).filter((x) => typeof x.start === 'number' && typeof x.end === 'number' && x.end > x.start && typeof x.kind === 'string')
+    return out.length >= 2 ? (out as { start: number; end: number; kind: string }[]) : null
+  } catch { return null }
+}
+
 /** One-line, fact-bound explanation for a recommendation (cached for a week). */
 export async function explain(track: Track, signals: string[]): Promise<string | null> {
   const prompt = `In one short sentence (max 14 words), explain to a listener why "${track.title}" by ${track.artist} was suggested.

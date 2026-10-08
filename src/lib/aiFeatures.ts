@@ -109,6 +109,45 @@ ${excerpt ? `Lyrics excerpt for context:\n${excerpt}\n` : ''}Interpret the lyric
   return r.ok ? { text: r.text.trim(), usedAi: true } : null
 }
 
+// ── A film's music ──────────────────────────────────────────────────────────
+export interface FilmMusic {
+  intro: string
+  composers: { name: string; works: { title: string; year: number | null }[] }[]
+  similar: { title: string; year: number | null; composer: string | null; why: string }[]
+}
+
+/** "Ask Arnav AI about this film's music": the composer's other work and soundtracks like it. */
+export async function filmMusic(film: { title: string; year: number | null; composers: string[]; director: string | null; songs: string[] }): Promise<FilmMusic | null> {
+  const facts = [
+    `Film: ${film.title}${film.year ? ` (${film.year})` : ''}`,
+    film.composers.length ? `Music by: ${film.composers.join(', ')}` : null,
+    film.director ? `Directed by: ${film.director}` : null,
+    film.songs.length ? `Songs: ${film.songs.slice(0, 12).join('; ')}` : null,
+  ].filter(Boolean).join('\n')
+  const prompt = `You are a film-music expert. Using these facts:
+${facts}
+
+Write JSON only, with real, well-known titles you are confident exist (skip anything you're unsure of):
+{"intro":"2-3 sentences about this soundtrack's sound and place, max 70 words",
+ "composers":[{"name":"composer","works":[{"title":"other film or album they scored","year":2015}]}],
+ "similar":[{"title":"film soundtrack with a similar feel","year":2014,"composer":"its composer","why":"max 10 words"}]}
+At most 6 works per composer and 6 similar soundtracks. No markdown.`
+  const r = await generate(prompt, 'film-music-v1', { json: true, maxOutputTokens: 1400, temperature: 0.3, cacheTtlMs: 180 * 86_400_000, skipThrottle: true })
+  if (!r.ok) return null
+  let o: Partial<FilmMusic> | null = null
+  try { const raw = extractObject(r.text); o = raw ? (JSON.parse(raw) as Partial<FilmMusic>) : null } catch { return null }
+  if (!o || typeof o.intro !== 'string') return null
+  const year = (y: unknown) => (typeof y === 'number' && y > 1900 && y < 2100 ? y : null)
+  return {
+    intro: o.intro.slice(0, 600),
+    composers: (Array.isArray(o.composers) ? o.composers : []).slice(0, 3).map((c) => ({
+      name: String(c?.name ?? '').slice(0, 80),
+      works: (Array.isArray(c?.works) ? c.works : []).slice(0, 6).map((w) => ({ title: String(w?.title ?? '').slice(0, 100), year: year(w?.year) })).filter((w) => w.title),
+    })).filter((c) => c.name),
+    similar: (Array.isArray(o.similar) ? o.similar : []).slice(0, 6).map((x) => ({ title: String(x?.title ?? '').slice(0, 100), year: year(x?.year), composer: x?.composer ? String(x.composer).slice(0, 80) : null, why: String(x?.why ?? '').slice(0, 80) })).filter((x) => x.title),
+  }
+}
+
 // ── Weather & time moods (Open-Meteo, no key; location only with consent) ─────
 export interface Weather { code: number; temp: number; isDay: boolean; label: string; mood: Mood; moment: string; at: number }
 

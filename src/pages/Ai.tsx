@@ -106,7 +106,7 @@ export default function AiPage() {
         </form>
         {!result && !busy && (
           <div className="ai-suggestions">
-            {(prompts.length ? [...prompts.slice(0, 3), ...AI_SUGGESTIONS.slice(0, 5)] : AI_SUGGESTIONS).slice(0, 8).map((sug, i) => (
+            {[...new Set(prompts.length ? [...prompts.slice(0, 3), ...AI_SUGGESTIONS] : AI_SUGGESTIONS)].slice(0, 8).map((sug, i) => (
               <motion.button key={sug} className="chip" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring, delay: 0.05 * i }} onClick={() => { setText(sug); submit(sug) }}>
                 {i < Math.min(3, prompts.length) ? <Icon name="history" size={13} /> : <Icon name="sparkles" size={13} />} {sug}
               </motion.button>

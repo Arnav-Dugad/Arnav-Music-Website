@@ -6,6 +6,8 @@ import { hourLabel } from './taste'
 export interface WrappedSong { track: Track; plays: number; minutes: number }
 export interface WrappedArtist { name: string; plays: number; minutes: number; art: string | null }
 export interface Wrapped {
+  /** A month ("2026-10") or a whole year ("2026"). */
+  kind: 'month' | 'year'
   key: string
   label: string
   start: number
@@ -24,6 +26,11 @@ export interface Wrapped {
   /** Minutes compared with the month before (null when there's no earlier month). */
   change: number | null
   firstSong: Track | null
+  /** Year only: each month's minutes and top artist. */
+  months: { key: string; label: string; minutes: number; topArtist: string | null }[]
+  /** The period before (last month / last year), for comparisons. */
+  prev: { minutes: number; topArtist: string | null; topSong: string | null; artists: number } | null
+  artistsCount: number
 }
 
 export const monthKey = (ts: number) => { const d = new Date(ts); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` }
@@ -32,6 +39,19 @@ export function monthRange(key: string): { start: number; end: number; label: st
   const start = new Date(y, m - 1, 1).getTime()
   const end = new Date(y, m, 1).getTime()
   return { start, end, label: new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) }
+}
+
+/** A month key or a year key → its range. */
+export function rangeOf(key: string): { start: number; end: number; label: string; kind: 'month' | 'year' } {
+  if (/^\d{4}$/.test(key)) { const y = Number(key); return { start: new Date(y, 0, 1).getTime(), end: new Date(y + 1, 0, 1).getTime(), label: key, kind: 'year' } }
+  return { ...monthRange(key), kind: 'month' }
+}
+
+/** Years with at least two wrapped months, newest first. */
+export function wrappedYears(events: PlayEvent[]): string[] {
+  const counts = new Map<string, number>()
+  for (const m of wrappedMonths(events)) counts.set(m.slice(0, 4), (counts.get(m.slice(0, 4)) ?? 0) + 1)
+  return [...counts.entries()].filter(([, n]) => n >= 2).map(([y]) => y).sort().reverse()
 }
 
 /** Months you listened in, newest first (only months with at least 30 minutes). */
@@ -53,7 +73,7 @@ function moodOf(energy: number): Mood {
 }
 
 export function buildWrapped(key: string, events: PlayEvent[], track: (id: TrackId) => Track | undefined): Wrapped | null {
-  const { start, end, label } = monthRange(key)
+  const { start, end, label, kind } = rangeOf(key)
   const inMonth = events.filter((e) => e.startedAt >= start && e.startedAt < end && e.listenedMs >= 15_000)
   if (!inMonth.length) return null
   const ms = inMonth.reduce((a, e) => a + e.listenedMs, 0)
@@ -108,8 +128,21 @@ export function buildWrapped(key: string, events: PlayEvent[], track: (id: Track
   let eSum = 0
   let wSum = 0
   for (const e of inMonth) { const t = track(e.trackId); if (t?.energy != null) { eSum += t.energy * e.listenedMs; wSum += e.listenedMs } }
-  const prev = monthRange(monthKey(start - 86_400_000))
-  const prevMs = events.filter((e) => e.startedAt >= prev.start && e.startedAt < prev.end).reduce((a, e) => a + e.listenedMs, 0)
+  const prev = kind === 'year' ? rangeOf(String(Number(key) - 1)) : monthRange(monthKey(start - 86_400_000))
+  const prevEvents = events.filter((e) => e.startedAt >= prev.start && e.startedAt < prev.end && e.listenedMs >= 15_000)
+  const prevMs = prevEvents.reduce((a, e) => a + e.listenedMs, 0)
+  const topOf = (list: PlayEvent[], by: (e: PlayEvent) => string | null) => {
+    const m = new Map<string, number>()
+    for (const e of list) { const k = by(e); if (k) m.set(k, (m.get(k) ?? 0) + e.listenedMs) }
+    return [...m.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
+  }
+  const artistName = (e: PlayEvent) => track(e.trackId)?.artist.split(/,|&/)[0].trim() || null
+  const months = kind === 'year' ? Array.from({ length: 12 }, (_, i) => {
+    const mk = `${key}-${String(i + 1).padStart(2, '0')}`
+    const r = monthRange(mk)
+    const evs = inMonth.filter((e) => e.startedAt >= r.start && e.startedAt < r.end)
+    return { key: mk, label: new Date(Number(key), i, 1).toLocaleDateString(undefined, { month: 'short' }), minutes: Math.round(evs.reduce((a, e) => a + e.listenedMs, 0) / 60_000), topArtist: topOf(evs, artistName) }
+  }) : []
   const first = [...inMonth].sort((a, b) => a.startedAt - b.startedAt)[0]
   return {
     key, label, start, end,
@@ -125,6 +158,10 @@ export function buildWrapped(key: string, events: PlayEvent[], track: (id: Track
     mood: moodOf(wSum ? eSum / wSum : 0.5),
     change: prevMs > 0 ? Math.round(((ms - prevMs) / prevMs) * 100) : null,
     firstSong: first ? track(first.trackId) ?? null : null,
+    kind,
+    months,
+    prev: prevMs > 0 ? { minutes: Math.round(prevMs / 60_000), topArtist: topOf(prevEvents, artistName), topSong: (() => { const id = topOf(prevEvents, (e) => e.trackId); return id ? track(id)?.title ?? null : null })(), artists: new Set(prevEvents.map((e) => e.artistKey)).size } : null,
+    artistsCount: byArtist.size,
   }
 }
 

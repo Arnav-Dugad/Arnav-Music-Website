@@ -23,6 +23,8 @@ import { authMessage, linkGoogle, resetPassword, signInEmail, signInWithGoogle, 
 import { refreshAuthUser } from '../services/sync'
 import type { Track } from '../lib/types'
 import { artistKey, MOODS, MOOD_KEYS } from '../lib/types'
+import { isHost, suggest, useTogether } from '../services/together'
+import { skipToChorus } from '../state/sections'
 
 export async function startRadio(track: Track) {
   toast(`Starting ${track.artist} radio…`)
@@ -116,6 +118,7 @@ export function TrackMenu() {
               toast('Making your card…')
               void shareCard(t, line).catch(() => toast('The card couldn’t be made'))
             }} />
+            {useTogether.getState().code && <MenuItem icon="radio" label={isHost() ? 'Play next for the room' : 'Suggest to the room'} onClick={() => suggest(t)} />}
             <MenuItem icon="phone" label="Continue on your phone" onClick={() => { if (usePlayer.getState().queue[usePlayer.getState().index]?.track.id !== t.id) player().play([t], 0, { context: 'Shared' }); ui().set({ phoneOpen: true }) }} />
             <MenuItem icon="youtube" label="Open on YouTube" onClick={() => window.open(`https://www.youtube.com/watch?v=${t.playbackRef}`, '_blank', 'noopener')} />
             <div className="menu-sep" />
@@ -210,6 +213,7 @@ export function CommandPalette() {
       { id: 'lib', group: 'Go to', icon: 'library', label: 'Library', run: go('/library') },
       { id: 'liked', group: 'Go to', icon: 'heartFill', label: 'Liked Songs', run: go('/playlist/liked') },
       { id: 'dna', group: 'Go to', icon: 'chart', label: 'Taste DNA', run: go('/insights') },
+      { id: 'together', group: 'Go to', icon: 'radio', label: 'Listen together', hint: 'Rooms', run: go('/together') },
       { id: 'wrapped', group: 'Go to', icon: 'story', label: 'Your month, wrapped', run: go('/wrapped') },
       { id: 'wall', group: 'Go to', icon: 'wall', label: 'Album wall', hint: '3D', run: go('/wall') },
       { id: 'set', group: 'Go to', icon: 'gear', label: 'Settings', run: go('/settings') },
@@ -297,7 +301,7 @@ export function CommandPalette() {
 
 const SHORTCUTS: [string, string][] = [
   ['Space', 'Play / pause'], ['⇧ →', 'Next song'], ['⇧ ←', 'Previous song'], ['→ / ←', 'Seek 5 seconds'], ['↑ / ↓', 'Volume'],
-  ['M', 'Mute'], ['L', 'Like the current song'], ['S', 'Shuffle'], ['R', 'Repeat'], ['F', 'Now Playing'], ['Y', 'Lyrics'], ['Q', 'Queue'],
+  ['M', 'Mute'], ['L', 'Like the current song'], ['S', 'Shuffle'], ['R', 'Repeat'], ['F', 'Now Playing'], ['Y', 'Lyrics'], ['Q', 'Queue'], ['C', 'Skip to the chorus'],
   ['⌘ K / Ctrl K', 'Command palette'], ['/', 'Search'], ['?', 'This list'],
 ]
 
@@ -338,6 +342,7 @@ export function useShortcuts() {
         case 'r': case 'R': p.cycleRepeat(); toast(`Repeat ${usePlayer.getState().repeat}`); break
         case 'f': case 'F': p.setExpanded(!usePlayer.getState().expanded); break
         case 'y': case 'Y': p.setExpanded(true); p.setPanel('lyrics'); break
+        case 'c': case 'C': skipToChorus(); break
         case 'q': case 'Q': p.setExpanded(true); p.setPanel('queue'); break
         case 'l': case 'L': { const t = usePlayer.getState().queue[usePlayer.getState().index]?.track; if (t) toast(lib().toggleLike(t) ? 'Added to Liked Songs' : 'Removed from Liked Songs'); break }
         case '/': e.preventDefault(); p.setExpanded(false); nav('/explore?focus=1'); break

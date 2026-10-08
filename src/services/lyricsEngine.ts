@@ -49,7 +49,7 @@ export interface LyricsPick {
   community: CommunityTiming | null
 }
 
-const CACHE = 'lyr|v5|'
+const CACHE = 'lyr|v6|'
 const words = (s: string) => s.toLowerCase().normalize('NFKD').replace(/\p{M}+/gu, '').replace(/\(.*?\)|\[.*?\]/g, ' ').replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
 
 interface LrclibRecord { id?: number; trackName?: string; artistName?: string; albumName?: string; duration?: number; instrumental?: boolean; plainLyrics?: string | null; syncedLyrics?: string | null }
@@ -131,7 +131,7 @@ export function scoreCandidate(c: LyricsCandidate, ctx: { rawTitle?: string; tit
   if (lines < 4 && !/instrumental/i.test(c.raw)) s -= 20
   if (ctx.preferLatin != null) {
     const latin = latinShare(c.raw) > 0.7
-    if (latin === ctx.preferLatin) s += 8
+    if (latin === ctx.preferLatin) s += 16
   }
   if (ctx.reference?.size) {
     const mine = tokensOf(sungText(c.raw))
