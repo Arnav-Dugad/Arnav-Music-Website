@@ -47,6 +47,24 @@ describe('formatters (CoreLogicTest)', () => {
   })
 })
 
+describe('label uploads (web improvements)', () => {
+  it('reads "Song - Movie | Cast | Singers" from Indian labels', () => {
+    const p = parseYouTubeTitle('Makhna - Drive | Sushant Singh Rajput, Jacqueline Fernandez | Tanishk Bagchi, Asees Kaur', 'Zee Music Company')
+    expect(p.title).toBe('Makhna')
+    expect(p.album).toBe('Drive')
+    expect(p.artist).toBe('Tanishk Bagchi, Asees Kaur')
+    expect(p.credits).toBe('Sushant Singh Rajput, Jacqueline Fernandez')
+  })
+  it('strips label noise and quotes', () => {
+    expect(parseYouTubeTitle('Full Song: Tujhe Kitna Chahne Lage | Kabir Singh', 'T-Series').title).toBe('Tujhe Kitna Chahne Lage')
+    expect(parseYouTubeTitle('"Senorita Zindagi Na Milegi Dobara" Full HD', 'T-Series').title).toBe('Senorita Zindagi Na Milegi Dobara')
+  })
+  it('leaves artist - title uploads from non-label channels alone', () => {
+    const p = parseYouTubeTitle('Daft Punk - Get Lucky (Official Video)', 'DaftPunkVEVO')
+    expect([p.artist, p.title]).toEqual(['Daft Punk', 'Get Lucky'])
+  })
+})
+
 describe('catalog (CatalogTest)', () => {
   it('rejects mixes, mashups and mood compilations', () => {
     for (const t of ['Music Mix 2026 | Party Club Dance 2026 | Best Remixes', 'Gym Motivation Music', 'Remixes & Mashups of Popular Songs 2026',

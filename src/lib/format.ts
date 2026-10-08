@@ -61,6 +61,11 @@ const segmentNoise = /(#|\b(songs?|music|video|lyric(al|s)?|latest|new|hits|telu
 const movieWords = /\s*\b(movie|film|songs?|ost)\b\s*/gi
 const movieWordsTest = /\s*\b(movie|film|songs?|ost)\b\s*/i
 
+const leadingNoise = /^\s*(full\s+(video\s+)?song|full\s+video|lyrical(\s+video)?|lyric\s+video|video\s+song|video|audio|official\s+(video|audio))\s*[:\-–|]\s*/i
+const fullHd = /\s+(full\s+)?(hd|4k|1080p|720p)(\s+video)?(\s+song)?\s*$/i
+const labelChannel = /^(t-series|yrf|sony music (india|south)|zee music|tips (official|music)|saregama|aditya music|lahari|speed records|times music|venus|eros now|shemaroo|think music|sun music|mango music|junglee music|desi music factory|white hill|saga music|universal music india|t-series [a-z]+|sony music)\b/i
+export const isLabelChannel = (channel: string) => labelChannel.test(channel.trim())
+
 export interface ParsedTitle {
   artist: string
   title: string
@@ -95,21 +100,35 @@ export function parseYouTubeTitle(raw: string, channel: string): ParsedTitle {
     .map((s) => s.replace(movieWords, ' ').replace(/\s+/g, ' ').trim())
     .filter((s) => s.length >= 2 && s.length <= 60 && !segmentNoise.test(s))
 
-  const sep = /( - | – | — )/.exec(cleaned)
-  const parts = sep ? [cleaned.slice(0, sep.index), cleaned.slice(sep.index + sep[0].length)] : [cleaned]
+  const tidy = cleaned.replace(leadingNoise, '').replace(fullHd, '').replace(/^["“”']+|["“”']+$/g, '').trim() || cleaned
+  const sep = /( - | – | — )/.exec(tidy)
+  const parts = sep ? [tidy.slice(0, sep.index), tidy.slice(sep.index + sep[0].length)] : [tidy]
   const artistFromChannel = channel.replace(/\s*-\s*Topic$/i, '').replace(/VEVO$/, '').trim()
+  const label = isLabelChannel(channel)
   let artist: string
   let title: string
-  if (parts.length === 2 && parts[0].length >= 1 && parts[0].length <= 60 && parts[1].trim() !== '') {
+  let labelAlbum: string | null = null
+  if (parts.length === 2 && label && parts[0].trim() && parts[1].trim()) {
+    // Label uploads write "Song - Movie": the channel is the label, not the singer.
+    title = parts[0].trim()
+    labelAlbum = parts[1].trim().slice(0, 60)
+    artist = artistFromChannel || 'Unknown artist'
+  } else if (parts.length === 2 && parts[0].length >= 1 && parts[0].length <= 60 && parts[1].trim() !== '') {
     artist = parts[0].trim()
     title = parts[1].trim()
   } else {
     artist = artistFromChannel || 'Unknown artist'
-    title = cleaned || raw
+    title = tidy || raw
   }
-  const album = extras.find((e) => !e.includes(',')) ?? null
-  const credits = extras.find((e) => e !== album && (e.includes(',') || e.split(' ').length <= 4)) ?? null
-  return { artist, title: decodeEntities(title), album: album ? decodeEntities(album) : null, credits: credits ? decodeEntities(credits) : null }
+  const album = labelAlbum ?? extras.find((e) => !e.includes(',')) ?? null
+  const lists = extras.filter((e) => e !== album && e.includes(','))
+  let credits = extras.find((e) => e !== album && (e.includes(',') || e.split(' ').length <= 4)) ?? null
+  if (label && lists.length >= 2) {
+    // "… | Cast A, Cast B | Singer A, Singer B": the last name list is the singers.
+    artist = lists[lists.length - 1].split(',').map((x) => x.trim()).filter(Boolean).slice(0, 2).join(', ')
+    credits = lists[0]
+  }
+  return { artist: decodeEntities(artist), title: decodeEntities(title), album: album ? decodeEntities(album) : null, credits: credits ? decodeEntities(credits) : null }
 }
 
 /** search.list snippets are HTML-escaped ("Guns N&#39; Roses"). */

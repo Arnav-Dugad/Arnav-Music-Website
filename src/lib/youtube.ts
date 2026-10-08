@@ -36,7 +36,7 @@ interface CachedPage {
 }
 
 /** Bumped when the track mapping changes so stale cached pages are refetched once. */
-const CACHE_VERSION = 'v2|'
+const CACHE_VERSION = 'v3|'
 const inflight = new Map<string, Promise<SearchResults>>()
 
 const budget = () => settings().youtubeDailyBudget || 10000

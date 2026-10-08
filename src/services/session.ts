@@ -71,8 +71,19 @@ export async function createSession(request: string, onStep: (s: Step) => void, 
   const p = profile()
   const seeds = new Set(constraints.seedArtists.map(artistKey))
   const target = constraints.energyTarget
-  const familiar = trackRegistry.many([...p.trackPlayCounts.keys(), ...likedIds()]).filter((t) =>
-    seeds.has(artistKey(t.artist)) || (t.energy != null && Math.abs(t.energy - target) < 0.2) || (constraints!.rediscover && (Date.now() - (p.lastPlayedAt.get(t.id) ?? 0)) > 30 * 86_400_000))
+  // What the request is actually about, judged from the songs it found (artists + dominant genres).
+  const poolArtists = new Set(pool.map((t) => artistKey(t.artist)))
+  const genreCounts = new Map<string, number>()
+  pool.forEach((t) => t.genres.forEach((g) => genreCounts.set(g, (genreCounts.get(g) ?? 0) + 1)))
+  const poolGenres = new Set([...genreCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([g]) => g))
+  const fitsEnergy = (t: Track) => t.energy == null || Math.abs(t.energy - target) < 0.2
+  const familiar = trackRegistry.many([...p.trackPlayCounts.keys(), ...likedIds()]).filter((t) => {
+    const k = artistKey(t.artist)
+    if (seeds.has(k)) return true
+    if (constraints!.rediscover) return (Date.now() - (p.lastPlayedAt.get(t.id) ?? 0)) > 30 * 86_400_000
+    if (pool.length === 0) return t.energy != null && Math.abs(t.energy - target) < 0.2 // offline: energy is all we have
+    return (poolArtists.has(k) || t.genres.some((g) => poolGenres.has(g))) && fitsEnergy(t)
+  })
   const want = constraints.familiarity
   const candidates = [...pool, ...(want >= 0.4 || constraints.rediscover ? familiar : familiar.slice(0, 10))]
     .filter((t) => isSingle(t) && allows(t))

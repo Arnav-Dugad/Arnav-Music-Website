@@ -66,7 +66,7 @@ export async function handleApi(request: Request, env: ApiEnv, waitUntil?: (p: P
   try {
     switch (route) {
       case '/api/health':
-        return json({ ok: true, youtube: Boolean(env.YOUTUBE_API_KEY), time: Date.now() }, 200, { 'cache-control': 'no-store' })
+        return json({ ok: true, youtube: Boolean(env.YOUTUBE_API_KEY), androidRestricted: Boolean(env.YOUTUBE_ANDROID_PACKAGE && env.YOUTUBE_ANDROID_CERT), time: Date.now() }, 200, { 'cache-control': 'no-store' })
       case '/api/yt':
         return await youtube(url, request, env, waitUntil)
       case '/api/img':
