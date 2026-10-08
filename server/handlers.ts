@@ -12,7 +12,7 @@
  *   GET|POST /api/community          → lyrics version + timing fixes listeners agreed on
  *   GET  /api/known                  → artist + film names learned from YouTube Topic data
  */
-import { cached, json, USER_AGENT, type ApiEnv, type WaitUntil } from './util'
+import { cached, fetchWithTimeout, json, USER_AGENT, type ApiEnv, type WaitUntil } from './util'
 import { creditsApi, communityApi, knownApi, metaApi } from './meta'
 import { flushKnown, knownSets, learnFromYouTube, nameKey } from './known'
 import { parseYouTubeTitle, PARSE_V } from '../src/lib/format'
@@ -176,16 +176,22 @@ async function lyrics(url: URL, env: ApiEnv, waitUntil?: WaitUntil): Promise<Res
   }
   const cacheKey = `lrc:v1:${upstream.pathname}?${upstream.searchParams.toString()}`
   const result = await cached(env, cacheKey, 7 * 86400, async () => {
-    const r = await fetch(upstream.toString(), { headers: { 'User-Agent': USER_AGENT, 'Lrclib-Client': USER_AGENT, accept: 'application/json' } })
-    // 404 from /api/get simply means "no exact match" — pass it through so the client can search.
-    return { status: r.status, body: await r.text() }
+    // LRCLIB has brief overloads (503 / 429 / timeouts): one quick retry before giving up.
+    for (let attempt = 0; ; attempt++) {
+      const r = await fetchWithTimeout(upstream.toString(), { headers: { 'User-Agent': USER_AGENT, 'Lrclib-Client': USER_AGENT, accept: 'application/json' } }, 9000).catch(() => null)
+      // 404 from /api/get simply means "no exact match" — pass it through so the client can search.
+      if (r && (r.status < 500 && r.status !== 429)) return { status: r.status, body: await r.text() }
+      if (attempt >= 1) return { status: r?.status ?? 504, body: r ? await r.text() : '{"error":"timeout"}' }
+      await new Promise((res) => setTimeout(res, 700))
+    }
   }, waitUntil)
   return new Response(result.body, {
     status: result.status,
     headers: {
       'content-type': 'application/json; charset=utf-8',
       'access-control-allow-origin': '*',
-      'cache-control': result.status === 200 ? 'public, max-age=3600, s-maxage=604800' : 'public, max-age=600, s-maxage=3600',
+      // A missing exact match is worth caching briefly; an upstream failure never is.
+      'cache-control': result.status === 200 ? 'public, max-age=3600, s-maxage=604800' : result.status === 404 ? 'public, max-age=600, s-maxage=3600' : 'no-store',
     },
   })
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { fitTiming, scoreCandidate, shiftLines, type LyricsCandidate } from '../src/services/lyricsEngine'
-import { parseLrc } from '../src/lib/lyrics'
+import { applyMap, fitSegments, fitTiming, scoreCandidate, shiftLines, titleMatch, type LyricsCandidate } from '../src/services/lyricsEngine'
+import { cleanTitle, isIndic, isRtl, parseLrc, syllables } from '../src/lib/lyrics'
 
 const lrc = (n: number, step = 4000) => Array.from({ length: n }, (_, i) => `[${String(Math.floor((i * step) / 60000)).padStart(2, '0')}:${String(Math.floor(((i * step) % 60000) / 1000)).padStart(2, '0')}.00] line number ${i} goes here`).join('\n')
 const cand = (p: Partial<LyricsCandidate>): LyricsCandidate => ({ key: 'lrclib:1', source: 'LRCLIB', title: 'Kesariya', artist: 'Arijit Singh', album: null, durationMs: 268_000, synced: true, wordTimed: false, raw: lrc(40), score: 0, reasons: [], ...p })
@@ -56,5 +56,73 @@ describe('timing fit', () => {
     expect(s[0].end).toBe(l.lines[0].end + 2000)
     expect(s[i].start).toBe(l.lines[i].start + 2000)
     expect(s[i + 1].words[0].start).toBe(l.lines[i + 1].words[0].start + 2000)
+  })
+})
+
+describe('lyrics across languages', () => {
+  it('matches titles by coverage, not just containment', () => {
+    expect(titleMatch('Kesariya - Brahmastra', 'Kesariya')).toBeGreaterThan(0.85)
+    expect(titleMatch('Kesariya', 'Kesariya')).toBe(1)
+    expect(titleMatch('Coke Studio Season 7 Tum Naraaz Ho', 'Pasoori')).toBe(0)
+    expect(titleMatch('Tum Hi Ho', 'Tum Hi Ho Aashiqui 2 Full Song')).toBeLessThan(0.6)
+    expect(titleMatch('تملي معاك', 'تملي معاك')).toBe(1)
+  })
+  it('scores lyrics timed to a shorter film edit as well as the full song', () => {
+    const cut = { ...ctx, referenceMs: 261_000, videoMs: 204_000 }
+    const edit = scoreCandidate(cand({ key: 'lrclib:11', durationMs: 204_000, raw: lrc(40, 5000) }), cut)
+    expect(edit.reasons).toContain('exact length')
+    expect(edit.reasons).not.toContain('timestamps past the end')
+  })
+  it('estimates syllables per script', () => {
+    expect(syllables('Despacito')).toBe(4)
+    expect(syllables('canción')).toBe(2)
+    expect(syllables('beautiful')).toBe(3)
+    expect(syllables('केसरिया')).toBe(4) // के-स-रि-या
+    expect(syllables('प्यार')).toBe(2) // प्या-र: the virama joins प and य
+    expect(syllables('ਸੋਹਣੀ')).toBe(3)
+    expect(syllables('حبيبي')).toBeGreaterThanOrEqual(2)
+    expect(syllables('愛してる')).toBe(4)
+  })
+  it('knows which lines read right to left', () => {
+    expect(isRtl('يا ليلي و يا ليلة')).toBe(true)
+    expect(isRtl('دل دل پاکستان')).toBe(true)
+    expect(isRtl('Ya lili ya lila')).toBe(false)
+    expect(isRtl('Habibi يا نور العين')).toBe(true)
+    expect(isIndic('केसरिया तेरा इश्क़ है पिया')).toBe(true)
+  })
+})
+
+describe('edited videos (piecewise timing)', () => {
+  it('finds the parts of an edit and hides the lines it cut', () => {
+    // Video plays 0–60 s of the song, cuts 60–100 s, then plays the rest; one anchor is misheard.
+    const at = (lrc: number) => ({ lrc, video: lrc < 60_000 ? lrc + 2_000 : lrc - 38_000 })
+    const pts = [5_000, 20_000, 35_000, 50_000, 110_000, 130_000, 150_000, 170_000].map(at)
+    pts.push({ lrc: 140_000, video: 15_000 })
+    const map = fitSegments(pts)!
+    expect(map).toHaveLength(2)
+    expect(map[0][2]).toBe(2_000)
+    expect(map[1][2]).toBe(-38_000)
+    const lines = parseLrc(lrc(45, 4000))!
+    if (lines.kind !== 'synced') throw new Error('synced')
+    const out = applyMap(lines.lines, map)
+    expect(out.length).toBeLessThan(lines.lines.length)
+    for (let i = 1; i < out.length; i++) expect(out[i].start).toBeGreaterThanOrEqual(out[i - 1].start)
+    expect(out.some((l) => l.text === 'line number 20 goes here')).toBe(false) // 80 s: cut
+  })
+  it('returns nothing for too few anchors', () => {
+    expect(fitSegments([{ lrc: 1, video: 2 }, { lrc: 3, video: 4 }])).toBeNull()
+  })
+})
+
+describe('featured artists and exact uploads', () => {
+  it('drops guests from the lookup title', () => {
+    expect(cleanTitle('Levitating Featuring DaBaby')).toBe('Levitating')
+    expect(cleanTitle('Despacito ft. Daddy Yankee')).toBe('Despacito')
+    expect(cleanTitle('Shape of You')).toBe('Shape of You')
+    expect(cleanTitle('Left and Right (feat. Jung Kook of BTS)')).toBe('Left and Right')
+  })
+  it('trusts lyrics timed to this exact upload', () => {
+    const c = scoreCandidate(cand({ durationMs: 231_000 }), { ...ctx, referenceMs: 204_000, videoMs: 231_000 })
+    expect(c.reasons).toContain('exact length')
   })
 })

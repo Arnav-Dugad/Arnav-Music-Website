@@ -7,7 +7,7 @@ import { prefs } from './prefs'
 import { toast } from './ui'
 import { idbGet, idbSet } from '../lib/idb'
 import { fetchCredits, shareCommunity } from '../lib/meta'
-import { buildLyrics, findLyricsCandidates, fitTiming, rescore, type LyricsCandidate, type LyricsPick, type LyricsTiming } from '../services/lyricsEngine'
+import { buildLyrics, findLyricsCandidates, fitSegments, fitTiming, rescore, timingUncertain, type LyricsCandidate, type LyricsPick, type LyricsTiming } from '../services/lyricsEngine'
 
 type Status = 'idle' | 'loading' | 'found' | 'none' | 'instrumental' | 'error' | 'off'
 
@@ -37,7 +37,8 @@ interface LyricsState {
   /** "Tap when this line starts": the line at [index] starts now. */
   tapSync: (index: number) => void
   resetTiming: () => void
-  alignAi: () => Promise<void>
+  /** Arnav AI listens to the video and lines the lyrics up (quiet: automatic, no toasts unless it works). */
+  alignAi: (quiet?: boolean) => Promise<void>
   useOfficial: () => void
   generate: () => Promise<void>
   translate: (language: string) => Promise<void>
@@ -57,6 +58,24 @@ function scheduleShare(trackId: string, videoId: string, choice: string, offsetM
   }, 20_000)
 }
 
+/**
+ * Self-aligning lyrics: when the timing is only a guess (a long intro shift, or a film video that is
+ * an edit of the song), Arnav AI listens once the song has played a few seconds, and shares the
+ * result so every later listener of this video gets it without asking the AI again.
+ */
+let autoTimer: ReturnType<typeof setTimeout> | null = null
+function scheduleAutoAlign(trackId: string, videoId: string) {
+  if (autoTimer) clearTimeout(autoTimer)
+  if (!settings().autoAlignLyrics || aiAvailability()) return
+  autoTimer = setTimeout(async () => {
+    if (currentTrack()?.id !== trackId || !usePlayer.getState().isPlaying) return
+    const key = `aal|v1|${videoId}`
+    if (await idbGet<number>(key, 'cache')) return // tried this video already
+    void idbSet(key, Date.now(), 'cache')
+    void useLyrics.getState().alignAi(true)
+  }, 9000)
+}
+
 export const useLyrics = create<LyricsState>()((set, get) => {
   /** Rebuilds the displayed lyrics from the current pick, choice and timing. */
   const apply = (pick: LyricsPick, key?: string | null) => {
@@ -70,6 +89,7 @@ export const useLyrics = create<LyricsState>()((set, get) => {
     const built = buildLyrics(t, pick, chosen)
     if (!built) { set({ pick, chosen: null, status: 'none', lyrics: null }); return }
     set({ pick, chosen, lyrics: built.lyrics, timing: built.timing, status: 'found' })
+    if (timingUncertain(t, chosen, built.timing)) scheduleAutoAlign(t.id, t.playbackRef)
   }
 
   return {
@@ -144,7 +164,14 @@ export const useLyrics = create<LyricsState>()((set, get) => {
       if (!t || !c || get().lyrics?.kind !== 'synced') return
       const cur = get().timing
       const offsetMs = Math.round(cur.offsetMs + delta)
-      prefs().setLyricsFix(t.id, { choice: c.key, offsetMs, scale: cur.scale })
+      // An edited video keeps its parts; the whole map moves together.
+      if (cur.map?.length) {
+        prefs().setLyricsFix(t.id, { choice: c.key, map: cur.map.map(([a, b, o]) => [a, b, Math.round(o + delta)] as [number, number, number]), offsetMs: undefined, scale: undefined, by: 'you' })
+        const pk = get().pick
+        if (pk && c.key !== 'own') apply(pk, c.key)
+        return
+      }
+      prefs().setLyricsFix(t.id, { choice: c.key, offsetMs, scale: cur.scale, map: undefined, by: 'you' })
       const pick = get().pick
       if (pick && c.key !== 'own') apply(pick, c.key)
       else void get().load(true)
@@ -163,30 +190,40 @@ export const useLyrics = create<LyricsState>()((set, get) => {
       const t = currentTrack()
       const c = get().chosen
       if (!t || !c) return
-      prefs().setLyricsFix(t.id, { choice: c.key, offsetMs: 0, scale: 1 })
+      prefs().setLyricsFix(t.id, { choice: c.key, offsetMs: 0, scale: 1, map: undefined, by: 'you' })
       const pick = get().pick
       if (pick) apply(pick, c.key)
     },
-    async alignAi() {
+    async alignAi(quiet = false) {
       const t = currentTrack()
       const c = get().chosen
       const pick = get().pick
       if (!t || !c || !c.synced || get().aligning) return
       const blocked = aiAvailability()
-      if (blocked) { toast(AI_REASON_COPY[blocked].replace(' — answered on device.', '.')); return }
+      if (blocked) { if (!quiet) toast(AI_REASON_COPY[blocked].replace(' — answered on device.', '.')); return }
       const raw = parseLrc(c.raw, t.durationMs, c.source)
       if (!raw || raw.kind !== 'synced') return
       set({ aligning: true })
-      toast('Arnav AI is listening for the lyrics… about a minute')
+      if (!quiet) toast('Arnav AI is listening for the lyrics… about a minute')
       try {
         const r = await alignLyricsAi(t, raw.lines.filter((l) => l.text.trim()).map((l) => ({ start: l.start, text: l.text })))
-        if (!r.ok) { toast('Arnav AI couldn’t line these lyrics up'); return }
+        if (!r.ok) { if (!quiet) toast('Arnav AI couldn’t line these lyrics up'); return }
+        const share = /^(lrclib|netease):/.test(c.key)
         const fit = fitTiming(r.points)
-        if (!fit) { toast('Arnav AI wasn’t sure enough — timing left as it was'); return }
-        prefs().setLyricsFix(t.id, { choice: c.key, offsetMs: fit.offsetMs, scale: fit.scale })
-        if (currentTrack()?.id === t.id && pick) apply(pick, c.key)
-        if (/^(lrclib|netease):/.test(c.key)) void shareCommunity(t.playbackRef, c.key, fit.offsetMs, fit.scale)
-        toast(`Timing fixed by Arnav AI (${fit.offsetMs >= 0 ? '+' : ''}${(fit.offsetMs / 1000).toFixed(1)} s${fit.scale !== 1 ? `, tempo ×${fit.scale}` : ''})`)
+        if (fit) {
+          prefs().setLyricsFix(t.id, { choice: c.key, offsetMs: fit.offsetMs, scale: fit.scale, map: undefined, by: 'ai' })
+          if (currentTrack()?.id === t.id && pick && get().chosen?.key === c.key) apply(pick, c.key)
+          if (share) void shareCommunity(t.playbackRef, c.key, fit.offsetMs, fit.scale)
+          toast(`Lyrics lined up by Arnav AI (${fit.offsetMs >= 0 ? '+' : ''}${(fit.offsetMs / 1000).toFixed(1)} s${fit.scale !== 1 ? `, tempo ×${fit.scale}` : ''})`)
+          return
+        }
+        // No single shift fits: the video is an edit of the song — line up each part on its own.
+        const map = fitSegments(r.points)
+        if (!map || map.length < 2) { if (!quiet) toast('Arnav AI wasn’t sure enough — timing left as it was'); return }
+        prefs().setLyricsFix(t.id, { choice: c.key, map, offsetMs: undefined, scale: undefined, by: 'ai' })
+        if (currentTrack()?.id === t.id && pick && get().chosen?.key === c.key) apply(pick, c.key)
+        if (share) void shareCommunity(t.playbackRef, c.key, undefined, undefined, map)
+        toast(`Lyrics lined up by Arnav AI — this video is an edit, ${map.length} parts matched`)
       } finally {
         set({ aligning: false })
       }

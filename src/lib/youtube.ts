@@ -37,8 +37,8 @@ interface CachedPage {
 }
 
 /** Bumped when the track mapping changes so stale cached pages are refetched once. */
-const CACHE_VERSION = 'v12|'
-const LIST_VERSION = 'v8|'
+const CACHE_VERSION = 'v15|'
+const LIST_VERSION = 'v11|'
 
 /** Removes cached pages saved under older versions (each bump would otherwise leave a copy behind). */
 export async function pruneStaleCache() {

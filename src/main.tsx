@@ -40,6 +40,8 @@ async function boot() {
   void pruneStaleCache()
   // Back in your listening room after a reload.
   void import('./services/together').then((m) => m.rejoinAfterReload())
+  // Diagnostics (read-only): window.__arnavLyricsProbe({ q: 'Kesariya Arijit Singh' })
+  ;(window as unknown as { __arnavLyricsProbe: unknown }).__arnavLyricsProbe = async (i: { q?: string; v?: string }) => (await import('./services/lyricsProbe')).lyricsProbe(i)
   // Names every visitor's YouTube Topic results taught the server (artists, films).
   void fetchKnownNames().then((r) => { if (r) mergeSharedNames(r) })
   startSync()

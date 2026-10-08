@@ -360,7 +360,7 @@ export async function creditsApi(url: URL, env: ApiEnv, waitUntil?: WaitUntil): 
 }
 
 // ── Community lyrics (version + timing listeners agreed on) ──────────────────
-interface Community { choices: Record<string, number>; offsets: Record<string, number[]>; scales: Record<string, number[]>; updatedAt: number }
+interface Community { choices: Record<string, number>; offsets: Record<string, number[]>; scales: Record<string, number[]>; maps?: Record<string, [number, number, number][]>; updatedAt: number }
 const CHOICE = /^(lrclib|netease):\d{1,14}$/
 const median = (xs: number[]) => { if (!xs.length) return null; const s = [...xs].sort((a, b) => a - b); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2 }
 
@@ -368,7 +368,20 @@ function summarize(c: Community | null) {
   if (!c) return { choice: null, offsetMs: null, scale: null, votes: 0, samples: 0 }
   const best = Object.entries(c.choices).sort((a, b) => b[1] - a[1])[0]
   const k = best?.[0] ?? null
-  return { choice: k, votes: best?.[1] ?? 0, offsetMs: k ? median(c.offsets[k] ?? []) : null, scale: k ? median(c.scales[k] ?? []) : null, samples: k ? (c.offsets[k] ?? []).length : 0 }
+  return { choice: k, votes: best?.[1] ?? 0, offsetMs: k ? median(c.offsets[k] ?? []) : null, scale: k ? median(c.scales[k] ?? []) : null, samples: k ? (c.offsets[k] ?? []).length : 0, map: k ? c.maps?.[k] ?? null : null }
+}
+
+/** [[lrcFrom, lrcTo, offsetMs], …] — ordered, within a song's length, at most 24 parts. */
+function validMap(m: unknown): m is [number, number, number][] {
+  if (!Array.isArray(m) || m.length < 1 || m.length > 24) return false
+  let last = -1
+  for (const seg of m) {
+    if (!Array.isArray(seg) || seg.length !== 3 || !seg.every((x) => typeof x === 'number' && Number.isFinite(x))) return false
+    const [from, to, off] = seg as number[]
+    if (from < last || to < from || from < 0 || to > 3_600_000 || Math.abs(off) > 600_000) return false
+    last = to
+  }
+  return true
 }
 
 export async function communityApi(request: Request, url: URL, env: ApiEnv): Promise<Response> {
@@ -383,7 +396,7 @@ export async function communityApi(request: Request, url: URL, env: ApiEnv): Pro
   if (!kv) return json({ error: 'unavailable' }, 503)
   const text = await request.text()
   if (text.length > 2000) return json({ error: 'too_large' }, 413)
-  let body: { v?: string; choice?: string; offsetMs?: number; scale?: number }
+  let body: { v?: string; choice?: string; offsetMs?: number; scale?: number; map?: unknown }
   try { body = JSON.parse(text) } catch { return json({ error: 'bad_json' }, 400) }
   if (!body.v || !VIDEO_ID.test(body.v) || !body.choice || !CHOICE.test(body.choice)) return json({ error: 'bad_request' }, 400)
   const key = `cm:v1:${body.v}`
@@ -396,11 +409,14 @@ export async function communityApi(request: Request, url: URL, env: ApiEnv): Pro
   if (typeof body.scale === 'number' && body.scale >= 0.85 && body.scale <= 1.15) {
     c.scales[body.choice] = [...(c.scales[body.choice] ?? []), Math.round(body.scale * 10000) / 10000].slice(-25)
   }
+  // A piecewise map (an edited video): the latest valid one wins.
+  if (validMap(body.map)) c.maps = { ...(c.maps ?? {}), [body.choice]: body.map }
   // Keep the record small: at most 8 competing versions.
   const keep = Object.entries(c.choices).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k]) => k)
   c.choices = Object.fromEntries(keep.map((k) => [k, c.choices[k]]))
   c.offsets = Object.fromEntries(keep.filter((k) => c.offsets[k]).map((k) => [k, c.offsets[k]]))
   c.scales = Object.fromEntries(keep.filter((k) => c.scales[k]).map((k) => [k, c.scales[k]]))
+  if (c.maps) c.maps = Object.fromEntries(keep.filter((k) => c.maps?.[k]).map((k) => [k, c.maps![k]]))
   c.updatedAt = Date.now()
   await kv.put(key, JSON.stringify(c), { expirationTtl: 400 * DAY }).catch(() => undefined)
   return json(summarize(c))

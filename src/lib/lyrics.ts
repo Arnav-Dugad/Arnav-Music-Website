@@ -70,12 +70,40 @@ function splitBackground(text: string): { text: string; background?: string } {
   return { text }
 }
 
-/** Rough syllable count for word-fill estimation (works across Latin scripts; others fall back to length). */
-function syllables(word: string): number {
-  const w = word.toLowerCase().replace(/[^\p{L}]/gu, '')
+/** Writing direction of a lyric line: Arabic, Urdu, Persian and Hebrew read right to left. */
+export function isRtl(text: string): boolean {
+  const letters = text.match(/\p{L}/gu)
+  if (!letters?.length) return false
+  return letters.filter((c) => /[֐-ࣿיִ-﷿ﹰ-﻿]/.test(c)).length / letters.length > 0.5
+}
+
+/** Indic scripts (Devanagari, Gurmukhi, Bengali, Tamil, Telugu…): vowel signs must stay attached. */
+export const isIndic = (text: string) => /[ऀ-෿]/.test(text)
+
+/**
+ * Rough syllable count for word-fill estimation, per script:
+ *  - Latin (English, Spanish, romanised Hindi/Punjabi): vowel groups, accents folded;
+ *  - Indic abugidas: one per consonant or independent vowel, minus conjuncts joined by a virama;
+ *  - Arabic: short vowels aren't written — consonants pair up, long vowels (ا و ي) add a beat;
+ *  - CJK / kana / Hangul: one per character.
+ */
+export function syllables(word: string): number {
+  const raw = word.toLowerCase()
+  if (/[ऀ-෿]/.test(raw)) {
+    const bases = raw.match(/[ऄ-हक़-ॡॲ-ॿਅ-ਹਖ਼-ਫ਼અ-હঅ-হଅ-ହஅ-ஹఅ-హಅ-ಹഅ-ഺ]/g)?.length ?? 0
+    const viramas = raw.match(/[्੍્্୍்్್്]/g)?.length ?? 0
+    return Math.max(1, bases - viramas)
+  }
+  if (/[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]/.test(raw)) {
+    const letters = raw.match(/[ء-يٱ-ۓ]/g) ?? []
+    const long = letters.filter((c) => /[اويىآ]/.test(c)).length
+    return Math.max(1, Math.round((letters.length - long) / 2) + Math.ceil(long / 2))
+  }
+  if (/[぀-ヿ㐀-鿿가-힯]/.test(raw)) return Math.max(1, raw.replace(/[ゃゅょャュョっッー\s\p{P}]/gu, '').length)
+  const w = raw.normalize('NFD').replace(/\p{M}+/gu, '').replace(/[^\p{L}]/gu, '')
   if (!w) return 1
   if (!/[a-z]/.test(w)) return Math.max(1, Math.round(w.length / 2))
-  const groups = w.replace(/e$/, '').match(/[aeiouy]+/g)
+  const groups = w.replace(/([^aeiou])e$/, '$1').match(/[aeiouy]+/g)
   return Math.max(1, groups?.length ?? 1)
 }
 
@@ -210,5 +238,6 @@ export function progress(start: number, end: number, pos: number): number {
 
 // ── Title cleaning for lyrics lookups ─────────────────────────────────────────
 const noise = /\s*[([](?:[^)\]]*(?:feat|ft\.|with |official|lyric|audio|video|visuali[sz]er|remaster|live|explicit|clean|hd|4k)[^)\]]*)[)\]]/gi
-const dashFeat = /\s+-\s+(?:feat|ft)\..*$/i
+/** "Song - feat. X", "Song ft. X", "Levitating Featuring DaBaby": the guests aren't part of the title. */
+const dashFeat = /\s+(?:-\s+)?(?:feat\.?|ft\.|featuring)\s.*$/i
 export const cleanTitle = (raw: string) => raw.replace(noise, '').replace(dashFeat, '').trim()

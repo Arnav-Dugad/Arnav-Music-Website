@@ -12,8 +12,8 @@
 
 :root {
   color-scheme: dark;
-  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI Variable Text', system-ui, sans-serif;
-  --font-display: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI Variable Display', system-ui, sans-serif;
+  --font: 'Inter', 'Noto Sans Devanagari', 'Noto Sans Gurmukhi', 'Noto Sans Arabic', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI Variable Text', system-ui, sans-serif;
+  --font-display: 'Inter', 'Noto Sans Devanagari', 'Noto Sans Gurmukhi', 'Noto Sans Arabic', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI Variable Display', system-ui, sans-serif;
   --font-brand: 'Manrope', var(--font-display);
   --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 

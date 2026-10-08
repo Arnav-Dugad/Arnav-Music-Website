@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useLyrics } from '../state/lyrics'
 import { currentTrack, player, usePlayer, useProgress } from '../state/player'
-import { activeIndex, isInstrumental, progress, type LyricLine } from '../lib/lyrics'
+import { activeIndex, isIndic, isInstrumental, isRtl, progress, type LyricLine } from '../lib/lyrics'
 import { Icon } from './Icon'
 import { Spinner } from './ui'
 import { aiAvailability } from '../lib/ai'
@@ -48,6 +48,8 @@ export function SyncedLyrics({ lines, translation, romanized, size, dual = false
   pulse.current = motionLevel === 'full' ? 0.008 + 0.012 * energy : 0
   const sizeRef = useRef(size)
   sizeRef.current = size
+  // An Arabic / Urdu song: even its instrumental breaks follow the right-to-left reading.
+  const songRtl = useMemo(() => { const sung = lines.filter((l) => l.text.trim()); return sung.length > 0 && sung.filter((l) => isRtl(l.text)).length / sung.length > 0.5 }, [lines])
 
   const layout = (active: number) => {
     const el = box.current
@@ -157,11 +159,13 @@ export function SyncedLyrics({ lines, translation, romanized, size, dual = false
       <div className="lyr-lines">
         {lines.map((ln, i) => {
           const inst = isInstrumental(ln)
+          const rtl = inst ? songRtl : isRtl(ln.text)
           return (
             <div
               key={i}
               ref={(el) => { lineRefs.current[i] = el }}
-              className={`lyr-line ${inst ? 'inst' : ''} ${ln.estimated ? 'est' : ''}`}
+              dir={rtl ? 'rtl' : undefined}
+              className={`lyr-line ${inst ? 'inst' : ''} ${ln.estimated ? 'est' : ''} ${rtl ? 'rtl' : ''} ${!inst && isIndic(ln.text) ? 'indic' : ''}`}
               onClick={() => { player().seek(Math.max(0, ln.start - 50)); state.current.free = false; state.current.manual = 0; box.current?.classList.remove('free') }}
             >
               {inst ? (
@@ -174,8 +178,8 @@ export function SyncedLyrics({ lines, translation, romanized, size, dual = false
                     </span>
                   )}
                   {ln.background && <span className="lyr-bg" ref={(el) => { if (el) bgRefs.current.set(i, el) }}>{ln.background}</span>}
-                  {romanized?.[i] && <span className="lyr-tr roman">{romanized[i]}</span>}
-                  {translation?.[i] && translation[i] !== ln.text && <span className="lyr-tr">{translation[i]}</span>}
+                  {romanized?.[i] && <span className="lyr-tr roman" dir="auto">{romanized[i]}</span>}
+                  {translation?.[i] && translation[i] !== ln.text && <span className="lyr-tr" dir="auto">{translation[i]}</span>}
                 </>
               )}
             </div>
@@ -192,7 +196,7 @@ export function PlainLyrics({ lines, translation, size }: { lines: string[]; tra
     <div className={`lyr plain ${size}`}>
       <div className="lyr-plain-note t-caption">These lyrics aren’t time-synced.</div>
       {lines.map((l, i) => (
-        <motion.p key={i} className={l.trim() ? 'pl' : 'gap'} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 20) * 0.02 }}>
+        <motion.p key={i} dir="auto" className={l.trim() ? 'pl' : 'gap'} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 20) * 0.02 }}>
           {l}
           {translation?.[i] && translation[i] !== l && <span className="lyr-tr">{translation[i]}</span>}
         </motion.p>
@@ -211,8 +215,9 @@ function defaultLanguage() {
 
 const SOURCE_LABEL: Record<string, string> = { LRCLIB: 'LRCLIB', NetEase: 'NetEase', 'YouTube description': 'From the uploader', 'Arnav AI': 'Written by Arnav AI', You: 'Your lyrics' }
 
-function timingLabel(t: { offsetMs: number; scale: number; source: string }): string | null {
-  const s = `${t.offsetMs >= 0 ? '+' : '−'}${(Math.abs(t.offsetMs) / 1000).toFixed(1)} s`
+function timingLabel(t: { offsetMs: number; scale: number; source: string; map?: unknown[] | null }): string | null {
+  const s = t.map?.length ? `edit · ${t.map.length} parts` : `${t.offsetMs >= 0 ? '+' : '−'}${(Math.abs(t.offsetMs) / 1000).toFixed(1)} s`
+  if (t.source === 'ai') return `Lined up by Arnav AI · ${s}`
   if (t.source === 'you') return `Your timing · ${s}`
   if (t.source === 'community') return `Timing from listeners · ${s}`
   if (t.source === 'auto') return `Aligned to this video · ${s}`
@@ -297,7 +302,7 @@ function FixSheet({ onClose }: { onClose: () => void }) {
 }
 
 export function LyricsPanel({ size = 'lg', dual = false }: { size?: 'lg' | 'md' | 'xl'; dual?: boolean }) {
-  const { status, lyrics, translation, showTranslation, translating, generating, chosen, timing, pick } = useLyrics()
+  const { status, lyrics, translation, showTranslation, translating, generating, chosen, timing, pick, aligning } = useLyrics()
   const [pasting, setPasting] = useState(false)
   const [fixing, setFixing] = useState(false)
   const [text, setText] = useState('')
@@ -373,7 +378,7 @@ export function LyricsPanel({ size = 'lg', dual = false }: { size?: 'lg' | 'md' 
       {status === 'found' && lyrics && (
         <div className="lyr-bar">
           <button className={`chip lyr-src ${chosen?.source === 'Arnav AI' ? 'ai' : ''} ${fixing ? 'on' : ''}`} onClick={() => setFixing((f) => !f)} title="Timing off or wrong lyrics? Fix them">
-            <Icon name="tune" size={14} /> {src}{tl ? <span className="lyr-src-t"> · {tl.split(' · ')[1]}</span> : null}
+            {aligning ? <Spinner size={13} /> : <Icon name="tune" size={14} />} {src}{aligning ? <span className="lyr-src-t"> · lining up…</span> : tl ? <span className="lyr-src-t"> · {tl.split(' · ').slice(1).join(' · ')}</span> : null}
           </button>
           <span className="grow" />
           {size !== 'xl' && <button className="chip" onClick={() => useLyrics.getState().set({ cinematic: true })} title="Cinematic full screen"><Icon name="expand" size={14} /> Cinematic</button>}

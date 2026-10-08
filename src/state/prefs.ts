@@ -13,6 +13,10 @@ export interface LyricsFix {
   offsetMs?: number
   /** Tempo scale fitted by "Fix timing" (1 = none). */
   scale?: number
+  /** Piecewise timing for an edited video: [lrcFrom, lrcTo, offsetMs] per part. */
+  map?: [number, number, number][]
+  /** Who made the timing: you, or Arnav AI listening to the video. */
+  by?: 'you' | 'ai'
   at: number
 }
 

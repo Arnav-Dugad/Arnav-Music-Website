@@ -102,8 +102,10 @@ const artistsOf = (s: string) => s.split(/\s*(?:,|&|\bx\b|\bfeat\.?|\bft\.?|\ban
 export const VARIANT = /\b(remix|reprise|live|acoustic|instrumental|karaoke|lo-?fi|slowed|reverb|sped|version|unplugged|cover|mashup|female|male|duet|sad|8d|recreated|revisited|extended|edit|mix)\b/i
 /** Same song title both ways ("Bekhayali" ≠ "Bekhayali Reprise"). */
 function sameTitle(a: string, b: string): boolean {
-  const x = new Set(words(a.replace(/\s*[([](?:from|feat|ft|with)\b[^)\]]*[)\]]/gi, '')).split(' ').filter((w) => w.length > 1))
-  const y = new Set(words(b).split(' ').filter((w) => w.length > 1))
+  // "Despacito ft. Daddy Yankee" = "Despacito (feat. Daddy Yankee)".
+  const bare = (t: string) => t.replace(/\s*[([](?:from|feat|ft|with)\b[^)\]]*[)\]]/gi, '').replace(/\s+(?:feat\.?|ft\.?|featuring)\s.*$/i, '')
+  const x = new Set(words(bare(a)).split(' ').filter((w) => w.length > 1))
+  const y = new Set(words(bare(b)).split(' ').filter((w) => w.length > 1))
   if (!x.size || !y.size) return false
   let common = 0
   for (const w of x) if (y.has(w)) common++
@@ -121,22 +123,37 @@ export function artistOverlap(a: string, b: string): boolean {
 
 /** The audio release of a YouTube song (exact title, length, album) — null when unsure. */
 export async function itunesMatch(t: Track): Promise<ItunesItem | null> {
-  const key = `itm|v3|${t.id}`
+  const key = `itm|v6|${t.id}`
   const hit = await idbGet<{ item: ItunesItem | null; at: number }>(key, 'cache')
   if (hit && (hit.item || Date.now() - hit.at < 7 * 86_400_000)) return hit.item
   const title = t.title.replace(/\s*[([].*?[)\]]\s*/g, ' ').trim()
+  // A label upload names no singer ("T-Series"): search and match by the film instead.
+  const film = t.album ? words(t.album.replace(/\s*[([].*?[)\]]/g, '')) : ''
+  const byFilm = !!t.artistFromChannel && film.length >= 3
   let item: ItunesItem | null = null
   try {
-    const results = await itunes('search', { term: `${title} ${t.artist.split(',')[0]}`, media: 'music', entity: 'song', limit: 15, country: country() })
-    item = results
-      .filter((r) => r.title && sameTitle(r.title, title) && !!r.artist && artistOverlap(r.artist, `${t.artist}, ${t.credits ?? ''}`))
+    const term = `${title} ${byFilm ? t.album : t.artist.split(',')[0]}`
+    const pickFrom = (results: ItunesItem[]) => results
+      .filter((r) => r.title && sameTitle(r.title, title) && (
+        (!!r.artist && !t.artistFromChannel && artistOverlap(r.artist, `${t.artist}, ${t.credits ?? ''}`)) ||
+        (byFilm && (words(r.album ?? '').includes(film) || words(r.title ?? '').includes(film)))))
       .filter((r) => !VARIANT.test(r.title ?? '') || VARIANT.test(t.rawTitle ?? t.title))
       .sort((a, b) => {
         const d = t.durationMs ?? 0
         return d ? Math.abs((a.durationMs ?? 1e9) - d) - Math.abs((b.durationMs ?? 1e9) - d) : 0
       })[0] ?? null
-    // A music video can run longer than the song (intro scenes), never much shorter.
-    if (item && t.durationMs && item.durationMs && (item.durationMs - t.durationMs > 15_000 || t.durationMs - item.durationMs > 75_000)) item = null
+    item = pickFrom(await itunes('search', { term, media: 'music', entity: 'song', limit: 15, country: country() }))
+    // Smaller storefronts (India) miss much of the Latin and Arabic catalogue: try the US store.
+    if (!item && country() !== 'US') item = pickFrom(await itunes('search', { term, media: 'music', entity: 'song', limit: 15, country: 'US' }))
+    // Apple's ranking can bury a hit under the artist's newer songs ("Tusa KAROL G"): search the song name alone.
+    if (!item && !byFilm && title.length >= 3) item = pickFrom(await itunes('search', { term: title, attribute: 'songTerm', media: 'music', entity: 'song', limit: 50, country: country() === 'IN' ? 'US' : country() }))
+    // A music video runs longer than the song (intro scenes) — or, for film songs, can be a shorter
+    // edit of it. An audio upload is the song itself, so its length must agree.
+    const video = t.variant !== 'SONG'
+    if (item && t.durationMs && item.durationMs) {
+      const longer = item.durationMs - t.durationMs
+      if (longer > (video ? 150_000 : 15_000) || -longer > 75_000) item = null
+    }
   } catch {
     return null // offline / blocked: try again next time
   }
@@ -172,7 +189,7 @@ export async function fetchCredits(t: Track): Promise<CreditsResult | null> {
   return r
 }
 
-export interface CommunityTiming { choice: string | null; votes: number; offsetMs: number | null; scale: number | null; samples: number }
+export interface CommunityTiming { choice: string | null; votes: number; offsetMs: number | null; scale: number | null; samples: number; map?: [number, number, number][] | null }
 
 export async function fetchCommunity(videoId: string): Promise<CommunityTiming | null> {
   try {
@@ -182,9 +199,9 @@ export async function fetchCommunity(videoId: string): Promise<CommunityTiming |
 }
 
 /** Shares your lyrics fix (version / timing) so the next listener gets it right away. */
-export async function shareCommunity(videoId: string, choice: string, offsetMs?: number, scale?: number): Promise<void> {
+export async function shareCommunity(videoId: string, choice: string, offsetMs?: number, scale?: number, map?: [number, number, number][]): Promise<void> {
   try {
-    await fetch('/api/community', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ v: videoId, choice, offsetMs, scale }) })
+    await fetch('/api/community', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ v: videoId, choice, offsetMs, scale, map }) })
   } catch { /* best effort */ }
 }
 
