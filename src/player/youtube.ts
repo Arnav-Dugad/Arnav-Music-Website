@@ -5,6 +5,7 @@ export interface YTPlayer {
   cueVideoById(opts: { videoId: string; startSeconds?: number }): void
   playVideo(): void
   pauseVideo(): void
+  stopVideo?(): void
   seekTo(seconds: number, allowSeekAhead: boolean): void
   setVolume(v: number): void
   getVolume(): number

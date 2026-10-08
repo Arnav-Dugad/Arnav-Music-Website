@@ -16,6 +16,7 @@ import { lib } from '../state/library'
 import { toast } from '../state/ui'
 import { useSettings } from '../state/settings'
 import { useYoutubeReady } from '../services/status'
+import { useVoice } from '../services/voice'
 
 const STEPS: { key: Step; label: string }[] = [
   { key: 'interpret', label: 'Understanding your request' },
@@ -43,6 +44,7 @@ export default function AiPage() {
   const aiEnabled = useSettings((s) => s.aiEnabled)
   const yt = useYoutubeReady()
   const busy = step != null && step !== 'done'
+  const voice = useVoice((t) => { setText(t); submit(t) }, (t) => setText(t))
 
   const run = async (request: string, base?: SessionConstraints) => {
     const q = request.trim()
@@ -94,9 +96,12 @@ export default function AiPage() {
           />
           <div className="row ai-input-foot">
             <span className="t-caption">{!aiEnabled ? 'Cloud AI is off — on-device engine' : blocked ? AI_REASON_COPY[blocked].replace(' — answered on device.', '') : 'Gemini · free tier · with an on-device fallback'}</span>
-            <motion.button whileTap={{ scale: 0.95 }} className="btn btn-primary" type="submit" disabled={busy || !text.trim()}>
-              {busy ? <Spinner size={15} /> : <Icon name="sparkles" size={16} />} Create session
-            </motion.button>
+            <div className="row" style={{ gap: 6 }}>
+              {voice.supported && <button type="button" className={`icon-btn ${voice.listening ? 'on recording' : ''}`} aria-label={voice.listening ? 'Stop listening' : 'Speak your request'} onClick={voice.toggle}><Icon name="mic" size={18} /></button>}
+              <motion.button whileTap={{ scale: 0.95 }} className="btn btn-primary" type="submit" disabled={busy || !text.trim()}>
+                {busy ? <Spinner size={15} /> : <Icon name="sparkles" size={16} />} Create session
+              </motion.button>
+            </div>
           </div>
         </form>
         {!result && !busy && (

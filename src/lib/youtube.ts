@@ -1,9 +1,10 @@
-import { idbGet, idbSet } from './idb'
+import { idbDel, idbGet, idbKeys, idbSet } from './idb'
 import { cacheKey, isRemoteWorthy } from './query'
 import { cachePolicy, COSTS, quotaState, useUsage, type QuotaState } from './usage'
 import { bestThumb, videoToTrack, type YtSnippet, type YtVideo } from './classify'
 import { decodeEntities } from './format'
 import { MusicError, artistKey, type Artist, type Track } from './types'
+import { trustOf, type ChannelStat } from './trust'
 import { remember } from '../state/tracks'
 import { regionCode, settings } from '../state/settings'
 
@@ -36,7 +37,16 @@ interface CachedPage {
 }
 
 /** Bumped when the track mapping changes so stale cached pages are refetched once. */
-const CACHE_VERSION = 'v3|'
+const CACHE_VERSION = 'v12|'
+const LIST_VERSION = 'v8|'
+
+/** Removes cached pages saved under older versions (each bump would otherwise leave a copy behind). */
+export async function pruneStaleCache() {
+  const keys = await idbKeys('cache').catch(() => [] as string[])
+  const stale = keys.filter((k) => (/^v\d+\|/.test(k) && !k.startsWith(CACHE_VERSION)) || (/^(chart|pl)\|v\d+\|/.test(k) && !k.startsWith(`chart|${LIST_VERSION}`) && !k.startsWith(`pl|${LIST_VERSION}`)))
+  for (const k of stale) await idbDel(k, 'cache').catch(() => {})
+  return stale.length
+}
 const inflight = new Map<string, Promise<SearchResults>>()
 
 const budget = () => settings().youtubeDailyBudget || 10000
@@ -102,22 +112,60 @@ const charge = (units: number, search = false) => useUsage.getState().bump({ uni
 interface SearchResponse { items?: { id?: { kind?: string; videoId?: string; channelId?: string; playlistId?: string }; snippet?: YtSnippet }[]; nextPageToken?: string }
 interface VideosResponse { items?: YtVideo[]; nextPageToken?: string }
 
+interface ChannelStatsResponse { items?: { id: string; statistics?: { subscriberCount?: string; hiddenSubscriberCount?: boolean } }[] }
+
+/** Subscriber counts for trust scoring — channels.list, 1 unit per 50 channels, cached for a week. */
+async function channelStats(ids: string[]): Promise<Map<string, ChannelStat>> {
+  const out = new Map<string, ChannelStat>()
+  const missing: string[] = []
+  for (const id of [...new Set(ids)]) {
+    const hit = await idbGet<{ s: ChannelStat; at: number }>(`chs|${id}`, 'cache')
+    if (hit && Date.now() - hit.at < 7 * 86_400_000) out.set(id, hit.s)
+    else missing.push(id)
+  }
+  if (missing.length && ytQuotaState() !== 'EXHAUSTED') {
+    for (let i = 0; i < missing.length; i += 50) {
+      try {
+        const r = await api<ChannelStatsResponse>('channels', { part: 'statistics', id: missing.slice(i, i + 50).join(','), maxResults: 50 })
+        charge(COSTS.CHANNELS_LIST)
+        for (const c of r.items ?? []) {
+          const s: ChannelStat = { subs: c.statistics?.hiddenSubscriberCount ? null : c.statistics?.subscriberCount ? Number(c.statistics.subscriberCount) : null, hidden: !!c.statistics?.hiddenSubscriberCount }
+          out.set(c.id, s)
+          void idbSet(`chs|${c.id}`, { s, at: Date.now() }, 'cache')
+        }
+      } catch { /* trust falls back to name signals */ }
+    }
+  }
+  return out
+}
+
+/** Adds trust scores (Topic/VEVO/label/artist channel/established) to fresh tracks. */
+async function scoreTrust(tracks: Track[], query = ''): Promise<Track[]> {
+  const first = tracks.map((t) => ({ ...t, trust: trustOf(t, null, query) }))
+  // Only uploads that names alone can't place need subscriber counts (one batched call).
+  const needStats = first.filter((t) => t.trust === 0 && t.channelId).map((t) => t.channelId!)
+  if (!needStats.length) return first
+  const stats = await channelStats(needStats)
+  return first.map((t) => (t.trust === 0 && t.channelId ? { ...t, trust: trustOf(t, stats.get(t.channelId), query) } : t))
+}
+
 /** videos.list for up to 50 ids — 1 unit. Filters to embeddable, non-live uploads. */
-export async function videoDetails(ids: string[]): Promise<Track[]> {
+export async function videoDetails(ids: string[], query = ''): Promise<Track[]> {
   if (ids.length === 0) return []
-  const out: Track[] = []
+  let out: Track[] = []
   for (let i = 0; i < ids.length; i += 50) {
     const chunk = ids.slice(i, i + 50)
-    const r = await withRetry(() => api<VideosResponse>('videos', { part: 'snippet,contentDetails,status', id: chunk.join(',') }))
+    const r = await withRetry(() => api<VideosResponse>('videos', { part: 'snippet,contentDetails,status,statistics', id: chunk.join(',') }))
     charge(COSTS.VIDEOS_LIST)
     out.push(
       ...(r.items ?? [])
         .filter((v) => v.status?.embeddable !== false && v.snippet?.liveBroadcastContent !== 'live')
-        .map(videoToTrack),
+        .map((v) => videoToTrack(v, query)),
     )
   }
   const order = new Map(ids.map((id, i) => [id, i]))
   out.sort((a, b) => (order.get(a.playbackRef) ?? 0) - (order.get(b.playbackRef) ?? 0))
+  out = await scoreTrust(out, query)
   remember(out)
   return out
 }
@@ -170,7 +218,7 @@ async function remoteSearch(query: string, filter: SearchFilter, pageToken: stri
   charge(COSTS.SEARCH, true)
   const items = r.items ?? []
   const videoIds = items.map((i) => i.id?.videoId).filter((v): v is string => !!v)
-  const tracks = await videoDetails(videoIds)
+  const tracks = await videoDetails(videoIds, query)
   const artists: Artist[] = []
   const seenA = new Set<string>()
   for (const it of items) {
@@ -220,12 +268,12 @@ async function cachedList(key: string, load: () => Promise<Track[]>): Promise<Tr
 
 /** Trending music chart (1 unit), cached for the day. */
 export function trending(region = regionCode()): Promise<Track[]> {
-  return cachedList(`chart|${region}`, async () => {
+  return cachedList(`chart|${LIST_VERSION}${region}`, async () => {
     const r = await withRetry(() => api<VideosResponse>('videos', {
-      part: 'snippet,contentDetails,status', chart: 'mostPopular', videoCategoryId: '10', maxResults: 50, regionCode: region,
+      part: 'snippet,contentDetails,status,statistics', chart: 'mostPopular', videoCategoryId: '10', maxResults: 50, regionCode: region,
     }))
     charge(COSTS.VIDEOS_LIST)
-    const tracks = (r.items ?? []).filter((v) => v.status?.embeddable !== false).map(videoToTrack)
+    const tracks = await scoreTrust((r.items ?? []).filter((v) => v.status?.embeddable !== false).map((v) => videoToTrack(v)))
     remember(tracks)
     return tracks
   })
@@ -236,7 +284,7 @@ interface PlaylistsResponse { items?: { id: string; snippet?: YtSnippet; content
 
 /** A public YouTube playlist's songs (up to 200), cached for the day. */
 export function playlistTracks(playlistId: string): Promise<Track[]> {
-  return cachedList(`pl|${playlistId}`, async () => {
+  return cachedList(`pl|${LIST_VERSION}${playlistId}`, async () => {
     const ids: string[] = []
     let token: string | undefined
     for (let page = 0; page < 4; page++) {

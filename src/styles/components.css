@@ -127,3 +127,12 @@
 .stat { display: flex; flex-direction: column; gap: 4px; padding: 18px; border-radius: var(--r-lg); background: var(--surface); border: 1px solid var(--hairline); min-width: 0; }
 .stat .v { font-family: var(--font-display); font-size: 30px; font-weight: 750; letter-spacing: -0.03em; line-height: 1.05; }
 .stat .k { font-size: 13px; color: var(--text-2); }
+
+/* Heart: fills from the centre with a burst */
+.heart-wrap { position: relative; display: inline-grid; place-items: center; }
+.heart-wrap > svg { grid-area: 1 / 1; }
+.heart-fill { grid-area: 1 / 1; display: grid; place-items: center; color: var(--accent); transform-origin: center; }
+.heart-burst { position: absolute; inset: 0; pointer-events: none; }
+.heart-ring { position: absolute; inset: -20%; border-radius: 50%; border: 2px solid var(--accent); }
+.heart-dot { position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px; border-radius: 50%; background: var(--accent); }
+.np .heart-fill { color: #fff; }

@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { Sheet, Spinner, Artwork, Notice } from './ui'
 import { Icon } from './Icon'
-import { youtubeAccessToken, authMessage } from '../lib/firebase'
+import { youtubeAccessToken, authMessage, hasGoogle } from '../lib/firebase'
+import { refreshAuthUser } from '../services/sync'
+import { useAuth } from '../state/auth'
 import { bestThumb, videoToTrack, type YtSnippet, type YtVideo } from '../lib/classify'
 import { decodeEntities } from '../lib/format'
 import { useLibrary, lib } from '../state/library'
@@ -27,11 +29,13 @@ export function YouTubeImport({ open, onClose }: { open: boolean; onClose: () =>
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState<{ done: number; total: number; label: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const signedIn = useAuth((s) => !!s.user)
 
   const connect = async () => {
     setBusy(true); setError(null)
     try {
       const t = await youtubeAccessToken()
+      refreshAuthUser()
       setToken(t)
       const out: RemoteList[] = [{ id: 'LL', title: 'Liked videos', count: 0 }]
       let page: string | undefined
@@ -70,7 +74,7 @@ export function YouTubeImport({ open, onClose }: { open: boolean; onClose: () =>
         const tracks = []
         for (let i = 0; i < ids.length; i += 50) {
           const r = await gapi<{ items?: YtVideo[] }>('videos', token, { part: 'snippet,contentDetails,status', id: ids.slice(i, i + 50).join(',') })
-          tracks.push(...(r.items ?? []).filter((v) => v.status?.embeddable !== false).map(videoToTrack))
+          tracks.push(...(r.items ?? []).filter((v) => v.status?.embeddable !== false).map((v) => videoToTrack(v)))
         }
         remember(tracks)
         const id = `ytimp_${l.id.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 56)}`
@@ -103,8 +107,9 @@ export function YouTubeImport({ open, onClose }: { open: boolean; onClose: () =>
       {!lists ? (
         <div className="col" style={{ gap: 14 }}>
           <div className="t-sub">Copies your YouTube playlists and Liked videos into Arnav playlists. Arnav Music asks for read-only access; the token stays in this tab’s memory and is never stored.</div>
+          {signedIn && !hasGoogle() && <Notice tone="info" icon="link">Your account uses email sign-in. Connecting links your Google account to it — same account, same library — so you can import.</Notice>}
           {error && <Notice tone="error">{error}</Notice>}
-          <button className="btn btn-primary btn-lg" disabled={busy} onClick={() => void connect()}>{busy ? <Spinner /> : <Icon name="youtube" size={18} />} Connect YouTube</button>
+          <button className="btn btn-primary btn-lg" disabled={busy} onClick={() => void connect()}>{busy ? <Spinner /> : <Icon name="youtube" size={18} />} {signedIn && !hasGoogle() ? 'Link Google & connect YouTube' : 'Connect YouTube'}</button>
         </div>
       ) : (
         <div className="col" style={{ gap: 12 }}>

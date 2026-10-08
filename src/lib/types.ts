@@ -23,6 +23,16 @@ export interface Track {
   variant?: MediaVariant | null
   credits?: string | null
   compilation?: boolean
+  // Web-only catalog signals (never synced): who uploaded it and how official it is.
+  channelTitle?: string | null
+  rawTitle?: string | null
+  views?: number | null
+  /** The title named no artist; the uploader's channel name stands in. */
+  artistFromChannel?: boolean
+  /** Title-parser version that produced title/artist/album (re-parsed when it changes). */
+  parseV?: number
+  /** -1 fan upload · 0 unverified · 1 established · 2 artist channel · 3 official (Topic/VEVO/label). */
+  trust?: -1 | 0 | 1 | 2 | 3 | null
 }
 
 export interface Artist {

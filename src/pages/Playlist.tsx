@@ -18,6 +18,7 @@ import { trackRegistry } from '../state/tracks'
 import { player } from '../state/player'
 import { toast } from '../state/ui'
 import { dailyMixes } from '../services/recs'
+import { namePlaylist } from '../lib/aiFeatures'
 
 interface View {
   kind: 'liked' | 'local' | 'smart' | 'daily' | 'remote'
@@ -174,12 +175,23 @@ function EditSheet({ open, onClose, id }: { open: boolean; onClose: () => void; 
   const [name, setName] = useState(p?.name ?? '')
   const [desc, setDesc] = useState(p?.description ?? '')
   const [confirm, setConfirm] = useState(false)
+  const [naming, setNaming] = useState(false)
   useEffect(() => { if (open && p) { setName(p.name); setDesc(p.description); setConfirm(false) } }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+  const suggest = async () => {
+    if (!p) return
+    setNaming(true)
+    try {
+      const r = await namePlaylist(trackRegistry.many(p.trackIds))
+      setName(r.name); setDesc(r.description)
+      if (!r.usedAi) toast('Suggested on device')
+    } finally { setNaming(false) }
+  }
   if (!p) return null
   return (
     <Sheet open={open} onClose={onClose} title="Edit playlist" width={480}>
       <form className="col" style={{ gap: 12 }} onSubmit={(e) => { e.preventDefault(); lib().updatePlaylist(id, { name: name.trim() || p.name, description: desc }); onClose() }}>
         <label className="col" style={{ gap: 6 }}><span className="t-caption">Name</span><input className="field" value={name} maxLength={100} onChange={(e) => setName(e.target.value)} autoFocus /></label>
+        <button type="button" className="btn btn-secondary btn-sm" style={{ alignSelf: 'flex-start' }} disabled={naming || !p.trackIds.length} onClick={() => void suggest()}>{naming ? <Spinner size={13} /> : <Icon name="sparkles" size={14} />} Suggest a name and description</button>
         <label className="col" style={{ gap: 6 }}><span className="t-caption">Description</span><textarea className="field" rows={3} maxLength={500} value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Add an optional description" /></label>
         <div className="row" style={{ justifyContent: 'space-between', marginTop: 6 }}>
           {confirm ? (

@@ -8,6 +8,8 @@ export interface LocalEvent extends PlayEvent {
   localId: string
   dirty?: boolean
   deleted?: boolean
+  /** Device that recorded it (cloud events only). */
+  device?: string
 }
 
 export interface SyncedLike extends Like { dirty?: boolean }

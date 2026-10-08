@@ -1,6 +1,6 @@
 import { initializeApp, type FirebaseApp } from 'firebase/app'
 import {
-  GoogleAuthProvider, browserLocalPersistence, createUserWithEmailAndPassword, getAuth, onAuthStateChanged, reauthenticateWithPopup,
+  GoogleAuthProvider, browserLocalPersistence, createUserWithEmailAndPassword, getAuth, linkWithPopup, onAuthStateChanged, reauthenticateWithPopup, unlink,
   sendPasswordResetEmail, setPersistence, signInWithEmailAndPassword, signInWithPopup, signOut, updateProfile,
   type Auth, type User,
 } from 'firebase/auth'
@@ -61,24 +61,43 @@ export async function signInWithGoogle(): Promise<User> {
   return r.user
 }
 
+/** True when the signed-in account has Google attached (needed for YouTube import). */
+export const hasGoogle = () => !!firebaseAuth().currentUser?.providerData.some((p) => p.providerId === 'google.com')
+
 /**
  * Short-lived youtube.readonly token for "Import from YouTube" — kept in memory only.
- * Signed-in Google users re-authenticate the same account (never switches accounts).
+ * Google accounts re-authenticate (never switches accounts); email accounts get Google
+ * linked to the same account first, so data and UID stay the same.
  */
 export async function youtubeAccessToken(): Promise<string> {
   const provider = new GoogleAuthProvider()
   provider.addScope(YT_READONLY)
   const a = firebaseAuth()
   const u = a.currentUser
-  if (u && !u.providerData.some((p) => p.providerId === 'google.com')) {
-    throw new Error('Import from YouTube needs a Google sign-in. Sign out and continue with Google to use it.')
-  }
   const email = u?.email
   provider.setCustomParameters(email ? { login_hint: email, prompt: 'consent' } : { prompt: 'consent' })
-  const r = u ? await reauthenticateWithPopup(u, provider) : await signInWithPopup(a, provider)
+  const r = !u ? await signInWithPopup(a, provider) : hasGoogle() ? await reauthenticateWithPopup(u, provider) : await linkWithPopup(u, provider)
   const cred = GoogleAuthProvider.credentialFromResult(r)
   if (!cred?.accessToken) throw new Error('Google didn’t grant YouTube access.')
   return cred.accessToken
+}
+
+/** Attaches a Google account to the current (email) account — same UID, same library. */
+export async function linkGoogle() {
+  const u = firebaseAuth().currentUser
+  if (!u) throw new Error('Sign in first')
+  const provider = new GoogleAuthProvider()
+  provider.setCustomParameters({ prompt: 'select_account' })
+  const r = await linkWithPopup(u, provider)
+  await r.user.reload()
+  return r.user
+}
+
+export async function unlinkGoogle() {
+  const u = firebaseAuth().currentUser
+  if (!u) throw new Error('Sign in first')
+  if (u.providerData.length < 2) throw new Error('Google is your only sign-in method, so it can’t be removed.')
+  return unlink(u, 'google.com')
 }
 
 export async function signInEmail(email: string, password: string) {
@@ -111,6 +130,10 @@ export function authMessage(e: unknown): string {
     'auth/network-request-failed': 'You appear to be offline.',
     'auth/too-many-requests': 'Too many attempts. Try again in a few minutes.',
     'auth/operation-not-allowed': 'This sign-in method isn’t enabled in Firebase.',
+    'auth/credential-already-in-use': 'That Google account already belongs to another Arnav Music account. Sign in with Google instead, or pick a different Google account.',
+    'auth/provider-already-linked': 'A Google account is already linked.',
+    'auth/requires-recent-login': 'For security, sign out and sign in again, then retry.',
+    'auth/user-mismatch': 'Pick the same Google account you signed in with.',
   }
   return map[code] ?? (e instanceof Error ? e.message.replace(/^Firebase: /, '') : 'Something went wrong.')
 }

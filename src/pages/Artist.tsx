@@ -15,6 +15,9 @@ import { liveEvents, useLibrary } from '../state/library'
 import { trackRegistry } from '../state/tracks'
 import { player } from '../state/player'
 import { coListenedArtists } from '../services/recs'
+import { verified } from '../services/catalog'
+import { credited } from '../lib/trust'
+import { albumHref } from '../components/TrackRow'
 
 export default function ArtistPage() {
   const { name: raw = '' } = useParams()
@@ -31,12 +34,20 @@ export default function ArtistPage() {
     if (!id) {
       const c = await cachedSearch(name, 'ARTISTS')
       id = c?.artists.find((a) => a.key === key)?.channelId ?? null
-      if (!id) id = trackRegistry.all().find((t) => artistKey(t.artist) === key && t.channelId)?.channelId ?? null
+      if (!id) id = trackRegistry.all().find((t) => artistKey(t.artist) === key && t.channelId && (t.trust === 2 || /- Topic$/i.test(t.channelTitle ?? '')))?.channelId ?? null
     }
     return id ? channelInfo(id).catch(() => null) : null
   }, [channelParam, name])
 
-  const top = useAsync(async () => (await search(`${name}`, 'SONGS')).tracks, [name])
+  // Two cache-first searches: the singer's songs, and their name alone (catches label uploads that credit them).
+  const top = useAsync(async () => {
+    const a = await search(`${name} songs`, 'SONGS')
+    // A second search only when the first found too few songs crediting the singer (saves quota).
+    const enough = verified(a.tracks).filter((t) => credited(t, name)).length >= 8
+    const b = enough ? null : await search(name, 'SONGS').catch(() => null)
+    const seen = new Set<string>()
+    return [...a.tracks, ...(b?.tracks ?? [])].filter((t) => (seen.has(t.id) ? false : (seen.add(t.id), true)))
+  }, [name])
 
   const mine = useMemo(() => {
     const ev = liveEvents(events).filter((e) => e.artistKey === key)
@@ -59,11 +70,35 @@ export default function ArtistPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [events, key, v])
 
+  /** Every upload crediting this singer — across label channels, Topic and the artist's own channel. */
   const topTracks = useMemo(() => {
-    const list = (top.data ?? []).filter(isSingle)
-    const own = list.filter((t) => artistKey(t.artist) === key || (channel.data && t.channelId === channel.data.id))
-    return rankForListening(own.length >= 5 ? own : list, 'SONG').slice(0, 20)
-  }, [top.data, key, channel.data])
+    const s = useLibrary.getState()
+    const mine = new Set<string>([...Object.keys(s.likes), ...Object.values(s.playlists).filter((p) => !p.deleted).flatMap((p) => p.trackIds), ...s.events.map((e) => e.trackId)])
+    const fromLibrary = trackRegistry.many([...mine]).filter((t) => credited(t, name))
+    const seen = new Set<string>()
+    const list = verified([...(top.data ?? []), ...fromLibrary]).filter(isSingle).filter((t) => (seen.has(t.id) ? false : (seen.add(t.id), true)))
+    const own = list.filter((t) => credited(t, name) || (channel.data && t.channelId === channel.data.id))
+    // One upload per song: prefer the most official version.
+    const bySong = new Map<string, typeof own[number]>()
+    for (const t of rankForListening(own.length >= 3 ? own : list, 'SONG')) {
+      const k = t.title.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')
+      const prev = bySong.get(k)
+      if (!prev || (t.trust ?? 1) > (prev.trust ?? 1)) bySong.set(k, t)
+    }
+    return [...bySong.values()].slice(0, 30)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [top.data, key, channel.data, v])
+  const albums = useMemo(() => {
+    const m = new Map<string, { name: string; tracks: typeof topTracks }>()
+    for (const t of topTracks) {
+      if (!t.album) continue
+      const k = t.album.toLowerCase()
+      const e = m.get(k) ?? { name: t.album, tracks: [] }
+      e.tracks.push(t)
+      m.set(k, e)
+    }
+    return [...m.values()].sort((a, b) => b.tracks.length - a.tracks.length).slice(0, 12)
+  }, [topTracks])
 
   const similar = useMemo(() => coListenedArtists(key, 8), [key, events]) // eslint-disable-line react-hooks/exhaustive-deps
   const avatar = channel.data?.avatar ?? mine?.tops[0]?.artworkUrl ?? topTracks[0]?.artworkUrl ?? null
@@ -101,6 +136,15 @@ export default function ArtistPage() {
           <Notice tone="warn">{top.error instanceof MusicError ? top.error.message : 'Songs couldn’t load.'}</Notice>
         ) : topTracks.length ? <TrackList tracks={topTracks} context={displayName} /> : <div className="t-sub">No songs found.</div>}
       </section>
+
+      {albums.length > 0 && (
+        <Shelf title="Albums & films" subtitle="Grouped from official uploads">
+          {albums.map((a) => (
+            <Card key={a.name} title={a.name} subtitle={`${a.tracks.length} ${a.tracks.length === 1 ? 'song' : 'songs'}`} art={artworkFor(a.tracks[0])}
+              onOpen={() => nav(albumHref({ album: a.name, artist: name }))} onPlay={() => player().play(a.tracks, 0, { context: a.name })} />
+          ))}
+        </Shelf>
+      )}
 
       {mine && (
         <section className="section">

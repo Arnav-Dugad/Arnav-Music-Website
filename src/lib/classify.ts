@@ -1,6 +1,7 @@
-import { parseIsoDuration, parseYouTubeTitle, decodeEntities } from './format'
+import { parseIsoDuration, parseYouTubeTitle, decodeEntities, tidyTitle } from './format'
 import type { MediaVariant, Track } from './types'
 import { ytId } from './types'
+import { addKnownArtist, isKnownArtist } from './knownArtists'
 
 /** Port of the app's TrackClassifier: keeps recommendations to real singles. */
 const compilationPatterns = [
@@ -144,11 +145,27 @@ export const bestThumb = (t?: YtThumbs) => (t?.maxres ?? t?.standard ?? t?.high 
 export const smallThumb = (t?: YtThumbs) => (t?.medium ?? t?.high ?? t?.default)?.url
 
 /** Maps a videos.list item to an Arnav track (label-title parsing, Song/Video variant, compilation flag). */
-export function videoToTrack(v: YtVideo): Track {
+/** Bump when title parsing changes: saved tracks are re-parsed from their original YouTube title. */
+export const PARSE_V = 9
+
+/** Re-reads title/artist/album/credits from the original YouTube title with today's parser. */
+export function reparse(t: Track): Track {
+  if (!t.rawTitle || !t.channelTitle) {
+    const title = tidyTitle(t.title)
+    return title === t.title ? t : { ...t, title }
+  }
+  if (t.parseV === PARSE_V) return t
+  const p = parseYouTubeTitle(t.rawTitle, t.channelTitle, { isKnownArtist })
+  return { ...t, title: p.title, artist: p.artist, album: p.album, credits: p.credits, artistFromChannel: p.fromChannel, parseV: PARSE_V }
+}
+
+export function videoToTrack(v: YtVideo, query?: string): Track {
   const sn = v.snippet ?? {}
   const rawTitle = decodeEntities(sn.title ?? '')
   const channel = decodeEntities(sn.channelTitle ?? '')
-  const parsed = parseYouTubeTitle(rawTitle, channel)
+  // "- Topic" channels are YouTube's official auto-generated artist channels.
+  if (/\s-\s*Topic$/i.test(channel)) addKnownArtist(channel.replace(/\s*-\s*Topic$/i, ''))
+  const parsed = parseYouTubeTitle(rawTitle, channel, { isKnownArtist, query })
   const tags = sn.tags ?? []
   const genres = genresFor(rawTitle, tags, sn.description ?? '')
   const dur = parseIsoDuration(v.contentDetails?.duration)
@@ -167,6 +184,11 @@ export function videoToTrack(v: YtVideo): Track {
     genres,
     energy: energyFor(rawTitle, tags, genres),
     year: sn.publishedAt ? Number(sn.publishedAt.slice(0, 4)) || null : null,
+    channelTitle: channel || null,
+    artistFromChannel: parsed.fromChannel,
+    rawTitle: rawTitle.slice(0, 200),
+    views: v.statistics?.viewCount ? Number(v.statistics.viewCount) : null,
+    parseV: PARSE_V,
   }
 }
 

@@ -7,6 +7,7 @@ import { artistKey, type MediaVariant, type Track } from '../lib/types'
 import { alternativeUpload, radioFor } from '../services/recs'
 import { artworkFor } from '../lib/classify'
 import { toast } from '../state/ui'
+import { tuner } from '../lib/tuner'
 
 let yt: YTPlayer | null = null
 let currentKey: string | null = null
@@ -22,7 +23,14 @@ const altPairs = new Map<string, Track>()
 let positionSavedAt = 0
 let started = false
 
-const targetVolume = () => (usePlayer.getState().muted ? 0 : usePlayer.getState().volume)
+let duckLevel: number | null = null
+const targetVolume = () => (usePlayer.getState().muted ? 0 : Math.round(usePlayer.getState().volume * (duckLevel ?? 1)))
+
+/** Lowers the music under a voice (AI DJ); null restores it. */
+export function setDuck(level: number | null) {
+  duckLevel = level
+  if (yt) void fade(targetVolume(), level == null ? 700 : 300)
+}
 
 function fade(to: number, ms: number): Promise<void> {
   const token = ++fadeToken
@@ -51,6 +59,7 @@ function finishSession(skipped: boolean) {
   if (listened < 5000) return
   const duration = s.track.durationMs ?? (usePlayer.getState().duration || null)
   const completed = endedNaturally || (duration != null && listened >= duration * 0.8)
+  tuner.observe(s.track.id, completed, skipped && !completed && listened < 30_000 + (duration ?? 0) / 3)
   lib().recordPlay({
     trackId: s.track.id,
     artistKey: artistKey(s.track.artist),
@@ -111,7 +120,43 @@ function syncTrack(prevPlaying: boolean) {
   }
 }
 
+// ── Hold-to-preview: ~15 s from a third of the way in; the queue and position come back after ──
+let preview: { track: Track | null; posSec: number; wasPlaying: boolean; timer: ReturnType<typeof setTimeout> } | null = null
+
+export function startPreview(t: Track) {
+  if (!yt || preview) return
+  const p = player()
+  const cur = currentTrack()
+  if (cur?.id === t.id) return
+  preview = { track: cur, posSec: useProgress.getState().position / 1000, wasPlaying: p.isPlaying, timer: setTimeout(() => endPreview(), 15_000) }
+  p.patch({ previewing: t })
+  const start = Math.max(0, Math.floor((t.durationMs ?? 180_000) / 3000))
+  void fade(0, 140).then(() => {
+    if (!preview || !yt) return
+    yt.loadVideoById({ videoId: t.playbackRef, startSeconds: start })
+    yt.setVolume(0)
+    void fade(targetVolume(), 500)
+  })
+}
+
+export function endPreview() {
+  const s = preview
+  if (!s || !yt) return
+  preview = null
+  clearTimeout(s.timer)
+  player().patch({ previewing: null })
+  void fade(0, 160).then(() => {
+    if (!yt) return
+    if (s.track) void load(s.track, s.posSec, s.wasPlaying, false)
+    else yt.stopVideo?.()
+    if (!s.wasPlaying) player().patch({ isPlaying: false, wantPlaying: false })
+    yt.setVolume(targetVolume())
+  })
+}
+export const isPreviewing = () => preview != null
+
 function onState(state: number) {
+  if (preview) { if (state === STATE.ENDED) endPreview(); return }
   const p = player()
   if (state === STATE.PLAYING) {
     p.patch({ isPlaying: true, isBuffering: false, issue: null })
@@ -234,7 +279,7 @@ async function maybeRadio() {
 }
 
 function tick() {
-  if (!yt) return
+  if (!yt || preview) return
   const p = player()
   const now = performance.now()
   const dt = Math.min(1000, now - lastTick)

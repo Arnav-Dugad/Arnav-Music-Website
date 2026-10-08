@@ -4,16 +4,18 @@ import { useNavigate } from 'react-router-dom'
 import { Icon } from './Icon'
 import { Artwork, Segmented, Sheet, spring, Spinner } from './ui'
 import { Progress, VolumeSlider } from './Progress'
-import { LikeButton, openTrackMenu } from './TrackRow'
+import { ArtistLinks, LikeButton, albumHref, openTrackMenu } from './TrackRow'
 import { PlayPauseIcon } from './PlayerBar'
 import { LyricsPanel } from './Lyrics'
 import { QueuePanel } from './Queue'
 import { useVideoSlot } from '../player/VideoHost'
+import { CoverParticles } from './CoverParticles'
 import { rescue, setMode } from '../player/controller'
 import { errorCopy } from '../player/youtube'
 import { usePlayer, player, useProgress } from '../state/player'
 import { useSettings } from '../state/settings'
 import { useIsDesktop } from '../hooks'
+import { ui } from '../state/ui'
 import { artworkFor } from '../lib/classify'
 import type { Track } from '../lib/types'
 
@@ -118,6 +120,7 @@ function Cover({ track, playing, showVideo }: { track: Track; playing: boolean; 
                 </motion.div>
               </AnimatePresence>
             </motion.div>
+            <CoverParticles id={track.id} art={artworkFor(track, 'sm')} />
             <div className={`np-cover-glow ${playing ? 'on' : ''}`} />
           </motion.div>
         )}
@@ -203,7 +206,6 @@ function NowPlayingView({ track }: { track: Track }) {
   }, [ambientIdle])
 
   const onDragEnd = (_: unknown, info: PanInfo) => { if (info.offset.y > 140 || info.velocity.y > 700) close() }
-  const goArtist = () => { close(); nav(`/artist/${encodeURIComponent(track.artist)}${track.channelId ? `?c=${track.channelId}` : ''}`) }
   const split = desktop && panel != null
 
   return (
@@ -243,6 +245,7 @@ function NowPlayingView({ track }: { track: Track }) {
           <div className="np-mode">
             <Segmented id="np-mode" size="sm" value={mode} onChange={(m) => void setMode(m)} options={[{ value: 'SONG', label: 'Song' }, { value: 'VIDEO', label: resolving ? <><Spinner size={11} /> Video</> : 'Video' }]} />
           </div>
+          <button className="icon-btn" aria-label="Continue on your phone" title="Continue on your phone" onClick={() => ui().set({ phoneOpen: true })}><Icon name="phone" size={19} /></button>
           <button className="icon-btn" aria-label="More" onClick={(e) => openTrackMenu(e, track)}><Icon name="more" size={20} /></button>
         </div>
       </header>
@@ -255,7 +258,7 @@ function NowPlayingView({ track }: { track: Track }) {
               <AnimatePresence mode="wait" initial={false}>
                 <motion.div key={track.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.3 }} style={{ minWidth: 0 }}>
                   <div className="np-title ellipsis">{track.title}</div>
-                  <button className="np-artist ellipsis" onClick={goArtist}>{track.artist}{track.album ? <span className="np-album"> — {track.album}</span> : null}</button>
+                  <div className="np-artist ellipsis"><ArtistLinks track={track} onNavigate={close} />{track.album ? <span className="np-album"> — <button className="link" onClick={() => { close(); nav(albumHref(track)) }}>{track.album}</button></span> : null}</div>
                 </motion.div>
               </AnimatePresence>
             </div>

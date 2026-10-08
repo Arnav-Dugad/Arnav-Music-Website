@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'motion/react'
-import { Card, Shelf, SkeletonCards, Notice, Tilt, spring, Artwork } from '../components/ui'
+import { Card, Shelf, SkeletonCards, Notice, Tilt, spring, Artwork, Spinner } from '../components/ui'
 import { Icon } from '../components/Icon'
 import { MixArt, MomentArt, QuickPicks } from '../components/Mix'
 import { PlaylistThumb } from '../components/Shell'
@@ -21,6 +21,9 @@ import { ui } from '../state/ui'
 import { useSync } from '../services/sync'
 import { dailyMixes, forYouNow, freshFinds, profile, rediscover } from '../services/recs'
 import { useYoutubeReady } from '../services/status'
+import { verified } from '../services/catalog'
+import { useWeather } from '../services/weather'
+import { momentById } from '../lib/moments'
 import { rank } from '../lib/taste'
 
 function Handoff() {
@@ -62,7 +65,10 @@ function Hero() {
   const nav = useNavigate()
   const user = useAuth((s) => s.user)
   const moods = useSettings((s) => s.selectedMoods)
-  const m = useMemo(() => featuredMoment(new Date().getHours(), moods), [moods])
+  const weather = useWeather((s) => s.weather)
+  const weatherOn = useSettings((s) => s.weatherMoods)
+  const wLoading = useWeather((s) => s.loading)
+  const m = useMemo(() => (weatherOn && weather ? momentById(weather.moment) : null) ?? featuredMoment(new Date().getHours(), moods), [moods, weather, weatherOn])
   const [q, setQ] = useState('')
   const hour = new Date().getHours()
   const name = firstName(user)
@@ -76,6 +82,15 @@ function Hero() {
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ask Arnav AI — “45 minutes of upbeat coding music”" aria-label="Ask Arnav AI" />
           <button type="submit" className="btn btn-primary btn-sm">Create</button>
         </form>
+        <div className="hero-chips">
+          {weatherOn && weather ? (
+            <button className="chip" onClick={() => nav(`/ai?q=${encodeURIComponent(`${weather.label.toLowerCase()} ${new Date().getHours() >= 17 ? 'evening' : 'day'}, ${MOODS[weather.mood].label.toLowerCase()} songs`)}`)}>
+              <Icon name={weather.isDay ? 'sun' : 'moon'} size={14} /> {weather.label} · {Math.round(weather.temp)}° — {MOODS[weather.mood].label} songs
+            </button>
+          ) : (
+            <button className="chip" disabled={wLoading} onClick={() => void useWeather.getState().refresh(true)}>{wLoading ? <Spinner size={12} /> : <Icon name="sun" size={14} />} Match the weather</button>
+          )}
+        </div>
       </div>
       <Tilt className="hero-moment" max={5}>
         <button className="hero-moment-btn" onClick={() => nav(`/moment/${m.id}`)} aria-label={`Open ${m.title} moment`}>
@@ -145,7 +160,7 @@ export default function Home() {
   }, [v, rev, events, likes])
 
   const chartRanked = useMemo(() => {
-    const list = singlesOnly(chart.data ?? []).filter((t) => allows(t))
+    const list = verified(singlesOnly(chart.data ?? [])).filter((t) => allows(t))
     return data.cold ? list : rank(list, profile(), { discovery: 0.5 }).map((s) => s.track)
   }, [chart.data, data.cold])
 
@@ -162,7 +177,7 @@ export default function Home() {
       {recent.length > 0 && (
         <Shelf title="Continue listening" subtitle="Pick up where you left off">
           {recent.map((t, i) => (
-            <Card key={t.id} title={t.title} subtitle={t.artist} art={artworkFor(t)} seed={t.artist} playing={nowId === t.id && isPlaying}
+            <Card key={t.id} title={t.title} subtitle={t.artist} art={artworkFor(t)} preview={t} seed={t.artist} playing={nowId === t.id && isPlaying}
               onOpen={() => player().play(recent, i, { context: 'Continue listening' })} onPlay={() => (nowId === t.id ? player().toggle() : player().play(recent, i, { context: 'Continue listening' }))} />
           ))}
         </Shelf>
@@ -215,20 +230,20 @@ export default function Home() {
 
       {data.tm && data.tm.tracks.length >= 2 && (
         <Shelf title={data.tm.title} subtitle={data.tm.subtitle} action={<button className="btn btn-secondary btn-sm" onClick={() => player().play(data.tm!.tracks, 0, { context: data.tm!.title })}><Icon name="play" size={13} /> Take me back</button>}>
-          {data.tm.tracks.map((t, i) => <Card key={t.id} title={t.title} subtitle={t.artist} art={artworkFor(t)} onOpen={() => player().play(data.tm!.tracks, i, { context: data.tm!.title })} />)}
+          {data.tm.tracks.map((t, i) => <Card key={t.id} title={t.title} subtitle={t.artist} art={artworkFor(t)} preview={t} onOpen={() => player().play(data.tm!.tracks, i, { context: data.tm!.title })} />)}
         </Shelf>
       )}
 
       {data.fresh.length >= 4 && (
         <Shelf title="Fresh finds" subtitle="New to you, close to your taste">
-          {data.fresh.map((r, i) => <Card key={r.track.id} title={r.track.title} subtitle={showWhy ? r.caption : r.track.artist} art={artworkFor(r.track)}
+          {data.fresh.map((r, i) => <Card key={r.track.id} title={r.track.title} subtitle={showWhy ? r.caption : r.track.artist} art={artworkFor(r.track)} preview={r.track}
             onOpen={() => player().play(data.fresh.map((x) => x.track), i, { context: 'Fresh finds' })} onPlay={() => player().play(data.fresh.map((x) => x.track), i, { context: 'Fresh finds' })} />)}
         </Shelf>
       )}
 
       {data.redis.length >= 4 && (
         <Shelf title="Rediscover" subtitle="Loved before, quiet lately">
-          {data.redis.map((r, i) => <Card key={r.track.id} title={r.track.title} subtitle={showWhy ? r.caption : r.track.artist} art={artworkFor(r.track)}
+          {data.redis.map((r, i) => <Card key={r.track.id} title={r.track.title} subtitle={showWhy ? r.caption : r.track.artist} art={artworkFor(r.track)} preview={r.track}
             onOpen={() => player().play(data.redis.map((x) => x.track), i, { context: 'Rediscover' })} onPlay={() => player().play(data.redis.map((x) => x.track), i, { context: 'Rediscover' })} />)}
         </Shelf>
       )}
@@ -238,7 +253,7 @@ export default function Home() {
           {chart.loading && !chart.data ? <SkeletonCards /> : chart.error ? (
             <div className="t-sub" style={{ padding: '8px 0' }}>{chart.error instanceof MusicError ? chart.error.message : 'Trending couldn’t load.'}</div>
           ) : chartRanked.slice(0, 24).map((t, i) => (
-            <Card key={t.id} title={t.title} subtitle={t.artist} art={artworkFor(t)} badge={i < 3 ? <span className="badge">#{i + 1}</span> : undefined}
+            <Card key={t.id} title={t.title} subtitle={t.artist} art={artworkFor(t)} preview={t} badge={i < 3 ? <span className="badge">#{i + 1}</span> : undefined}
               onOpen={() => player().play(chartRanked, i, { context: 'Trending in music' })} onPlay={() => player().play(chartRanked, i, { context: 'Trending in music' })} />
           ))}
         </Shelf>
@@ -246,7 +261,7 @@ export default function Home() {
 
       {data.liked.length > 0 && (
         <Shelf title="From your likes" action={<button className="btn btn-ghost btn-sm" onClick={() => nav('/playlist/liked')}>See all</button>}>
-          {data.liked.map((t, i) => <Card key={t.id} title={t.title} subtitle={t.artist} art={artworkFor(t)} onOpen={() => player().play(data.liked, i, { context: 'Liked Songs' })} />)}
+          {data.liked.map((t, i) => <Card key={t.id} title={t.title} subtitle={t.artist} art={artworkFor(t)} preview={t} onOpen={() => player().play(data.liked, i, { context: 'Liked Songs' })} />)}
         </Shelf>
       )}
 

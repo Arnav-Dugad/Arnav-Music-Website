@@ -3,13 +3,14 @@
  * LyricsTest) so the web and Android implementations provably agree.
  */
 import { describe, expect, it } from 'vitest'
-import { duration, parseIsoDuration, compactCount, parseYouTubeTitle } from '../src/lib/format'
+import { duration, parseIsoDuration, compactCount, parseYouTubeTitle, tidyTitle } from '../src/lib/format'
 import { isCompilation, isSingleTitle, variantOf, titleSimilarity, rankForListening } from '../src/lib/classify'
 import { cacheKey, matchScore } from '../src/lib/query'
 import { artistKey, type Track } from '../src/lib/types'
 import { interpretLocally, parseSession, extractObject, buildSession, energyAt, sanitize } from '../src/lib/intent'
 import { buildProfile, rank, smartPlaylist } from '../src/lib/taste'
 import { parseLrc, activeIndex, isInstrumental } from '../src/lib/lyrics'
+import { trustOf, fanKind, passesVerified, credited } from '../src/lib/trust'
 
 const split = (raw: string, ch: string) => { const p = parseYouTubeTitle(raw, ch); return [p.artist, p.title] }
 const tr = (i: number, artist = `Artist ${i % 10}`, energy: number | null = 0.5 + (i % 5) * 0.08): Track => ({
@@ -47,6 +48,80 @@ describe('formatters (CoreLogicTest)', () => {
   })
 })
 
+describe('verified music (web)', () => {
+  const t = (title: string, artist: string, channelTitle: string, extra: Partial<Track> = {}) => ({ title, artist, channelTitle, credits: null, views: 1_000_000, rawTitle: title, ...extra })
+  it('marks official sources', () => {
+    expect(trustOf(t('Blinding Lights', 'The Weeknd', 'The Weeknd - Topic'))).toBe(3)
+    expect(trustOf(t('Starboy', 'The Weeknd', 'TheWeekndVEVO'))).toBe(3)
+    expect(trustOf(t('Makhna', 'Tanishk Bagchi, Asees Kaur', 'Zee Music Company'))).toBe(3)
+    expect(trustOf(t('Kesariya', 'Arijit Singh', 'Sony Music India'))).toBe(3)
+    expect(trustOf(t('Perfect', 'Ed Sheeran', 'Ed Sheeran'))).toBe(2)
+    expect(trustOf(t('Perfect', 'Ed Sheeran', 'Ed Sheeran Official'))).toBe(2)
+    // A fan channel whose name was used as the artist doesn't "match itself".
+    expect(trustOf(t('Perfect Duet', 'SyrebralVibes', 'SyrebralVibes', { artistFromChannel: true }))).toBe(0)
+    expect(parseYouTubeTitle('Ed Sheeran ‒ Perfect Duet ft. Beyoncé', 'SyrebralVibes').artist).toBe('Ed Sheeran')
+  })
+  it('rejects fan uploads unless searched for', () => {
+    expect(trustOf(t('Perfect - Ed Sheeran (Cover by Someone)', 'Someone', 'Someone Music'))).toBe(-1)
+    expect(trustOf(t('Kesariya (Slowed + Reverb)', 'Arijit Singh', 'Lofi Vibes'))).toBe(-1)
+    expect(trustOf(t('Makhna Dance Cover', 'Dance Crew', 'Dance Crew'))).toBe(-1)
+    expect(trustOf(t('Song karaoke with lyrics', 'X', 'Karaoke Hub'))).toBe(-1)
+    expect(fanKind('Perfect (Cover)', 'perfect cover')).toBeNull()
+  })
+  it('only trusts big channels for non-lyric uploads', () => {
+    expect(trustOf(t('Perfect', 'Ed Sheeran', 'Some Hits'), { subs: 2_000_000 })).toBe(1)
+    expect(trustOf(t('Ed Sheeran - Perfect (Lyrics)', 'Ed Sheeran', '7clouds'), { subs: 18_000_000 })).toBe(0)
+    expect(trustOf(t('Perfect', 'Ed Sheeran', 'Tiny Channel'), { subs: 900 })).toBe(0)
+  })
+  it('filters by the preference and credits featured singers', () => {
+    expect(passesVerified({ ...tr(1), trust: 0 }, true)).toBe(false)
+    expect(passesVerified({ ...tr(1), trust: 0 }, false)).toBe(true)
+    expect(passesVerified({ ...tr(1), trust: -1 }, false)).toBe(false)
+    expect(passesVerified({ ...tr(1) }, true)).toBe(true)
+    expect(credited({ artist: 'Tanishk Bagchi, Asees Kaur', credits: null, channelTitle: 'Zee Music Company' }, 'Asees Kaur')).toBe(true)
+    expect(credited({ artist: 'Drake feat. Rihanna', credits: null, channelTitle: null }, 'Rihanna')).toBe(true)
+    expect(credited({ artist: 'Drake', credits: null, channelTitle: null }, 'Rihanna')).toBe(false)
+  })
+})
+
+describe('label uploads read with known artists', () => {
+  const known = new Set(['aseeskaur', 'arijitsingh'])
+  const ctx = { isKnownArtist: (s: string) => known.has(s.toLowerCase().replace(/[^a-z]/g, '')) }
+  it('reads Artist - Song when the left side is a known artist', () => {
+    const p = parseYouTubeTitle('Asees Kaur - Baarish (Official Video)', 'Saregama Music', ctx)
+    expect([p.artist, p.title]).toEqual(['Asees Kaur', 'Baarish'])
+    const q = parseYouTubeTitle('Makhna - Drive | Sushant Singh Rajput, Jacqueline Fernandez | Tanishk Bagchi, Asees Kaur', 'Zee Music Company', ctx)
+    expect([q.title, q.album]).toEqual(['Makhna', 'Drive'])
+  })
+  it('uses the search query as a hint', () => {
+    expect(parseYouTubeTitle('Asees Kaur - Baarish', 'Saregama Music', { query: 'asees kaur songs' }).artist).toBe('Asees Kaur')
+  })
+  it('skips noise-only segments and splits tight pipes', () => {
+    expect(parseYouTubeTitle('Video | Babul Da Vehda | Meet Bros', 'Zee Music Company').title).toBe('Babul Da Vehda')
+    expect(parseYouTubeTitle('Makhna| Sushant Singh Rajput, Jacqueline', 'Zee Music Company').title).toBe('Makhna')
+  })
+  it('reads "Song | Singer | Singer | Actor" credits lists', () => {
+    const a = parseYouTubeTitle('Tu Mile Dil Khile | Stebin Ben | Asees Kaur | Larissa B | Lijo G-Dj Chetas | Latest Hindi Song 2023', 'Saregama Music', ctx)
+    expect([a.title, a.album]).toEqual(['Tu Mile Dil Khile', null])
+    expect(a.artist).toBe('Asees Kaur')
+    const b = parseYouTubeTitle('Babul Da Vehda - Video | Meet Bros | Asees Kaur | Divyanka Tripathi Dahiya | New Punjabi Song', 'IVY Music', ctx)
+    expect([b.title, b.album, b.artist]).toEqual(['Babul Da Vehda', null, 'Asees Kaur'])
+    const c = parseYouTubeTitle('Halka Halka Suroor | Asees Kaur | Divya Kumar | Shehnaz Akhtar', 'Asees Kaur', ctx)
+    expect([c.title, c.artist, c.album]).toEqual(['Halka Halka Suroor', 'Asees Kaur', null])
+    const d = parseYouTubeTitle('MADHANYA - Rahul Vaidya & Disha Parmar | Asees Kaur |Lijo-DJ Chetas| Anshul Garg | Wedding Song 2021', 'Desi Music Factory', ctx)
+    expect([d.title, d.artist]).toEqual(['MADHANYA', 'Rahul Vaidya & Disha Parmar'])
+    const e = parseYouTubeTitle('PANI DI GAL: Maninder Buttar feat. Jasmin Bhasin | Asees Kaur | MixSingh | JUGNI', 'Ishtar Punjabi', ctx)
+    expect([e.title, e.artist]).toEqual(['PANI DI GAL', 'Maninder Buttar feat. Jasmin Bhasin'])
+    // Films still win in "Song | Film | Cast" titles.
+    expect(parseYouTubeTitle('Raataan Lambiyan - Lyric Video | Shershaah | Sidharth, Kiara | Tanishk B. | Jubin | Asees', 'Sony Music India', ctx).album).toBe('Shershaah')
+    expect(parseYouTubeTitle('Kapoor & Sons - Let’s Nacho', 'T-Series', ctx).artist).toBe('T-Series')
+  })
+  it('never uses a known artist as the album', () => {
+    expect(parseYouTubeTitle('Kesariya | Arijit Singh', 'Sony Music India', ctx).album).toBeNull()
+    expect(parseYouTubeTitle('Kesariya | Brahmastra | Arijit Singh', 'Sony Music India', ctx).album).toBe('Brahmastra')
+  })
+})
+
 describe('label uploads (web improvements)', () => {
   it('reads "Song - Movie | Cast | Singers" from Indian labels', () => {
     const p = parseYouTubeTitle('Makhna - Drive | Sushant Singh Rajput, Jacqueline Fernandez | Tanishk Bagchi, Asees Kaur', 'Zee Music Company')
@@ -59,9 +134,55 @@ describe('label uploads (web improvements)', () => {
     expect(parseYouTubeTitle('Full Song: Tujhe Kitna Chahne Lage | Kabir Singh', 'T-Series').title).toBe('Tujhe Kitna Chahne Lage')
     expect(parseYouTubeTitle('"Senorita Zindagi Na Milegi Dobara" Full HD', 'T-Series').title).toBe('Senorita Zindagi Na Milegi Dobara')
   })
+  it('reads T-Series soundtrack uploads: song, film, cast, singers', () => {
+    const p = (t: string, ch = 'T-Series') => { const r = parseYouTubeTitle(t, ch, { query: 'Kabir Singh songs' }); return [r.title, r.album, r.artist] }
+    expect(p('Bekhayali Full Song | Kabir Singh | Shahid K,Kiara A|Sandeep Reddy Vanga | Sachet-Parampara | Irshad')).toEqual(['Bekhayali', 'Kabir Singh', 'Sachet-Parampara'])
+    expect(p('Full Song: Tujhe Kitna Chahne Lage | Kabir Singh | Mithoon Feat. Arijit Singh | Shahid K, Kiara A')).toEqual(['Tujhe Kitna Chahne Lage', 'Kabir Singh', 'Mithoon, Arijit Singh'])
+    expect(p('Full Song: Pehla Pyaar | Kabir Singh | Shahid Kapoor, Kiara Advani | Armaan Malik | Vishal Mishra')).toEqual(['Pehla Pyaar', 'Kabir Singh', 'Armaan Malik'])
+    expect(p('Full Song: Mere Sohneya | Kabir Singh | Shahid K, Kiara A, Sandeep V | Sachet - Parampara | Irshad K')).toEqual(['Mere Sohneya', 'Kabir Singh', 'Sachet-Parampara'])
+    expect(p('LYRICAL: Tera Ban Jaunga | Kabir Singh | Shahid K, Kiara A, Sandeep V | Tulsi Kumar, Akhil Sachdeva')).toEqual(['Tera Ban Jaunga', 'Kabir Singh', 'Tulsi Kumar, Akhil Sachdeva'])
+    expect(p('Bekhayali 8K Full Song | Kabir Singh | Arijit Singh | Shahid K,Kiara A | Sandeep V |Sachet-Parampara')).toEqual(['Bekhayali', 'Kabir Singh', 'Arijit Singh'])
+    expect(p('ARIJIT SINGH VERSION: Bekhayali Full Song | Kabir Singh | Shahid K,Kiara A | Sandeep Reddy V| Irshad')).toEqual(['Bekhayali (Arijit Singh Version)', 'Kabir Singh', 'Arijit Singh'])
+    expect(p('Kabir Singh : Kaise Hua Song | Shahid K, Kiara A, Sandeep V | Vishal Mishra, Manoj Muntashir')).toEqual(['Kaise Hua', 'Kabir Singh', 'Vishal Mishra, Manoj Muntashir'])
+    expect(p('Meri Umar Ke Naujawano - Kabir Singh | Shahid Kapoor | Kiara Advani | Teena Singh', 'Saregama Music')).toEqual(['Meri Umar Ke Naujawano', 'Kabir Singh', 'Teena Singh'])
+    expect(p('Full Audio: Tujhe Kitna Chahne Lage | Kabir Singh | Mithoon Feat. Arijit Singh | Shahid K, Kiara A')[0]).toBe('Tujhe Kitna Chahne Lage')
+    expect(p('Remix: Bekhayali | Kabir Singh | Shahid K, Kiara A | Arijit Singh')).toEqual(['Bekhayali (Remix)', 'Kabir Singh', 'Arijit Singh'])
+    expect(p('FULL SONG: Yeh Aaina | Kabir Singh | Shahid Kapoor, Kiara Advani Nikita D| Amaal Mallik Feat.Shreya')).toEqual(['Yeh Aaina', 'Kabir Singh', 'Amaal Mallik, Shreya'])
+  })
+  it('keeps every singer after a composer credit, and reads artist-channel credit lists', () => {
+    const a = parseYouTubeTitle('Jaan Ban Gaye - Khuda Haafiz |Vidyut Jammwal , Shivaleeka O | Mithoon Ft. Vishal Mishra, Asees Kaur', 'Zee Music Company')
+    expect([a.title, a.album, a.artist]).toEqual(['Jaan Ban Gaye', 'Khuda Haafiz', 'Mithoon, Vishal Mishra, Asees Kaur'])
+    const b = parseYouTubeTitle('Raataan Lambiyan revisited | Asees Kaur | Tanishk Bagchi', 'Asees Kaur')
+    expect([b.title, b.album, b.artist]).toEqual(['Raataan Lambiyan revisited', null, 'Asees Kaur'])
+    const c = parseYouTubeTitle('Meri Jaan / Ya Tuli Khanjar Maare | Bhoomi 2023 | Mithoon | Abdul Rashid Hafiz, Asees Kaur | Kashmir', 'Salim Sulaiman Music')
+    expect([c.album, c.artist, c.credits]).toEqual(['Bhoomi', 'Salim Sulaiman', 'Abdul Rashid Hafiz, Asees Kaur'])
+  })
+  it('does not mistake a kind of song for a film', () => {
+    expect(parseYouTubeTitle('MADHANYA - Rahul Vaidya & Disha Parmar | Asees Kaur |Lijo-DJ Chetas| Anshul Garg | Wedding Song 2021', 'Desi Music Factory').album).toBeNull()
+  })
   it('leaves artist - title uploads from non-label channels alone', () => {
     const p = parseYouTubeTitle('Daft Punk - Get Lucky (Official Video)', 'DaftPunkVEVO')
     expect([p.artist, p.title]).toEqual(['Daft Punk', 'Get Lucky'])
+  })
+})
+
+describe('artist channels', () => {
+  it('matches the artist named in the title, not a credit that shares a word with the channel', () => {
+    const base = { title: 'Bekhayali', views: 1e6 }
+    expect(trustOf({ ...base, artist: 'Sachet-Parampara', credits: 'Prem', channelTitle: 'PREM MUSIC FACTORY' })).toBe(0)
+    expect(trustOf({ ...base, artist: 'Arijit Singh', credits: null, channelTitle: 'Arijit Singh' })).toBe(2)
+    expect(trustOf({ ...base, artist: 'Prem', credits: null, channelTitle: 'Prem Factory' })).toBe(0)
+  })
+})
+
+describe('tidying titles saved without their YouTube title', () => {
+  it('drops resolution and video suffixes, keeps real titles', () => {
+    expect(tidyTitle('Makhna 8K Video')).toBe('Makhna')
+    expect(tidyTitle('Kesariya Full HD Video Song')).toBe('Kesariya')
+    expect(tidyTitle('Tum Hi Ho Lyrical')).toBe('Tum Hi Ho')
+    expect(tidyTitle('Video: Raataan Lambiyan')).toBe('Raataan Lambiyan')
+    expect(tidyTitle('4K')).toBe('4K')
+    expect(tidyTitle('Hello')).toBe('Hello')
   })
 })
 

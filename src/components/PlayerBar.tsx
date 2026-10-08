@@ -9,21 +9,26 @@ import { useLyrics } from '../state/lyrics'
 import { useSettings } from '../state/settings'
 import { activeIndex } from '../lib/lyrics'
 import { artworkFor } from '../lib/classify'
+import { openPopOut, popOutSupported } from './PopOut'
 
+// Play and pause drawn with the same commands (two quads each), so the shapes morph into each other.
+const PAUSE_D = 'M6.6 4.8 L10.4 4.8 L10.4 19.2 L6.6 19.2 Z M13.6 4.8 L17.4 4.8 L17.4 19.2 L13.6 19.2 Z'
+const PLAY_D = 'M7.6 4.6 L13.2 8.3 L13.2 15.7 L7.6 19.4 Z M13.2 8.3 L19.2 12 L19.2 12 L13.2 15.7 Z'
+
+/** A play/pause glyph that morphs between shapes (the app's morphing play button). */
 export function PlayPauseIcon({ playing, size = 22 }: { playing: boolean; size?: number }) {
   return (
-    <AnimatePresence mode="popLayout" initial={false}>
-      <motion.span
-        key={playing ? 'pause' : 'play'}
-        initial={{ scale: 0.4, opacity: 0, rotate: playing ? -30 : 30 }}
-        animate={{ scale: 1, opacity: 1, rotate: 0 }}
-        exit={{ scale: 0.4, opacity: 0 }}
-        transition={{ type: 'spring', stiffness: 600, damping: 30 }}
-        style={{ display: 'grid', placeItems: 'center' }}
-      >
-        <Icon name={playing ? 'pause' : 'play'} size={size} style={playing ? undefined : { marginLeft: size * 0.08 }} />
-      </motion.span>
-    </AnimatePresence>
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden style={{ flex: 'none', overflow: 'visible' }}>
+      <motion.path
+        initial={false}
+        animate={{ d: playing ? PAUSE_D : PLAY_D }}
+        transition={{ type: 'spring', stiffness: 520, damping: 32 }}
+        fill="currentColor"
+        stroke="currentColor"
+        strokeWidth={1.6}
+        strokeLinejoin="round"
+      />
+    </svg>
   )
 }
 
@@ -52,6 +57,19 @@ function LiveLyric() {
   )
 }
 
+export function PreviewPill() {
+  const t = usePlayer((s) => s.previewing)
+  return (
+    <AnimatePresence>
+      {t && (
+        <motion.div className="preview-pill glass-thick" initial={{ opacity: 0, y: 12, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8 }} transition={{ type: 'spring', stiffness: 500, damping: 34 }}>
+          <span className="eq"><i /><i /><i /></span> Previewing <b className="ellipsis">{t.title}</b> · release to return
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}
+
 export function PlayerBar() {
   const track = usePlayer((s) => s.queue[s.index]?.track ?? null)
   const playing = usePlayer((s) => s.wantPlaying)
@@ -60,6 +78,7 @@ export function PlayerBar() {
   const shuffle = usePlayer((s) => s.shuffle)
   const repeat = usePlayer((s) => s.repeat)
   const panel = usePlayer((s) => s.panel)
+  const docked = useSettings((s) => s.dockedPlayer)
   if (!track) return null
   const open = (p?: 'lyrics' | 'queue') => {
     player().setExpanded(true)
@@ -99,9 +118,11 @@ export function PlayerBar() {
         <Progress variant="bar" />
       </div>
       <div className="pb-right">
-        <button className={`icon-btn sm ${panel === 'lyrics' && expanded ? 'on' : ''}`} aria-label="Lyrics" onClick={() => open('lyrics')}><Icon name="lyrics" size={18} /></button>
-        <button className={`icon-btn sm ${panel === 'queue' && expanded ? 'on' : ''}`} aria-label="Queue" onClick={() => open('queue')}><Icon name="queue" size={18} /></button>
+        <button className={`icon-btn sm dock-dup ${panel === 'lyrics' && expanded ? 'on' : ''}`} aria-label="Lyrics" onClick={() => open('lyrics')}><Icon name="lyrics" size={18} /></button>
+        <button className={`icon-btn sm dock-dup ${panel === 'queue' && expanded ? 'on' : ''}`} aria-label="Queue" onClick={() => open('queue')}><Icon name="queue" size={18} /></button>
         <VolumeSlider />
+        {popOutSupported() && <button className="icon-btn sm" aria-label="Pop out mini player" title="Pop out mini player" onClick={() => void openPopOut()}><Icon name="minimize" size={17} /></button>}
+        <button className={`icon-btn sm ${docked ? 'on' : ''}`} aria-label={docked ? 'Undock Now Playing' : 'Dock Now Playing beside the page'} title="Dock Now Playing" onClick={() => useSettings.getState().update({ dockedPlayer: !docked })}><Icon name="dock" size={18} /></button>
         <button className="icon-btn sm" aria-label="More" onClick={(e) => openTrackMenu(e, track)}><Icon name="more" size={18} /></button>
       </div>
     </motion.div>

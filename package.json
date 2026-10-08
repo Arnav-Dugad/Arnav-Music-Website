@@ -16,6 +16,7 @@
   "dependencies": {
     "firebase": "^13.0.0",
     "motion": "^14.0.0",
+    "qrcode-generator": "^2.0.4",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-router-dom": "^7.18.4",

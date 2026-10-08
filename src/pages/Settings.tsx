@@ -10,9 +10,13 @@ import { useLibrary } from '../state/library'
 import { useUsage, quotaDay } from '../lib/usage'
 import { ytQuotaState } from '../lib/youtube'
 import { idbClear } from '../lib/idb'
-import { signOutUser } from '../lib/firebase'
+import { authMessage, linkGoogle, signOutUser, unlinkGoogle } from '../lib/firebase'
 import { lastAiError } from '../lib/ai'
-import { adoptAccount, deleteCloudData, deviceId, syncNow, useSync } from '../services/sync'
+import { useWeather } from '../services/weather'
+import { setThemeWithReveal } from '../lib/reveal'
+import { SIGNALS, SIGNAL_COPY, tuner } from '../lib/tuner'
+import { useSyncExternalStore } from 'react'
+import { adoptAccount, deleteCloudData, deviceId, refreshAuthUser, syncNow, useSync } from '../services/sync'
 import { useApiStatus } from '../services/status'
 import { syncLabel } from '../components/Shell'
 import { relative } from '../lib/format'
@@ -84,7 +88,33 @@ function Account() {
           <button className="btn btn-secondary" onClick={() => void signOutUser().then(() => toast('Signed out'))}><Icon name="logout" size={15} /> Sign out</button>
         </div>
       </Group>
+      <LinkedAccounts />
     </>
+  )
+}
+
+function LinkedAccounts() {
+  const user = useAuth((s) => s.user)
+  const [busy, setBusy] = useState(false)
+  if (!user) return null
+  const google = user.providers.includes('google.com')
+  const email = user.providers.includes('password')
+  const run = async (fn: () => Promise<unknown>, done: string) => {
+    setBusy(true)
+    try { await fn(); refreshAuthUser(); toast(done) } catch (e) { toast(authMessage(e)) } finally { setBusy(false) }
+  }
+  return (
+    <Group title="Linked accounts">
+      <Row title={<span className="row" style={{ gap: 8 }}><Icon name="google" size={16} /> Google</span>}
+        sub={google ? 'Linked \u2014 you can sign in with Google and import your YouTube playlists.' : 'Link Google to sign in with it and to import your YouTube playlists and Liked videos. Your library stays the same.'}>
+        {google
+          ? (email ? <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => void run(unlinkGoogle, 'Google unlinked')}>Unlink</button> : <span className="badge">Linked</span>)
+          : <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => void run(linkGoogle, 'Google account linked')}>{busy ? <Spinner size={13} /> : <Icon name="link" size={14} />} Link Google</button>}
+      </Row>
+      <Row title={<span className="row" style={{ gap: 8 }}><Icon name="user" size={16} /> Email &amp; password</span>} sub={email ? user.email : 'Not set up \u2014 you sign in with Google.'}>
+        {email && <span className="badge">Linked</span>}
+      </Row>
+    </Group>
   )
 }
 
@@ -93,7 +123,7 @@ function Appearance() {
   return (
     <>
       <Group title="Theme">
-        <Row title="Appearance"><Segmented id="theme" size="sm" value={s.themeMode} onChange={(v) => s.update({ themeMode: v })} options={[{ value: 'dark', label: 'Dark' }, { value: 'light', label: 'Light' }, { value: 'system', label: 'Auto' }]} /></Row>
+        <Row title="Appearance"><Segmented id="theme" size="sm" value={s.themeMode} onChange={(v) => setThemeWithReveal(v)} options={[{ value: 'dark', label: 'Dark' }, { value: 'light', label: 'Light' }, { value: 'system', label: 'Auto' }]} /></Row>
         <Row title="Accent colour" sub="Follow the artwork, or pick a colour"><Segmented id="accent" size="sm" value={s.accentMode} onChange={(v) => s.update({ accentMode: v })} options={[{ value: 'artwork', label: 'Artwork' }, { value: 'preset', label: 'Fixed' }]} /></Row>
         {s.accentMode === 'preset' && (
           <div className="accent-row">
@@ -108,6 +138,8 @@ function Appearance() {
         <Bool k="movingGradient" title="Living Now Playing" sub="The background drifts through the cover’s colours" />
         <Bool k="coverBreathing" title="Cover breathing" sub="Artwork settles back when paused" />
         <Bool k="ambientIdle" title="Ambient idle" sub="Now Playing fades to just the music after a few seconds" />
+        <Bool k="coverParticles" title="Cover particles" sub="The old cover dissolves into particles as the new one forms" />
+        <Bool k="dockedPlayer" title="Docked Now Playing (desktop)" sub="Keep the cover, lyrics and queue in a panel beside the page" />
       </Group>
     </>
   )
@@ -116,6 +148,7 @@ function Appearance() {
 function Playback() {
   return (
     <Group>
+      <Bool k="verifiedOnly" title="Verified music only" sub="Official uploads only: YouTube Topic art tracks, VEVO, record labels, artists' own channels and established channels. Covers, karaoke, reactions, slowed/8D edits and Shorts are always left out." />
       <Bool k="endlessRadio" title="Endless radio" sub="When the queue ends, keep playing similar songs" />
       <Bool k="autoReplaceUnavailable" title="Rescue unplayable videos" sub="Automatically find another upload when one can’t be embedded" />
       <Bool k="crossfadeOnSkip" title="Smooth transitions" sub="Fade out and in when you skip" />
@@ -141,12 +174,39 @@ function Ai() {
       <Group>
         <Bool k="aiEnabled" title="Arnav AI cloud" sub="Uses Gemini through Firebase AI Logic. When off or unavailable, the on-device engine answers." />
         <Bool k="aiPersonalization" title="Personalise with my taste" sub="Sends your top artists and genres (never history) with each request" />
+        <Bool k="aiDj" title="AI DJ" sub="A short spoken intro as each new song starts. The voice is generated on this device; the music dips under it." />
+        <Row title="Weather moods" sub="Uses your approximate location (only with your permission) to match Home and Moments to the weather. Weather from Open-Meteo.">
+          <Toggle on={useSettings((s) => s.weatherMoods)} label="Weather moods" onChange={(on) => { if (on) void useWeather.getState().refresh(true); else useSettings.getState().update({ weatherMoods: false }) }} />
+        </Row>
         <Row title="Daily request limit" sub={`${u.aiRequests} used today`}>
           <input className="field" style={{ width: 90 }} type="number" min={0} max={500} value={s.dailyAiLimit} onChange={(e) => s.update({ dailyAiLimit: Math.max(0, Math.min(500, Number(e.target.value) || 0)) })} />
         </Row>
       </Group>
+      <Tuner />
       {lastAiError && <Notice tone="info">Last cloud AI error: {lastAiError}</Notice>}
     </>
+  )
+}
+
+function Tuner() {
+  const st = useSyncExternalStore(tuner.subscribe, tuner.stats, tuner.stats)
+  return (
+    <Group title="Recommendations learn from you">
+      <div className="set-row col" style={{ alignItems: 'stretch', gap: 12 }}>
+        <div className="t-caption">Every recommended song remembers why it was picked. Finishing it strengthens those reasons; an early skip weakens them. {st.plays ? `Learned from ${st.plays} recommended ${st.plays === 1 ? 'play' : 'plays'} — ${st.finished} finished, ${st.skipped} skipped.` : 'Nothing learned yet — play some recommendations.'}</div>
+        {SIGNALS.map((k) => {
+          const v = st.m[k]
+          return (
+            <div key={k} className="tune-row">
+              <div className="tune-label"><span className="set-title">{SIGNAL_COPY[k].label}</span><span className="t-caption">{SIGNAL_COPY[k].line}</span></div>
+              <div className="tune-bar" aria-label={`${SIGNAL_COPY[k].label}: ${Math.round(v * 100)}%`}><i style={{ transform: `scaleX(${Math.min(1, v / 2.5)})` }} /><b style={{ left: `${(1 / 2.5) * 100}%` }} /></div>
+              <span className="t-caption tabular" style={{ width: 44, textAlign: 'right' }}>{v >= 1 ? '+' : ''}{Math.round((v - 1) * 100)}%</span>
+            </div>
+          )
+        })}
+        <div className="row" style={{ justifyContent: 'flex-end' }}><button className="btn btn-ghost btn-sm" onClick={() => { tuner.reset(); toast('Recommendation tuning reset') }}>Reset</button></div>
+      </div>
+    </Group>
   )
 }
 
@@ -194,6 +254,8 @@ function SyncSection() {
     <>
       <Group>
         <Bool k="cloudSync" title="Cloud sync" sub="Likes, playlists, listening history and your queue sync with the Android app through your Firebase account" />
+        <Bool k="syncSettings" title="Sync settings with my phone" sub="Theme, accent, motion, Arnav AI, playback, lyrics and taste preferences follow you both ways. Phone-only choices (like OLED) are kept on the phone." />
+        {user && cloud && <Row title="Continue on your phone" sub="Send your queue, scan a QR code, or see your devices"><button className="btn btn-secondary btn-sm" onClick={() => ui().set({ phoneOpen: true })}><Icon name="phone" size={14} /> Open</button></Row>}
         <Row title="Status" sub={sync.error ?? (sync.lastSyncedAt ? `Last synced ${relative(sync.lastSyncedAt)}` : user ? 'Not synced yet' : 'Sign in to sync')}>
           <span className="badge">{user ? syncLabel(sync.status) : 'Signed out'}</span>
         </Row>

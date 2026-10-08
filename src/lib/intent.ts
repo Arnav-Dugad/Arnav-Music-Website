@@ -249,9 +249,9 @@ export interface BuiltSession {
 }
 
 /** Turns constraints + real, resolved candidates into an ordered queue. Deterministic. */
-export function buildSession(c: SessionConstraints, candidates: Track[], profile: TasteProfile, liked: Set<TrackId>, now = Date.now()): BuiltSession {
+export function buildSession(c: SessionConstraints, candidates: Track[], profile: TasteProfile, liked: Set<TrackId>, now = Date.now(), tune?: NonNullable<Parameters<typeof rank>[2]>['tune']): BuiltSession {
   const targetMs = c.durationMinutes * 60_000
-  const ranked = rank(candidates, profile, { now, liked, targetEnergy: c.energyTarget, discovery: c.discoveryRatio })
+  const ranked = rank(candidates, profile, { now, liked, targetEnergy: c.energyTarget, discovery: c.discoveryRatio, tune })
   if (!ranked.length) return { constraints: c, tracks: [], reasons: {}, totalMs: 0, discovered: 0 }
   const fam = (s: Scored) => profile.trackFamiliarity.get(s.track.id) ?? 0
   const familiarPool = ranked.filter((s) => fam(s) >= 0.15)

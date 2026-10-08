@@ -16,6 +16,8 @@ interface LyricsState {
   translating: boolean
   generating: boolean
   showTranslation: boolean
+  /** Cinematic full-screen lyrics (serif type over the blurred cover). */
+  cinematic: boolean
   load: (force?: boolean) => Promise<void>
   generate: () => Promise<void>
   translate: (language: string) => Promise<void>
@@ -31,6 +33,7 @@ export const useLyrics = create<LyricsState>()((set, get) => ({
   translating: false,
   generating: false,
   showTranslation: false,
+  cinematic: false,
   set: (p) => set(p),
   async load(force = false) {
     const t = currentTrack()

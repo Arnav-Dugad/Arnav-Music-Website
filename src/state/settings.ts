@@ -16,6 +16,8 @@ export interface Settings {
   highContrast: boolean
   // playback
   preferVideos: boolean
+  /** Official uploads only (Topic / VEVO / labels / artist channels / established channels). */
+  verifiedOnly: boolean
   autoReplaceUnavailable: boolean
   endlessRadio: boolean
   crossfadeOnSkip: boolean
@@ -27,6 +29,10 @@ export interface Settings {
   miniPlayerLyrics: boolean
   // AI
   aiEnabled: boolean
+  /** Spoken AI DJ intros between songs (on-device voice). */
+  aiDj: boolean
+  /** Use local weather (with location permission) to suggest moods and moments. */
+  weatherMoods: boolean
   aiPersonalization: boolean
   explanations: boolean
   dailyAiLimit: number
@@ -36,11 +42,17 @@ export interface Settings {
   regionCode: string
   // sync
   cloudSync: boolean
+  /** Keep shared preferences (theme, AI, playback, taste) in sync with the Android app. */
+  syncSettings: boolean
   // taste
   selectedMoods: Mood[]
   seedArtists: string[]
   homeLayout: 'shelves' | 'grid'
   libraryLayout: 'grid' | 'list'
+  /** Desktop: keep Now Playing docked beside the page. */
+  dockedPlayer: boolean
+  /** The old cover dissolves into particles as the new one forms. */
+  coverParticles: boolean
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -53,6 +65,7 @@ export const DEFAULT_SETTINGS: Settings = {
   motion: 'full',
   highContrast: false,
   preferVideos: false,
+  verifiedOnly: true,
   autoReplaceUnavailable: true,
   endlessRadio: true,
   crossfadeOnSkip: true,
@@ -62,6 +75,8 @@ export const DEFAULT_SETTINGS: Settings = {
   onlineLyrics: true,
   miniPlayerLyrics: true,
   aiEnabled: true,
+  aiDj: false,
+  weatherMoods: false,
   aiPersonalization: true,
   explanations: true,
   dailyAiLimit: 40,
@@ -69,10 +84,13 @@ export const DEFAULT_SETTINGS: Settings = {
   youtubeDailyBudget: 10000,
   regionCode: '',
   cloudSync: true,
+  syncSettings: true,
   selectedMoods: [],
   seedArtists: [],
   homeLayout: 'shelves',
   libraryLayout: 'grid',
+  dockedPlayer: false,
+  coverParticles: true,
 }
 
 interface SettingsStore extends Settings {

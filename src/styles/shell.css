@@ -105,3 +105,33 @@
 .mini .pb-title { font-size: 14px; }
 .mini .pb-sub { font-size: 12.5px; }
 .mini-prog .prog-line { left: 16px; right: 16px; bottom: 0; }
+
+/* Docked Now Playing (desktop) */
+:root { --dock: 380px; }
+.app.docked .main-scroll { margin-right: var(--dock); }
+.app.docked .pbar { right: calc(var(--dock) + 16px); }
+/* Narrower bar beside the dock: lyrics and Up next already live in the dock. */
+.app.docked .pbar { grid-template-columns: minmax(0, 1fr) minmax(250px, 1.25fr) minmax(0, auto); gap: 14px; }
+.app.docked .pb-right .dock-dup { display: none; }
+.app.docked .vol { width: 96px; }
+.dock { position: fixed; z-index: 25; top: 0; right: 0; bottom: 0; width: var(--dock); color: #fff; overflow: hidden; border-left: 1px solid rgba(255,255,255,0.08);
+  --text: #fff; --text-2: rgba(255,255,255,0.72); --text-3: rgba(255,255,255,0.5); --surface: rgba(255,255,255,0.07); --surface-2: rgba(255,255,255,0.13); --surface-3: rgba(255,255,255,0.22);
+  --hairline: rgba(255,255,255,0.12); --bg: #0b0b0f; --surface-raised: #2a2a33; color-scheme: dark; }
+.dock-bg { position: absolute; inset: 0; }
+.dock-bg::after { content: ''; position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(0,0,0,0.15), rgba(0,0,0,0.55)); }
+.dock-inner { position: relative; z-index: 1; height: 100%; display: flex; flex-direction: column; padding: 16px 18px 104px; gap: 12px; }
+.dock-head { display: flex; align-items: center; gap: 4px; }
+.dock-art { width: 100%; aspect-ratio: 1; border-radius: 16px; overflow: hidden; box-shadow: 0 24px 60px rgba(0,0,0,0.5); flex: none; max-height: 34vh; max-width: 34vh; align-self: center; }
+.dock-art .art { width: 100%; height: 100%; border-radius: 0; }
+.dock-meta { display: flex; align-items: center; gap: 10px; }
+.dock-title { font-family: var(--font-display); font-size: 19px; font-weight: 720; letter-spacing: -0.02em; }
+.dock-artist { color: rgba(255,255,255,0.7); font-size: 14px; }
+.dock-panel { flex: 1; min-height: 0; position: relative; }
+.dock .segmented { background: rgba(255,255,255,0.1); }
+.dock .seg-pill { background: rgba(255,255,255,0.2); box-shadow: none; }
+.dock .chip { background: rgba(255,255,255,0.12); color: #fff; }
+.dock .badge { background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.8); }
+@media (max-width: 1279px) { :root { --dock: 340px; } }
+
+.preview-pill { position: fixed; z-index: 121; left: 50%; transform: translateX(-50%); top: 18px; display: flex; align-items: center; gap: 10px; max-width: min(92vw, 460px); padding: 10px 16px; border-radius: 99px; font-size: 13.5px; }
+.preview-pill b { font-weight: 650; max-width: 200px; }

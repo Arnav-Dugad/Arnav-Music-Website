@@ -4,16 +4,23 @@ import { useNavigate } from 'react-router-dom'
 import { Icon, Logo, type IconName } from './Icon'
 import { Artwork, Sheet, Spinner, spring } from './ui'
 import { PlaylistThumb } from './Shell'
+import { albumHref, artistHref, splitArtists } from './TrackRow'
 import { useUi, ui, toast } from '../state/ui'
 import { useLibrary, lib, visiblePlaylists, likedTracks, liveEvents } from '../state/library'
 import { player, usePlayer, useProgress } from '../state/player'
 import { useSettings } from '../state/settings'
 import { trackRegistry } from '../state/tracks'
 import { radioFor } from '../services/recs'
+import { verified } from '../services/catalog'
+import { setThemeWithReveal } from '../lib/reveal'
+import { shareCard } from '../lib/shareCard'
+import { useLyrics } from '../state/lyrics'
+import { activeIndex } from '../lib/lyrics'
 import { artworkFor } from '../lib/classify'
 import { matchScore } from '../lib/query'
 import { MOMENTS } from '../lib/moments'
-import { authMessage, resetPassword, signInEmail, signInWithGoogle, signUpEmail } from '../lib/firebase'
+import { authMessage, linkGoogle, resetPassword, signInEmail, signInWithGoogle, signUpEmail } from '../lib/firebase'
+import { refreshAuthUser } from '../services/sync'
 import type { Track } from '../lib/types'
 import { artistKey } from '../lib/types'
 
@@ -92,11 +99,23 @@ export function TrackMenu() {
             <div className="menu-sep" />
             <MenuItem icon="plus" label="Add to playlist…" onClick={() => ui().set({ addTo: [t] })} />
             <MenuItem icon={liked ? 'heartFill' : 'heart'} label={liked ? 'Remove from Liked Songs' : 'Add to Liked Songs'} onClick={() => lib().toggleLike(t)} />
-            <MenuItem icon="user" label={`Go to ${t.artist}`} onClick={() => { player().setExpanded(false); nav(`/artist/${encodeURIComponent(t.artist)}${t.channelId ? `?c=${t.channelId}` : ''}`) }} />
+            {splitArtists(t.artist).map((n, _i, all) => <MenuItem key={n} icon="user" label={`Go to ${n}`} onClick={() => { player().setExpanded(false); nav(artistHref(t, n, all.length === 1)) }} />)}
+            {t.album && <MenuItem icon="album" label={`Go to ${t.album}`} onClick={() => { player().setExpanded(false); nav(albumHref(t)) }} />}
             {menu.playlistId && menu.playlistId.startsWith('arn_') && <MenuItem icon="minus" label="Remove from this playlist" onClick={() => lib().removeFromPlaylist(menu.playlistId!, t.id)} />}
             {menu.queueKey && <MenuItem icon="minus" label="Remove from queue" onClick={() => player().remove(menu.queueKey!)} />}
             <div className="menu-sep" />
             <MenuItem icon="share" label="Share" onClick={() => shareTrack(t)} />
+            <MenuItem icon="download" label="Share as a card" onClick={() => {
+              const lyr = useLyrics.getState()
+              let line: string | null = null
+              if (lyr.trackId === t.id && lyr.lyrics?.kind === 'synced') {
+                const i = activeIndex(lyr.lyrics.lines, useProgress.getState().position)
+                line = i >= 0 ? lyr.lyrics.lines[i].text || null : null
+              }
+              toast('Making your card…')
+              void shareCard(t, line).catch(() => toast('The card couldn’t be made'))
+            }} />
+            <MenuItem icon="phone" label="Continue on your phone" onClick={() => { if (usePlayer.getState().queue[usePlayer.getState().index]?.track.id !== t.id) player().play([t], 0, { context: 'Shared' }); ui().set({ phoneOpen: true }) }} />
             <MenuItem icon="youtube" label="Open on YouTube" onClick={() => window.open(`https://www.youtube.com/watch?v=${t.playbackRef}`, '_blank', 'noopener')} />
             <div className="menu-sep" />
             <MenuItem icon="close" label="Not interested" onClick={() => { lib().notInterestedIn(t.id); toast('You won’t see this in recommendations', { label: 'Undo', run: () => lib().unblock('track', t.id) }) }} />
@@ -191,7 +210,7 @@ export function CommandPalette() {
       { id: 'liked', group: 'Go to', icon: 'heartFill', label: 'Liked Songs', run: go('/playlist/liked') },
       { id: 'dna', group: 'Go to', icon: 'chart', label: 'Taste DNA', run: go('/insights') },
       { id: 'set', group: 'Go to', icon: 'gear', label: 'Settings', run: go('/settings') },
-      { id: 'theme', group: 'Settings', icon: s.themeMode === 'light' ? 'moon' : 'sun', label: s.themeMode === 'light' ? 'Switch to dark appearance' : 'Switch to light appearance', run: () => useSettings.getState().update({ themeMode: s.themeMode === 'light' ? 'dark' : 'light' }) },
+      { id: 'theme', group: 'Settings', icon: s.themeMode === 'light' ? 'moon' : 'sun', label: s.themeMode === 'light' ? 'Switch to dark appearance' : 'Switch to light appearance', run: () => setThemeWithReveal(s.themeMode === 'light' ? 'dark' : 'light') },
       { id: 'keys', group: 'Settings', icon: 'keyboard', label: 'Keyboard shortcuts', hint: '?', run: () => ui().set({ shortcutsOpen: true }) },
       ...MOMENTS.map((m) => ({ id: `m-${m.id}`, group: 'Moments', icon: 'moments' as IconName, label: m.title, hint: m.subtitle, run: go(`/moment/${m.id}`) })),
     ]
@@ -202,7 +221,7 @@ export function CommandPalette() {
     if (!query) return items.filter((i) => i.group !== 'Moments').slice(0, 14)
     const scored = items.map((i) => ({ i, s: Math.max(matchScore(query, i.label), i.hint ? matchScore(query, i.hint) * 0.7 : 0) })).filter((x) => x.s > 0.4)
     const pls = visiblePlaylists(playlists).map((p) => ({ i: { id: `pl-${p.id}`, group: 'Your library', icon: 'note' as IconName, label: p.name, hint: `${p.trackIds.length} songs`, run: go(`/playlist/${p.id}`) }, s: matchScore(query, p.name) })).filter((x) => x.s > 0.5)
-    const known = [...likedTracks(), ...trackRegistry.all().slice(-800)]
+    const known = verified([...likedTracks(), ...trackRegistry.all().slice(-800)])
     const seen = new Set<string>()
     const songs = known.filter((t) => (seen.has(t.id) ? false : (seen.add(t.id), true)))
       .map((t) => ({ t, s: Math.max(matchScore(query, t.title), matchScore(query, `${t.title} ${t.artist}`), matchScore(query, t.artist) * 0.8) }))
@@ -317,13 +336,28 @@ export function AuthSheet() {
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const close = () => { ui().set({ authOpen: false }); setError(null) }
+  const [linkStep, setLinkStep] = useState(false)
+  const close = () => { ui().set({ authOpen: false }); setError(null); setLinkStep(false) }
   const run = async (key: string, fn: () => Promise<unknown>, done?: string) => {
     setBusy(key); setError(null)
     try { await fn(); if (done) toast(done); close() } catch (e) { setError(authMessage(e)) } finally { setBusy(null) }
   }
   return (
     <Sheet open={open} onClose={close} width={430}>
+      {linkStep ? (
+        <div className="col" style={{ alignItems: 'center', textAlign: 'center', gap: 12, padding: '6px 4px 2px' }}>
+          <span className="link-hero"><Logo size={48} /><Icon name="link" size={18} /><span className="link-g"><Icon name="google" size={26} /></span></span>
+          <div className="t-title">Link your Google account?</div>
+          <div className="t-sub" style={{ maxWidth: 340 }}>Linking lets you import your YouTube playlists and Liked videos, and sign in with Google next time. Your new account and library stay exactly the same.</div>
+          {error && <div className="notice error" style={{ fontSize: 13, width: '100%' }}><Icon name="info" size={16} />{error}</div>}
+          <button className="btn btn-primary btn-lg" style={{ width: '100%', marginTop: 6 }} disabled={!!busy}
+            onClick={() => { setBusy('l'); setError(null); linkGoogle().then(() => { refreshAuthUser(); toast('Google account linked'); close() }, (err) => setError(authMessage(err))).finally(() => setBusy(null)) }}>
+            {busy === 'l' ? <Spinner /> : <Icon name="google" size={18} />} Link Google account
+          </button>
+          <button className="btn btn-ghost" onClick={close}>Not now</button>
+          <div className="t-caption">You can link it later in Settings → Account.</div>
+        </div>
+      ) : (<>
       <div className="col" style={{ alignItems: 'center', textAlign: 'center', gap: 10, padding: '6px 4px 2px' }}>
         <Logo size={56} glow />
         <div className="t-title" style={{ marginTop: 6 }}>{mode === 'in' ? 'Sign in to Arnav Music' : 'Create your account'}</div>
@@ -334,7 +368,12 @@ export function AuthSheet() {
           {busy === 'g' ? <Spinner /> : <Icon name="google" size={18} />} Continue with Google
         </button>
         <div className="row" style={{ gap: 10, margin: '6px 0' }}><hr className="divider grow" /><span className="t-caption">or</span><hr className="divider grow" /></div>
-        <form className="col" style={{ gap: 10 }} onSubmit={(e) => { e.preventDefault(); void run('e', () => (mode === 'in' ? signInEmail(email, password) : signUpEmail(name, email, password)), mode === 'in' ? 'Signed in' : 'Welcome to Arnav Music') }}>
+        <form className="col" style={{ gap: 10 }} onSubmit={(e) => {
+          e.preventDefault()
+          if (mode === 'in') { void run('e', () => signInEmail(email, password), 'Signed in'); return }
+          setBusy('e'); setError(null)
+          signUpEmail(name, email, password).then(() => { toast('Welcome to Arnav Music'); setLinkStep(true) }, (err) => setError(authMessage(err))).finally(() => setBusy(null))
+        }}>
           {mode === 'up' && <input className="field" placeholder="Name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />}
           <input className="field" type="email" placeholder="Email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
           <input className="field" type="password" placeholder="Password" autoComplete={mode === 'in' ? 'current-password' : 'new-password'} required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} />
@@ -346,6 +385,7 @@ export function AuthSheet() {
           {mode === 'in' && <button className="btn btn-ghost btn-sm" disabled={!email || !!busy} onClick={() => void run('r', () => resetPassword(email), 'Password reset email sent')}>Forgot password?</button>}
         </div>
       </div>
+      </>)}
     </Sheet>
   )
 }

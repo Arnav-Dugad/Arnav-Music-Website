@@ -118,12 +118,13 @@ export const REASON_COPY: Record<Reason, string> = {
   TIME_OF_DAY: 'Fits this time of day',
 }
 
-export interface Scored { track: Track; score: number; reason: Reason }
+export interface Scored { track: Track; score: number; reason: Reason; parts?: Record<'artist' | 'genre' | 'energy' | 'familiarity' | 'novelty', number> }
 
 const W = { artist: 1.0, genre: 0.6, energy: 0.5, familiarity: 0.4, novelty: 0.35, recencyPenalty: 0.8, liked: 0.5 }
 
 /** Deterministic hybrid ranker. Gemini never decides what plays; it only shapes the constraints. */
-export function rank(candidates: Track[], p: TasteProfile, opts: { now?: number; liked?: Set<TrackId>; targetEnergy?: number | null; discovery?: number; exclude?: Set<TrackId> } = {}): Scored[] {
+export function rank(candidates: Track[], p: TasteProfile, opts: { now?: number; liked?: Set<TrackId>; targetEnergy?: number | null; discovery?: number; exclude?: Set<TrackId>; tune?: Partial<Record<'artist' | 'genre' | 'energy' | 'familiarity' | 'novelty', number>> } = {}): Scored[] {
+  const M = { artist: 1, genre: 1, energy: 1, familiarity: 1, novelty: 1, ...opts.tune }
   const now = opts.now ?? Date.now()
   const liked = opts.liked ?? new Set()
   const d = Math.min(1, Math.max(0, opts.discovery ?? 0.3))
@@ -142,8 +143,9 @@ export function rank(candidates: Track[], p: TasteProfile, opts: { now?: number;
     const hoursSince = last ? (now - last) / 3_600_000 : Infinity
     const recency = last ? Math.exp(-hoursSince / 8) : 0
     const isLiked = liked.has(t.id)
-    const score = W.artist * artistAff + W.genre * genreAff + W.energy * energyFit + W.familiarity * familiarity * (1 - d) +
-      W.novelty * (1 - familiarity) * d + (isLiked ? W.liked : 0) - W.recencyPenalty * recency
+    const parts = { artist: W.artist * artistAff, genre: W.genre * genreAff, energy: W.energy * energyFit, familiarity: W.familiarity * familiarity * (1 - d), novelty: W.novelty * (1 - familiarity) * d }
+    const score = M.artist * parts.artist + M.genre * parts.genre + M.energy * parts.energy + M.familiarity * parts.familiarity +
+      M.novelty * parts.novelty + (isLiked ? W.liked : 0) - W.recencyPenalty * recency
     let reason: Reason = 'TIME_OF_DAY'
     if (isLiked && hoursSince > 24 * 21) reason = 'FORGOTTEN_FAVORITE'
     else if (familiarity < 0.05 && artistAff < 0.1) reason = 'NEW_DISCOVERY'
@@ -152,7 +154,7 @@ export function rank(candidates: Track[], p: TasteProfile, opts: { now?: number;
     else if (genreAff > 0.4) reason = 'GENRE_MATCH'
     else if (familiarity > 0.7) reason = 'HEAVY_ROTATION'
     else if (isLiked) reason = 'LIKED'
-    out.push({ track: t, score, reason })
+    out.push({ track: t, score, reason, parts })
   }
   return out.sort((a, b) => b.score - a.score || a.track.id.localeCompare(b.track.id))
 }

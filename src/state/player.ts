@@ -37,6 +37,8 @@ interface PlayerState {
   /** Incremented to ask the engine to seek. */
   seekRequest: { ms: number; n: number } | null
   radioLoading: boolean
+  /** A 15-second hold-to-preview is playing (the queue is untouched). */
+  previewing: Track | null
   engineReady: boolean
 }
 
@@ -102,6 +104,7 @@ export const usePlayer = create<PlayerState & PlayerActions>()((set, get) => ({
   context: saved?.context ?? null,
   seekRequest: null,
   radioLoading: false,
+  previewing: null,
   engineReady: false,
 
   play(tracks, startIndex = 0, opts = {}) {

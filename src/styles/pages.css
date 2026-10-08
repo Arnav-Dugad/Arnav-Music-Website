@@ -297,3 +297,54 @@ button.heat-cell:hover { outline: 2px solid var(--text); outline-offset: 1px; }
 /* Shared link */
 .share-card { width: min(380px, 92vw); padding: 24px; border-radius: 30px; text-align: center; display: flex; flex-direction: column; align-items: center; }
 .share-art { width: 100%; border-radius: 20px; box-shadow: var(--shadow-3); }
+
+/* Link Google hero */
+.link-hero { display: inline-flex; align-items: center; gap: 12px; color: var(--text-3); margin-bottom: 4px; }
+.link-g { width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; background: #fff; box-shadow: var(--shadow-1); }
+
+.trust-note { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; color: var(--text-3); }
+.trust-note > svg { color: var(--success); }
+.trust-note .link { color: var(--accent); font-weight: 600; margin-left: 4px; }
+.verified-badge { display: inline-grid; place-items: center; width: 14px; height: 14px; border-radius: 50%; background: var(--text-3); color: var(--bg); flex: none; }
+.verified-badge svg { width: 9px; height: 9px; }
+.album-cover .art { width: 100%; height: 100%; border-radius: 0; }
+
+/* Phone handoff */
+.phone-grid { display: grid; grid-template-columns: 200px 1fr; gap: 20px; align-items: center; }
+.qr { width: 200px; height: 200px; padding: 10px; border-radius: 18px; background: #fff; box-shadow: var(--shadow-2); }
+.qr svg { width: 100%; height: 100%; display: block; }
+.device-row { display: flex; align-items: center; gap: 12px; padding: 8px 6px; border-radius: 12px; }
+.device-row:hover { background: var(--surface); }
+.device-icon { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--surface-2); color: var(--text-2); flex: none; }
+@media (max-width: 560px) { .phone-grid { grid-template-columns: 1fr; justify-items: center; } }
+
+/* Imports, duplicates, tuner */
+.dropzone { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; padding: 34px 20px; border-radius: 20px; border: 1.5px dashed var(--hairline-strong); background: var(--surface); cursor: pointer; transition: background-color .2s, border-color .2s, transform .25s var(--ease); color: var(--text-2); }
+.dropzone:hover, .dropzone.on { background: var(--accent-soft); border-color: var(--accent); transform: scale(1.01); }
+.dropzone .t-headline { color: var(--text); }
+.dup-group { border-radius: 16px; background: var(--surface); border: 1px solid var(--hairline); padding: 6px; display: flex; flex-direction: column; gap: 2px; margin-bottom: 14px; }
+.dup-row { display: flex; align-items: center; gap: 12px; padding: 6px; border-radius: 12px; }
+.dup-row:hover { background: var(--surface-2); }
+.dup-art { position: relative; width: 46px; height: 46px; flex: none; }
+.dup-art .art { width: 46px; height: 46px; border-radius: 8px; }
+.dup-art:hover .qp-ov { opacity: 1; }
+.tune-row { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(120px, 1.2fr) auto; gap: 14px; align-items: center; }
+.tune-label { display: flex; flex-direction: column; min-width: 0; }
+.tune-bar { position: relative; height: 8px; border-radius: 8px; background: var(--surface-3); overflow: hidden; }
+.tune-bar i { position: absolute; inset: 0; background: var(--accent); transform-origin: left; border-radius: 8px; transition: transform .6s var(--ease); }
+.tune-bar b { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--text-2); }
+@media (max-width: 560px) { .tune-row { grid-template-columns: 1fr auto; } .tune-bar { grid-column: 1 / -1; grid-row: 2; } }
+
+/* AI: queue chat, notes, voice, weather */
+.qchat { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.qchat-box { display: flex; align-items: center; gap: 6px; height: 42px; padding: 0 4px 0 12px; border-radius: 14px; background: rgba(255,255,255,0.09); border: 1px solid rgba(255,255,255,0.1); transition: box-shadow .25s var(--ease); }
+.qchat-box:focus-within { box-shadow: 0 0 0 3px rgba(255,255,255,0.12); }
+.qchat-box input { flex: 1; min-width: 0; height: 100%; border: 0; outline: none; background: transparent; color: #fff; font-size: 14px; }
+.qchat-box input::placeholder { color: rgba(255,255,255,0.5); }
+.qchat-reply { display: flex; align-items: center; gap: 8px; font-size: 13px; color: rgba(255,255,255,0.85); padding: 6px 4px 6px 10px; border-radius: 12px; background: rgba(255,255,255,0.06); }
+.qchat-reply .icon-btn { margin-left: auto; }
+.icon-btn.recording { color: #ff5a5f !important; animation: recPulse 1.2s ease-in-out infinite; }
+@keyframes recPulse { 50% { box-shadow: 0 0 0 6px rgba(255, 90, 95, 0.18); } }
+.lyr-notes { position: absolute; left: 0; right: 0; bottom: 56px; z-index: 3; padding: 16px 18px; border-radius: 18px; }
+.lyr-notes p { margin-top: 10px; font-size: 15px; line-height: 1.55; color: rgba(255,255,255,0.88); }
+.hero-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }

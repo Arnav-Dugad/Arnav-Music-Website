@@ -61,6 +61,22 @@ test('web: history + queue live records and sync queries', async () => {
   await assertSucceeds(getDocs(query(collection(db, 'users/alice/liveRecords'), orderBy('updatedAt', 'desc'), limit(1))))
 })
 
+test('web: settings records the Android app reads (create + update, allowlisted ids only)', async () => {
+  const db = env.authenticatedContext('alice').firestore()
+  const push = (id, value) => runTransaction(db, async (tx) => {
+    const ref = doc(db, 'users/alice/liveRecords', id)
+    const ex = await tx.get(ref)
+    tx.set(ref, { kind: 'setting', value, revision: Number(ex.exists() ? ex.data().revision ?? 0 : 0) + 1, deleted: false, deviceId, updatedAt: serverTimestamp(), schema: 1 })
+  })
+  for (const [id, value] of [['s_themeMode', '"DARK"'], ['s_presetAccent', String((0xff << 24 | 0x52d6c3) | 0)], ['s_selectedMoods', '["FOCUS","UPBEAT"]'],
+    ['s_dailyAiLimit', '40'], ['s_ambientEdgeGlow', 'true'], ['s_regionCode', '"IN"'], ['s_seedArtists', '["Arijit Singh"]'], ['s_glass', '"SUBTLE"'], ['s_motion', '"MINIMAL"']]) {
+    await assertSucceeds(push(id, value))
+  }
+  await assertSucceeds(push('s_themeMode', '"LIGHT"'))
+  await assertFails(push('s_cloudSync', 'false'))
+  await assertFails(push('s_youtubeKey', '"secret"'))
+})
+
 test('hardening: rejects malformed like ids, mismatched tracks and bad playlist ids', async () => {
   const db = env.authenticatedContext('alice').firestore()
   await assertFails(setDoc(doc(db, 'users/alice/likes/local:1234'), like('local:1234', null)))

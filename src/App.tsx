@@ -2,20 +2,25 @@ import { lazy, Suspense, useEffect, useRef } from 'react'
 import { Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion, MotionConfig } from 'motion/react'
 import { Sidebar, TabBar } from './components/Shell'
-import { PlayerBar, MiniPlayer } from './components/PlayerBar'
+import { PlayerBar, MiniPlayer, PreviewPill } from './components/PlayerBar'
 import { NowPlaying } from './components/NowPlaying'
 import { AddToPlaylist, AuthSheet, CommandPalette, ShortcutsSheet, Toasts, TrackMenu, useShortcuts } from './components/Overlays'
 import { VideoHost } from './player/VideoHost'
+import { PhoneSheet } from './components/PhoneLink'
+import { CinematicLyrics } from './components/Cinematic'
+import { DockPanel } from './components/Dock'
 import { useCurrentPalette, useIsDesktop, useThemeEffects } from './hooks'
 import { useSettings } from './state/settings'
 import { usePlayer } from './state/player'
 import { Spinner } from './components/ui'
+import { PageBoundary } from './components/ErrorBoundary'
 import Home from './pages/Home'
 
 const Explore = lazy(() => import('./pages/Explore'))
 const Library = lazy(() => import('./pages/Library'))
 const PlaylistPage = lazy(() => import('./pages/Playlist'))
 const ArtistPage = lazy(() => import('./pages/Artist'))
+const AlbumPage = lazy(() => import('./pages/Album'))
 const AiPage = lazy(() => import('./pages/Ai'))
 const MomentsPage = lazy(() => import('./pages/Moments'))
 const MomentPage = lazy(() => import('./pages/Moment'))
@@ -54,6 +59,7 @@ export default function App() {
   const hasTrack = usePlayer((s) => s.queue.length > 0)
   const expanded = usePlayer((s) => s.expanded)
   const scroller = useRef<HTMLDivElement>(null)
+  const docked = useSettings((s) => s.dockedPlayer) && desktop && hasTrack
 
   useEffect(() => {
     if (!onboardingDone && !loc.pathname.startsWith('/welcome') && !loc.pathname.startsWith('/track/')) nav('/welcome', { replace: true })
@@ -64,10 +70,11 @@ export default function App() {
   const onboarding = loc.pathname.startsWith('/welcome')
   return (
     <MotionConfig reducedMotion={motionLevel === 'full' ? 'user' : 'always'}>
-      <div className={`app ${desktop ? 'desktop' : 'mobile'} ${hasTrack ? 'has-track' : ''} ${onboarding ? 'onboarding' : ''}`}>
+      <div className={`app ${desktop ? 'desktop' : 'mobile'} ${hasTrack ? 'has-track' : ''} ${onboarding ? 'onboarding' : ''} ${docked && !onboarding ? 'docked' : ''}`}>
         <div className="ambient" aria-hidden><div className="ambient-glow" /></div>
         {desktop && !onboarding && <Sidebar />}
         <main className="main-scroll" ref={scroller} id="main">
+          <PageBoundary resetKey={loc.pathname}>
           <Suspense fallback={<Fallback />}>
             <AnimatePresence mode="wait" initial={false}>
               <Routes location={loc} key={loc.pathname}>
@@ -78,6 +85,7 @@ export default function App() {
                 <Route path="/library/:tab" element={<Page><Library /></Page>} />
                 <Route path="/playlist/:id" element={<Page><PlaylistPage /></Page>} />
                 <Route path="/artist/:name" element={<Page><ArtistPage /></Page>} />
+                <Route path="/album/:name" element={<Page><AlbumPage /></Page>} />
                 <Route path="/ai" element={<Page><AiPage /></Page>} />
                 <Route path="/moments" element={<Page><MomentsPage /></Page>} />
                 <Route path="/moment/:id" element={<MomentPage />} />
@@ -90,16 +98,21 @@ export default function App() {
               </Routes>
             </AnimatePresence>
           </Suspense>
+          </PageBoundary>
         </main>
         {!onboarding && (desktop ? <PlayerBar /> : <><MiniPlayer /><TabBar /></>)}
+        <DockPanel />
         <NowPlaying />
+        <CinematicLyrics />
         <VideoHost />
         <TrackMenu />
         <AddToPlaylist />
         <CommandPalette />
         <ShortcutsSheet />
         <AuthSheet />
+        <PhoneSheet />
         <Toasts />
+        <PreviewPill />
       </div>
     </MotionConfig>
   )

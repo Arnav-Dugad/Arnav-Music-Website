@@ -2,6 +2,8 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type 
 import { AnimatePresence, motion, useMotionValue, useSpring, useTransform } from 'motion/react'
 import { Icon, type IconName } from './Icon'
 import { hashHue } from '../lib/color'
+import { usePreviewHold } from '../player/usePreviewHold'
+import type { Track } from '../lib/types'
 
 export const spring = { type: 'spring', stiffness: 420, damping: 36, mass: 0.9 } as const
 export const softSpring = { type: 'spring', stiffness: 260, damping: 30 } as const
@@ -87,12 +89,15 @@ export function PlayFab({ onClick, playing = false, size = 46, label = 'Play' }:
   )
 }
 
-export function Card({ title, subtitle, art, round, onOpen, onPlay, playing, badge, seed, wide, letterbox, icon, custom }: {
+export function Card({ title, subtitle, art, round, onOpen, onPlay, playing, badge, seed, wide, letterbox, icon, custom, preview }: {
   title: string; subtitle?: ReactNode; art?: string | null; round?: boolean; onOpen?: () => void; onPlay?: () => void; playing?: boolean
   badge?: ReactNode; seed?: string; wide?: boolean; letterbox?: boolean; icon?: IconName; custom?: ReactNode
+  /** Hold the cover to hear ~15 s of this song. */
+  preview?: Track
 }) {
+  const hold = usePreviewHold(preview)
   return (
-    <div className={`card ${wide ? 'wide' : ''}`} onClick={onOpen} role={onOpen ? 'link' : undefined} tabIndex={onOpen ? 0 : -1} onKeyDown={(e) => { if (e.key === 'Enter') onOpen?.() }}>
+    <div className={`card ${wide ? 'wide' : ''}`} onClick={hold.guard(onOpen)} role={onOpen ? 'link' : undefined} tabIndex={onOpen ? 0 : -1} onKeyDown={(e) => { if (e.key === 'Enter') onOpen?.() }} {...hold.handlers}>
       <Tilt className="card-art-wrap">
         {custom ?? <Artwork src={art} round={round} seed={seed ?? title} letterbox={letterbox} icon={icon} className="card-art" />}
         {badge && <div className="card-badge">{badge}</div>}

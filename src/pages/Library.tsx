@@ -6,6 +6,8 @@ import { Icon } from '../components/Icon'
 import { TrackList } from '../components/TrackRow'
 import { PlaylistThumb } from '../components/Shell'
 import { YouTubeImport } from '../components/YouTubeImport'
+import { ImportSheet } from '../components/ImportSheet'
+import { DuplicatesSheet } from '../components/DuplicatesSheet'
 import { useLiveHistory, useRegistryVersion } from '../hooks'
 import { matchScore } from '../lib/query'
 import { relative } from '../lib/format'
@@ -30,6 +32,8 @@ export default function Library() {
   const [sort, setSort] = useState<'recent' | 'name' | 'count'>('recent')
   const [importOpen, setImportOpen] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [fileImportOpen, setFileImportOpen] = useState(false)
+  const [dupesOpen, setDupesOpen] = useState(false)
   const layout = useSettings((s) => s.libraryLayout)
   const playlists = useLibrary((s) => s.playlists)
   const likes = useLibrary((s) => s.likes)
@@ -62,7 +66,9 @@ export default function Library() {
   return (
     <div className="page library">
       <PageHeader title="Library" actions={<>
-        <button className="btn btn-secondary btn-sm" onClick={() => setImportOpen(true)}><Icon name="youtube" size={15} /> Import from YouTube</button>
+        <button className="btn btn-secondary btn-sm" onClick={() => setImportOpen(true)}><Icon name="youtube" size={15} /> YouTube</button>
+        <button className="btn btn-secondary btn-sm" onClick={() => setFileImportOpen(true)}><Icon name="upload" size={15} /> Spotify / CSV</button>
+        <button className="btn btn-secondary btn-sm" onClick={() => setDupesOpen(true)} title="Find duplicate songs"><Icon name="filter" size={15} /> Duplicates</button>
         <button className="btn btn-primary btn-sm" onClick={() => { const id = useLibrary.getState().createPlaylist('New playlist'); nav(`/playlist/${id}?edit=1`) }}><Icon name="plus" size={15} /> New playlist</button>
       </>} />
       <div className="lib-bar">
@@ -165,6 +171,8 @@ export default function Library() {
         )}
       </motion.div>
       <YouTubeImport open={importOpen} onClose={() => setImportOpen(false)} />
+      <ImportSheet open={fileImportOpen} onClose={() => setFileImportOpen(false)} />
+      <DuplicatesSheet open={dupesOpen} onClose={() => setDupesOpen(false)} />
       <Sheet open={confirmOpen} onClose={() => setConfirmOpen(false)} title="Clear listening history?" width={420}>
         <div className="t-sub">This removes your history from this browser. If you’re signed in, it’s removed from your other devices too. Taste DNA and recommendations start fresh.</div>
         <div className="row" style={{ justifyContent: 'flex-end', marginTop: 18 }}>

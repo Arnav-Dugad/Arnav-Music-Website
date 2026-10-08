@@ -3,7 +3,7 @@ import {
   Timestamp, collection, deleteDoc, doc, getDocs, getDocsFromServer, limit, onSnapshot, orderBy, query, runTransaction,
   serverTimestamp, setDoc, startAfter, where, writeBatch, type DocumentData, type QueryDocumentSnapshot,
 } from 'firebase/firestore'
-import { firestore, watchAuth } from '../lib/firebase'
+import { firebaseAuth, firestore, watchAuth } from '../lib/firebase'
 import { idbGet, idbSet, ls } from '../lib/idb'
 import { useUsage } from '../lib/usage'
 import { artistKey, nativeId, sourceOf, type Track, type TrackId } from '../lib/types'
@@ -12,6 +12,8 @@ import { remember, trackRegistry } from '../state/tracks'
 import { useAuth } from '../state/auth'
 import { settings, useSettings } from '../state/settings'
 import { player, usePlayer } from '../state/player'
+import { applyRemoteSetting, pushSettings, settingsFingerprint } from './settingsSync'
+import { toast } from '../state/ui'
 
 export type SyncStatus = 'DISABLED' | 'IDLE' | 'SYNCING' | 'OFFLINE' | 'ERROR' | 'UP_TO_DATE' | 'ACCOUNT_BLOCKED'
 
@@ -233,9 +235,12 @@ async function pullLive(uid: string, journal: Journal): Promise<number> {
           newEvents.push({
             trackId, artistKey: ev.artistKey || artistKey(ev.artist ?? ''), startedAt: ev.startedAt, listenedMs: ev.listenedMs,
             durationMs: ev.durationMs ?? null, completed: !!ev.completed, skipped: !!ev.skipped, source: src,
-            cloudId: d.id, localId: `c${d.id.slice(2, 17)}`, dirty: false,
+            cloudId: d.id, localId: `c${d.id.slice(2, 17)}`, dirty: false, device: typeof data.deviceId === 'string' ? data.deviceId : undefined,
           })
         } catch { /* malformed record — ignore */ }
+      } else if (kind === 'setting' && value && !data.deleted) {
+        if (data.deviceId !== deviceId) applyRemoteSetting(uid, d.id, value)
+        journal[d.id] = { rev, value }
       } else if (kind === 'queue' && value) {
         try {
           const q2 = JSON.parse(value) as { tracks?: Record<string, unknown>[]; index?: number }
@@ -301,13 +306,16 @@ async function pushLive(uid: string, journal: Journal) {
 }
 
 /** Shares an idle, YouTube-only queue (≤100 songs) — the same record the phone hands off. */
-async function pushQueue(uid: string, journal: Journal) {
+async function pushQueue(uid: string, journal: Journal, force = false) {
   const p = player()
-  if (p.isPlaying || !p.queue.length || p.queue.length > 100) return
-  const tracks = p.queue.map((q) => q.track)
-  if (!tracks.every((t) => sourceOf(t.id) === 'YOUTUBE')) return
-  const value = JSON.stringify({ tracks: tracks.map(kotlinTrack), index: p.index })
-  if (value.length > 200_000 || ls.get<string | null>(`queue_seen_${uid}`, null) === value) return
+  if ((!force && p.isPlaying) || !p.queue.length) return
+  // The phone accepts up to 100 YouTube songs: send the window starting at what's playing.
+  const start = p.queue.length > 100 ? p.index : 0
+  const tracks = p.queue.slice(start, start + 100).map((q) => q.track).filter((t) => sourceOf(t.id) === 'YOUTUBE')
+  if (!tracks.length) return
+  const index = Math.max(0, tracks.findIndex((t) => t.id === p.queue[p.index]?.track.id))
+  const value = JSON.stringify({ tracks: tracks.map(kotlinTrack), index })
+  if (value.length > 200_000 || (!force && ls.get<string | null>(`queue_seen_${uid}`, null) === value)) return
   const db = firestore()
   const ref = doc(collection(db, 'users', uid, 'liveRecords'), 'q_shared')
   const rev = await runTransaction(db, async (tx) => {
@@ -366,6 +374,7 @@ async function syncOnce() {
     const playlists = await syncPlaylists(uid)
     await pushLive(uid, journal)
     await pushQueue(uid, journal).catch(() => undefined)
+    await pushSettings(uid, deviceId, journal).catch(() => 0)
     await idbSet(`journal_${uid}`, journal)
     if (useAuth.getState().user?.uid !== uid) return
     observeLive(uid)
@@ -398,6 +407,42 @@ function stopLive() {
   liveUid = null
 }
 
+/** "Send to phone": shares the current queue now (the phone picks it up when it isn't playing). */
+export async function sendQueueToPhone(): Promise<void> {
+  const user = useAuth.getState().user
+  if (!user) throw new Error('Sign in to send music to your phone')
+  if (!settings().cloudSync) throw new Error('Turn on cloud sync in Settings \u2192 Data & sync')
+  const journal = (await idbGet<Journal>(`journal_${user.uid}`)) ?? {}
+  await pushQueue(user.uid, journal, true)
+  await idbSet(`journal_${user.uid}`, journal)
+  toast('Sent to your phone \u2014 it starts there when you open Arnav Music (or as soon as it\u2019s not playing)')
+}
+
+export interface DeviceInfo { id: string; label: string; appVersion?: string; lastSeen: number; lastTrack?: string; thisDevice: boolean }
+
+/** Your devices: backup pointers (labels) plus the latest listening recorded by each device. */
+export async function listDevices(): Promise<DeviceInfo[]> {
+  const user = useAuth.getState().user
+  if (!user) return []
+  const out = new Map<string, DeviceInfo>()
+  try {
+    const snap = await getDocs(collection(firestore(), 'users', user.uid, 'devices'))
+    reads(snap.size)
+    snap.forEach((d) => {
+      const x = d.data()
+      out.set(d.id, { id: d.id, label: String(x.deviceLabel || 'Android phone'), appVersion: x.appVersion, lastSeen: (x.updatedAt as Timestamp | undefined)?.toMillis?.() ?? 0, thisDevice: d.id === deviceId })
+    })
+  } catch { /* devices are optional */ }
+  for (const e of lib().events) {
+    if (!e.device || e.deleted) continue
+    const cur = out.get(e.device) ?? { id: e.device, label: 'Android phone', lastSeen: 0, thisDevice: false }
+    if (e.startedAt > cur.lastSeen) { cur.lastSeen = e.startedAt; cur.lastTrack = trackRegistry.get(e.trackId)?.title }
+    out.set(e.device, cur)
+  }
+  out.set(deviceId, { id: deviceId, label: 'This browser', lastSeen: Date.now(), thisDevice: true })
+  return [...out.values()].sort((a, b) => Number(b.thisDevice) - Number(a.thisDevice) || b.lastSeen - a.lastSeen)
+}
+
 /** Deletes everything Arnav Music stored in the cloud for this account (local data stays). */
 export async function deleteCloudData() {
   const user = useAuth.getState().user
@@ -421,15 +466,21 @@ export async function deleteCloudData() {
   useSync.setState({ status: 'DISABLED', remoteQueue: null })
 }
 
+/** Re-reads the Firebase user (providers change after linking Google; no auth event fires). */
+export function refreshAuthUser() {
+  const u = firebaseAuth().currentUser
+  useAuth.getState().set({
+    status: u ? 'signedIn' : 'signedOut',
+    user: u ? { uid: u.uid, displayName: u.displayName, email: u.email, photoURL: u.photoURL ?? u.providerData.find((p) => p.photoURL)?.photoURL ?? null, providers: u.providerData.map((p) => p.providerId) } : null,
+  })
+}
+
 let started = false
 export function startSync() {
   if (started) return
   started = true
   watchAuth((u) => {
-    useAuth.getState().set({
-      status: u ? 'signedIn' : 'signedOut',
-      user: u ? { uid: u.uid, displayName: u.displayName, email: u.email, photoURL: u.photoURL, providers: u.providerData.map((p) => p.providerId) } : null,
-    })
+    refreshAuthUser()
     stopLive()
     useSync.setState({ remoteQueue: null })
     requestSync(u ? 300 : 0)
@@ -443,7 +494,12 @@ export function startSync() {
   usePlayer.subscribe((s, prev) => {
     if (prev.isPlaying && !s.isPlaying) requestSync(6000)
   })
-  useSettings.subscribe((s, prev) => { if (s.cloudSync !== prev.cloudSync) requestSync(500) })
+  let fp = settingsFingerprint(useSettings.getState())
+  useSettings.subscribe((s, prev) => {
+    if (s.cloudSync !== prev.cloudSync || s.syncSettings !== prev.syncSettings) requestSync(500)
+    const next = settingsFingerprint(s)
+    if (next !== fp) { fp = next; requestSync(4000) }
+  })
   window.addEventListener('online', () => requestSync(1000))
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') requestSync(1500) })
 }

@@ -19,6 +19,7 @@ interface UiState {
   addTo: Track[] | null
   authOpen: boolean
   shortcutsOpen: boolean
+  phoneOpen: boolean
   sidebarCollapsed: boolean
   pushToast: (t: Omit<Toast, 'id'>) => void
   dismiss: (id: number) => void
@@ -33,6 +34,7 @@ export const useUi = create<UiState>()((set, get) => ({
   addTo: null,
   authOpen: false,
   shortcutsOpen: false,
+  phoneOpen: false,
   sidebarCollapsed: false,
   pushToast(t) {
     const id = ++seq

@@ -24,6 +24,12 @@ A premium, Apple-style music web app: YouTube discovery through the official API
 - **Taste DNA**: personality, recaps (week/month/year/all), listening clock, week rhythm, discovery/repeat/skip gauges, a year heatmap (tap a day to "take me back"), streaks, milestones, recent shifts, a pan/zoom **taste constellation**, and CSV export.
 - **Library**: playlists (grid/list, sort, pin, edit, drag-reorder), Liked Songs, artists, grouped history, saved YouTube playlists, the Hidden list, and **Import from YouTube** (read-only, token kept in memory).
 - **Explore/Search**: genre and mood tiles, regional charts, recent searches, instant library matches while you type, cache-first results with a 650 ms debounce, a Top result card, pagination, and pasting a YouTube link plays it.
+- **Verified music only** (default): every upload is scored. Topic, VEVO and label channels rank as official; then the artist's own channel; then established channels. Fan uploads (covers, slowed/reverb, edits, Shorts, mashups) are never shown. Turn on "show unverified" per search, or switch it off in Settings.
+- **Singer and album pages**: a singer page gathers their songs from every label channel (credited or featured), and an album page rebuilds a film soundtrack from label uploads ("Song | Film | Cast | Singers"), one best version per song.
+- **Cinematic lyrics** (full-screen, large serif type, lines pulse with the beat), **About this song** AI notes, and a **docked Now Playing** panel on desktop. Also: a pop-out mini player (Document Picture-in-Picture), hold-to-preview, a heart burst, cover particles, a circular theme reveal and a morphing play/pause icon.
+- **AI**: queue chat ("swap the sad ones for upbeat ones"), a daily AI DJ with short spoken intros, AI playlist names and descriptions, voice prompts, and weather/time-aware moods.
+- **Import & tidy**: Spotify (data-export ZIP/JSON) and CSV import with matching to official uploads; a resumable importer with undo/redo; a duplicate finder with undo; and a recommendation tuner that learns from what you finish and skip.
+- **Phone ↔ web**: settings sync with the app (same `liveRecords` `s_*` records), Continue on phone (QR / Android intent), a send-queue-to-phone option, a list of signed-in devices, and linking Google to an email account to import YouTube playlists.
 - **Everywhere**: ⌘K command palette, keyboard shortcuts (`?`), Media Session (hardware keys / OS media controls), sleep timer, speed, endless radio, unplayable-video rescue, Start radio / Not interested / Don't recommend artist, sharing (`/track/<id>`), PWA manifest, light/dark/auto, artwork-tinted or fixed accent, glass on/off, three motion levels, high contrast, and responsive layouts (sidebar + floating player on desktop; tab bar + mini player on phones).
 
 ## Architecture
@@ -50,9 +56,10 @@ tests/               Unit tests ported from the Android app's core/domain tests
 | Playlists | `users/{uid}/playlists/{id}` | `kind: ARNAV`, up to 500 YouTube tracks |
 | Listening history | `users/{uid}/liveRecords/h_<sha256>` | `SharedListen` JSON, server timestamps, consecutive revisions, tombstones |
 | Shared queue | `users/{uid}/liveRecords/q_shared` | Kotlin `Track` JSON; shown as a handoff card, never auto-plays |
+| Settings | `users/{uid}/liveRecords/s_<field>` | Same field names and enum values as the app; only settings changed on the web are pushed |
 | AI | Firebase AI Logic (Gemini Developer API) | Same session prompt contract (`session-v4`) |
 
-Every web write was replayed against the app's own `firebase/firestore.rules` in the Firebase emulator (likes, tombstones, playlists, history create/delete, queue, queries, cross-account denial): all pass.
+Hardened rules for both clients live in `firebase/firestore.rules`. `firebase/tests` replays the app's own rule tests plus every web write in the Firebase emulator (likes, tombstones, playlists, history, queue, settings and cross-account denial): all pass. Deploy them with `firebase deploy --only firestore:rules` from a project owner account.
 
 ## Configuration
 | Secret / setting | Where | Notes |

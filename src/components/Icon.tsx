@@ -66,6 +66,8 @@ const P: Record<string, string> = {
   trophy: 'M8 4.5h8v5a4 4 0 0 1-8 0zM8 6.5H4.5v1a3 3 0 0 0 3.5 3M16 6.5h3.5v1a3 3 0 0 1-3.5 3M12 13.5v4M8.5 20.5h7',
   filter: 'M4 6h16M7 12h10M10 18h4',
   stop: 'M7 7h10v10H7z',
+  dock: 'M4.5 5h15a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM14.5 5v14M16.8 9h1.7M16.8 12h1.7',
+  phone: 'M8 2.5h8a1.5 1.5 0 0 1 1.5 1.5v16a1.5 1.5 0 0 1-1.5 1.5H8A1.5 1.5 0 0 1 6.5 20V4A1.5 1.5 0 0 1 8 2.5zM10.5 18.5h3',
 }
 
 const FILLED: Record<string, string> = {

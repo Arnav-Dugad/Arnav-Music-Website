@@ -1,11 +1,13 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { motion } from 'motion/react'
+import { AnimatePresence, motion } from 'motion/react'
 import { useLyrics } from '../state/lyrics'
-import { player, usePlayer, useProgress } from '../state/player'
+import { currentTrack, player, usePlayer, useProgress } from '../state/player'
 import { activeIndex, isInstrumental, progress, type LyricLine } from '../lib/lyrics'
 import { Icon } from './Icon'
 import { Spinner } from './ui'
 import { aiAvailability } from '../lib/ai'
+import { useSettings } from '../state/settings'
+import { songNotes } from '../lib/aiFeatures'
 
 const LEAD_MS = 140
 
@@ -20,7 +22,7 @@ function usePositionClock() {
   }
 }
 
-function SyncedLyrics({ lines, translation, romanized, size }: { lines: LyricLine[]; translation?: string[] | null; romanized?: string[] | null; size: 'lg' | 'md' }) {
+export function SyncedLyrics({ lines, translation, romanized, size }: { lines: LyricLine[]; translation?: string[] | null; romanized?: string[] | null; size: 'lg' | 'md' | 'xl' }) {
   const box = useRef<HTMLDivElement>(null)
   const lineRefs = useRef<(HTMLDivElement | null)[]>([])
   const wordRefs = useRef<Map<number, HTMLSpanElement[]>>(new Map())
@@ -29,6 +31,11 @@ function SyncedLyrics({ lines, translation, romanized, size }: { lines: LyricLin
   const clock = usePositionClock()
   const state = useRef({ active: -2, manual: 0, free: false, freeTimer: 0 as unknown as ReturnType<typeof setTimeout> })
   const [, force] = useState(0)
+  const beat = useRef({ line: -1, word: -1 })
+  const motionLevel = useSettings((s) => s.motion)
+  const energy = usePlayer((s) => s.queue[s.index]?.track.energy ?? 0.5)
+  const pulse = useRef(0)
+  pulse.current = motionLevel === 'full' ? 0.008 + 0.012 * energy : 0
   const sizeRef = useRef(size)
   sizeRef.current = size
 
@@ -77,6 +84,16 @@ function SyncedLyrics({ lines, translation, romanized, size }: { lines: LyricLin
         const ln = lines[a]
         const words = wordRefs.current.get(a)
         if (words) ln.words.forEach((w, i) => words[i]?.style.setProperty('--p', String(progress(w.start, w.end, pos))))
+        // A light pulse as each new word is sung — the rhythm of the vocal line.
+        let wi = -1
+        for (let i = 0; i < ln.words.length; i++) if (ln.words[i].start <= pos) wi = i
+        if (wi !== beat.current.word || a !== beat.current.line) {
+          if (wi >= 0 && a === beat.current.line && wi > beat.current.word && pulse.current) {
+            const main = lineRefs.current[a]?.querySelector('.lyr-main') as HTMLElement | null
+            main?.animate([{ transform: 'scale(1)' }, { transform: `scale(${1 + pulse.current})` }, { transform: 'scale(1)' }], { duration: 300, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' })
+          }
+          beat.current = { line: a, word: wi }
+        }
         const bg = bgRefs.current.get(a)
         if (bg) bg.style.setProperty('--p', String(progress(ln.start + 300, ln.end, pos)))
         const dots = dotRefs.current.get(a)
@@ -150,7 +167,7 @@ function SyncedLyrics({ lines, translation, romanized, size }: { lines: LyricLin
   )
 }
 
-function PlainLyrics({ lines, translation, size }: { lines: string[]; translation?: string[] | null; size: 'lg' | 'md' }) {
+export function PlainLyrics({ lines, translation, size }: { lines: string[]; translation?: string[] | null; size: 'lg' | 'md' | 'xl' }) {
   return (
     <div className={`lyr plain ${size}`}>
       <div className="lyr-plain-note t-caption">These lyrics aren’t time-synced.</div>
@@ -172,11 +189,24 @@ function defaultLanguage() {
   } catch { return 'English' }
 }
 
-export function LyricsPanel({ size = 'lg' }: { size?: 'lg' | 'md' }) {
+export function LyricsPanel({ size = 'lg' }: { size?: 'lg' | 'md' | 'xl' }) {
   const { status, lyrics, translation, showTranslation, translating, generating } = useLyrics()
   const [pasting, setPasting] = useState(false)
   const [text, setText] = useState('')
   const [lang, setLang] = useState(defaultLanguage)
+  const [notes, setNotes] = useState<{ id: string; text: string } | null>(null)
+  const [notesBusy, setNotesBusy] = useState(false)
+  const about = async () => {
+    const t = currentTrack()
+    if (!t || !lyrics) return
+    if (notes?.id === t.id) { setNotes(null); return }
+    setNotesBusy(true)
+    try {
+      const lines = lyrics.kind === 'synced' ? lyrics.lines.map((l) => l.text) : lyrics.lines
+      const r = await songNotes(t, lines)
+      setNotes(r ? { id: t.id, text: r.text } : { id: t.id, text: 'Arnav AI couldn’t write notes for this song right now.' })
+    } finally { setNotesBusy(false) }
+  }
   const tr = showTranslation ? translation : null
   const body = useMemo(() => {
     if (status === 'loading' || status === 'idle') return <div className="lyr-state"><Spinner size={22} /></div>
@@ -220,10 +250,20 @@ export function LyricsPanel({ size = 'lg' }: { size?: 'lg' | 'md' }) {
   return (
     <div className="lyr-panel">
       {body}
+      <AnimatePresence>
+        {notes && notes.id === currentTrack()?.id && (
+          <motion.div className="lyr-notes glass-thick" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}>
+            <div className="row" style={{ justifyContent: 'space-between' }}><span className="badge ai">About this song · Arnav AI</span><button className="icon-btn sm" aria-label="Close" onClick={() => setNotes(null)}><Icon name="close" size={14} /></button></div>
+            <p>{notes.text}</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
       {status === 'found' && lyrics && (
         <div className="lyr-bar">
           <span className={`badge ${lyrics.source === 'Arnav AI' ? 'ai' : ''}`}>{lyrics.source === 'Arnav AI' ? 'Written by Arnav AI' : lyrics.source === 'You' ? 'Your lyrics' : 'Lyrics · LRCLIB'}</span>
           <span className="grow" />
+          {size !== 'xl' && <button className="chip" onClick={() => useLyrics.getState().set({ cinematic: true })} title="Cinematic full screen"><Icon name="expand" size={14} /> Cinematic</button>}
+          <button className={`chip ${notes ? 'on' : ''}`} disabled={notesBusy || !!aiAvailability()} onClick={() => void about()}>{notesBusy ? <Spinner size={13} /> : <Icon name="info" size={14} />} About</button>
           {translation && (
             <button className={`chip ${showTranslation ? 'on' : ''}`} onClick={() => useLyrics.getState().set({ showTranslation: !showTranslation })}>
               <Icon name="translate" size={14} /> {translation.language}

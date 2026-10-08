@@ -10,6 +10,7 @@ import { duration, longDuration } from '../lib/format'
 import { artworkFor } from '../lib/classify'
 import { toast } from '../state/ui'
 import { useLiveHistory } from '../hooks'
+import { QueueChat } from './QueueChat'
 
 function Row({ item, onRemove, eta }: { item: QueueItem; onRemove: () => void; eta?: string }) {
   const controls = useDragControls()
@@ -79,6 +80,7 @@ export function QueuePanel() {
           </>
         )}
       </div>
+      {tab === 'next' && <QueueChat />}
       {tab === 'next' ? (
         <div className="q-scroll">
           {current && (

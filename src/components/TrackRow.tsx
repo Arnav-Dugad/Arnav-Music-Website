@@ -1,4 +1,5 @@
-import { memo, type MouseEvent, type ReactNode } from 'react'
+import { memo, useState, type MouseEvent, type ReactNode } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
 import { useNavigate } from 'react-router-dom'
 import { Artwork, Eq } from './ui'
 import { Icon } from './Icon'
@@ -8,6 +9,37 @@ import type { Track } from '../lib/types'
 import { usePlayer, player } from '../state/player'
 import { useLibrary } from '../state/library'
 import { ui, toast } from '../state/ui'
+import { usePreviewHold } from '../player/usePreviewHold'
+
+/** Credited names ("Tanishk Bagchi, Asees Kaur" / "A & B" / "A feat. B") as separate artists. */
+export function splitArtists(artist: string): string[] {
+  return artist.split(/\s*,\s*|\s+&\s+|\s+x\s+|\s+feat\.?\s+|\s+ft\.?\s+/i).map((s) => s.trim()).filter(Boolean).slice(0, 4)
+}
+
+/** Artist page link. The uploader channel is only a hint when it *is* the artist (Topic / own channel). */
+export function artistHref(track: Pick<Track, 'channelId' | 'trust' | 'channelTitle'>, name: string, single: boolean): string {
+  const own = single && track.channelId && ((track.trust ?? 0) === 2 || /- Topic$/i.test(track.channelTitle ?? ''))
+  return `/artist/${encodeURIComponent(name)}${own ? `?c=${track.channelId}` : ''}`
+}
+
+export const albumHref = (track: Pick<Track, 'album' | 'artist'>) =>
+  `/album/${encodeURIComponent(track.album ?? '')}?a=${encodeURIComponent(splitArtists(track.artist)[0] ?? '')}`
+
+export function ArtistLinks({ track, onNavigate }: { track: Track; onNavigate?: () => void }) {
+  const nav = useNavigate()
+  const names = splitArtists(track.artist)
+  return (
+    <>
+      {names.map((n, i) => (
+        <span key={n}>
+          {i > 0 && ', '}
+          <button className="link" onClick={(e) => { e.stopPropagation(); onNavigate?.(); nav(artistHref(track, n, names.length === 1)) }}>{n}</button>
+        </span>
+      ))}
+      {(track.trust ?? 0) >= 2 && <span className="verified-badge" title={(track.trust ?? 0) === 3 ? 'Official upload' : 'Artist channel'} aria-label="Official"><Icon name="check" size={9} strokeWidth={3.4} /></span>}
+    </>
+  )
+}
 
 export function useNowPlaying() {
   const id = usePlayer((s) => s.queue[s.index]?.track.id ?? null)
@@ -24,8 +56,12 @@ export function openTrackMenu(e: MouseEvent, track: Track, extra: { playlistId?:
   ui().set({ menu: { track, x, y, ...extra } })
 }
 
+const BURST = Array.from({ length: 8 }, (_, i) => (i / 8) * Math.PI * 2)
+
+/** A heart that fills from its centre with a small burst (the app's like animation). */
 export function LikeButton({ track, size = 18, className = '' }: { track: Track; size?: number; className?: string }) {
   const liked = useLibrary((s) => !!s.likes[track.id] && !s.likes[track.id].deleted)
+  const [burst, setBurst] = useState(0)
   return (
     <button
       className={`icon-btn sm like ${liked ? 'on liked' : ''} ${className}`}
@@ -34,10 +70,25 @@ export function LikeButton({ track, size = 18, className = '' }: { track: Track;
       onClick={(e) => {
         e.stopPropagation()
         const now = useLibrary.getState().toggleLike(track)
-        if (now) toast('Added to Liked Songs')
+        if (now) { setBurst((b) => b + 1); toast('Added to Liked Songs') }
       }}
     >
-      <Icon name={liked ? 'heartFill' : 'heart'} size={size} />
+      <span className="heart-wrap" style={{ width: size, height: size }}>
+        <Icon name="heart" size={size} />
+        <motion.span className="heart-fill" initial={false} animate={{ scale: liked ? 1 : 0, opacity: liked ? 1 : 0 }} transition={{ type: 'spring', stiffness: 520, damping: liked ? 14 : 30 }}>
+          <Icon name="heartFill" size={size} />
+        </motion.span>
+        <AnimatePresence>
+          {burst > 0 && liked && (
+            <motion.span key={burst} className="heart-burst" initial={{ opacity: 1 }} animate={{ opacity: 0 }} transition={{ duration: 0.7, delay: 0.15 }}>
+              <motion.i className="heart-ring" initial={{ scale: 0.3, opacity: 0.9 }} animate={{ scale: 1.9, opacity: 0 }} transition={{ duration: 0.55, ease: 'easeOut' }} />
+              {BURST.map((a, i) => (
+                <motion.i key={i} className="heart-dot" initial={{ x: 0, y: 0, scale: 1 }} animate={{ x: Math.cos(a) * size * 0.95, y: Math.sin(a) * size * 0.95, scale: 0 }} transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }} />
+              ))}
+            </motion.span>
+          )}
+        </AnimatePresence>
+      </span>
     </button>
   )
 }
@@ -60,6 +111,7 @@ export const TrackRow = memo(function TrackRow({ track, index, list, context, nu
   const { id, playing } = useNowPlaying()
   const nav = useNavigate()
   const isCurrent = id === track.id
+  const hold = usePreviewHold(track)
   const play = () => {
     if (onPlay) return onPlay()
     if (isCurrent) return player().toggle()
@@ -68,8 +120,9 @@ export const TrackRow = memo(function TrackRow({ track, index, list, context, nu
   return (
     <div
       className={`track-row ${isCurrent ? 'current' : ''} ${compact ? 'compact' : ''}`}
-      onClick={(e) => { if (!(e.target as HTMLElement).closest('button')) play() }}
-      onContextMenu={(e) => openTrackMenu(e, track, { playlistId })}
+      onClick={(e) => { if (!(e.target as HTMLElement).closest('button')) hold.guard(play)?.() }}
+      {...hold.handlers}
+      onContextMenu={(e) => { if (hold.held()) { e.preventDefault(); return } openTrackMenu(e, track, { playlistId }) }}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => { if (e.key === 'Enter') play() }}
@@ -96,11 +149,11 @@ export const TrackRow = memo(function TrackRow({ track, index, list, context, nu
           {track.variant === 'VIDEO' && <span className="tr-tag">Video</span>}
         </div>
         <div className="tr-sub ellipsis">
-          <button className="link" onClick={(e) => { e.stopPropagation(); nav(`/artist/${encodeURIComponent(track.artist)}${track.channelId ? `?c=${track.channelId}` : ''}`) }}>{track.artist}</button>
+          <ArtistLinks track={track} />
           {caption && <span className="tr-caption"> · {caption}</span>}
         </div>
       </div>
-      {showAlbum && <div className="tr-album ellipsis hide-sm">{track.album ?? ''}</div>}
+      {showAlbum && <div className="tr-album ellipsis hide-sm">{track.album ? <button className="link" onClick={(e) => { e.stopPropagation(); nav(albumHref(track)) }}>{track.album}</button> : ''}</div>}
       <div className="tr-right">
         {right}
         <LikeButton track={track} />

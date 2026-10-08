@@ -7,6 +7,9 @@ import { allows, likedIds, liveEvents } from '../state/library'
 import { trackRegistry } from '../state/tracks'
 import { settings } from '../state/settings'
 import { profile } from './recs'
+import { tuner } from '../lib/tuner'
+import { rank } from '../lib/taste'
+import { verified } from './catalog'
 import { ls } from '../lib/idb'
 
 export type Step = 'interpret' | 'search' | 'order' | 'done'
@@ -61,10 +64,10 @@ export async function createSession(request: string, onStep: (s: Step) => void, 
   let searched = 0
   await Promise.all(queries.map(async (q, i) => {
     const c = await cachedSearch(q, 'SONGS')
-    if (c) { pool.push(...c.tracks); searched++; return }
+    if (c) { pool.push(...verified(c.tracks)); searched++; return }
     if (i >= budget || remote >= budget) return
     remote++
-    try { pool.push(...(await search(q, 'SONGS')).tracks); searched++ } catch { /* other queries still count */ }
+    try { pool.push(...verified((await search(q, 'SONGS')).tracks)); searched++ } catch { /* other queries still count */ }
   }))
 
   // Familiar candidates from your own listening, filtered so they fit the request.
@@ -89,7 +92,9 @@ export async function createSession(request: string, onStep: (s: Step) => void, 
     .filter((t) => isSingle(t) && allows(t))
 
   onStep('order')
-  const session = buildSession(constraints, candidates, p, likedIds())
+  const session = buildSession(constraints, candidates, p, likedIds(), Date.now(), tuner.multipliers())
+  const chosen = new Set(session.tracks.map((t) => t.id))
+  tuner.offer(rank(session.tracks, p, { liked: likedIds(), targetEnergy: constraints.energyTarget, discovery: constraints.discoveryRatio }).filter((x) => chosen.has(x.track.id)))
   onStep('done')
   return { session, usedAi, model, unavailable, searched, request }
 }

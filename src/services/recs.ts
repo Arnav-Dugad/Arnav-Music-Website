@@ -4,6 +4,8 @@ import { buildProfile, diversify, rank, type Reason, type TasteProfile } from '.
 import { artistKey, type MediaVariant, type PlayEvent, type Track, type TrackId } from '../lib/types'
 import { allows, lib, likedIds, liveEvents } from '../state/library'
 import { trackRegistry } from '../state/tracks'
+import { verified } from './catalog'
+import { tuner } from '../lib/tuner'
 
 let profileCache: { at: number; rev: number; profile: TasteProfile } | null = null
 
@@ -67,10 +69,10 @@ async function gather(queries: string[], remoteBudget: number): Promise<Track[]>
   let remote = 0
   for (const q of queries) {
     const c = await cachedSearch(q, 'SONGS')
-    if (c) { out.push(...c.tracks); continue }
+    if (c) { out.push(...verified(c.tracks)); continue }
     if (remote >= remoteBudget || ytQuotaState() === 'EXHAUSTED') continue
     remote++
-    try { out.push(...(await search(q, 'SONGS')).tracks) } catch { /* keep what we have */ }
+    try { out.push(...verified((await search(q, 'SONGS')).tracks)) } catch { /* keep what we have */ }
   }
   return out
 }
@@ -106,7 +108,7 @@ export async function radioFor(seed: Track, opts: { exclude?: Set<TrackId>; limi
   const state = ytQuotaState()
   const budget = opts.remoteBudget ?? (state === 'NORMAL' ? 2 : state === 'CONSERVE' ? 1 : 0)
   const remote = await gather(queries, budget)
-  const localPool = trackRegistry.all().filter((t) =>
+  const localPool = verified(trackRegistry.all()).filter((t) =>
     artistKey(t.artist) === key || co.some((a) => a.key === artistKey(t.artist)) || t.genres.some((g) => seed.genres.includes(g)))
   const followIds = new Set(followers(seed.id))
   const exclude = new Set([seed.id, ...(opts.exclude ?? [])])
@@ -114,10 +116,12 @@ export async function radioFor(seed: Track, opts: { exclude?: Set<TrackId>; limi
   recent.forEach((id) => exclude.add(id))
   const candidates = [...trackRegistry.many([...followIds]), ...remote, ...localPool]
     .filter((t) => isSingle(t) && allows(t) && titleSimilarity(t.title, seed.title) < 0.8)
-  const ranked = rank(candidates, p, { liked: likedIds(), targetEnergy: seed.energy ?? p.energyPreference, discovery: 0.45, exclude })
+  const ranked = rank(candidates, p, { tune: tuner.multipliers(), liked: likedIds(), targetEnergy: seed.energy ?? p.energyPreference, discovery: 0.45, exclude })
     .map((s) => ({ ...s, score: s.score + (followIds.has(s.track.id) ? 0.6 : 0) }))
     .sort((a, b) => b.score - a.score)
-  return diversify(ranked, 2).slice(0, opts.limit ?? 25).map((s) => ({ track: s.track, reason: s.reason, caption: caption(s.track, s.reason, seed) }))
+  const picked = diversify(ranked, 2).slice(0, opts.limit ?? 25)
+  tuner.offer(picked)
+  return picked.map((s) => ({ track: s.track, reason: s.reason, caption: caption(s.track, s.reason, seed) }))
 }
 
 /** Home "For you right now": time-of-day aware ranking over everything known. */
@@ -126,9 +130,11 @@ export function forYouNow(limit = 16): Rec[] {
   if (p.isCold) return []
   const hour = new Date().getHours()
   const hourWeight = (p.hourHistogram[hour] ?? 0) / Math.max(1, Math.max(...p.hourHistogram))
-  const pool = trackRegistry.all().filter((t) => isSingle(t) && allows(t))
-  const ranked = rank(pool, p, { liked: likedIds(), discovery: 0.25 + 0.2 * (1 - hourWeight) })
-  return diversify(ranked, 2).slice(0, limit).map((s) => ({ track: s.track, reason: s.reason, caption: caption(s.track, s.reason) }))
+  const pool = verified(trackRegistry.all()).filter((t) => isSingle(t) && allows(t))
+  const ranked = rank(pool, p, { tune: tuner.multipliers(), liked: likedIds(), discovery: 0.25 + 0.2 * (1 - hourWeight) })
+  const picked = diversify(ranked, 2).slice(0, limit)
+  tuner.offer(picked)
+  return picked.map((s) => ({ track: s.track, reason: s.reason, caption: caption(s.track, s.reason) }))
 }
 
 /** Fresh finds: close to taste, never played. */
@@ -136,9 +142,11 @@ export function freshFinds(limit = 16): Rec[] {
   const p = profile()
   if (p.isCold) return []
   const played = new Set(liveEvents().map((e) => e.trackId))
-  const pool = trackRegistry.all().filter((t) => !played.has(t.id) && isSingle(t) && allows(t))
-  const ranked = rank(pool, p, { liked: likedIds(), discovery: 0.8 }).filter((s) => (p.artistAffinity.get(artistKey(s.track.artist)) ?? 0) > 0.05 || s.track.genres.some((g) => (p.genreAffinity.get(g) ?? 0) > 0.2))
-  return diversify(ranked, 2).slice(0, limit).map((s) => ({ track: s.track, reason: 'NEW_DISCOVERY' as Reason, caption: (p.artistAffinity.get(artistKey(s.track.artist)) ?? 0) > 0.05 ? `New from ${s.track.artist}` : 'New to you, close to your taste' }))
+  const pool = verified(trackRegistry.all()).filter((t) => !played.has(t.id) && isSingle(t) && allows(t))
+  const ranked = rank(pool, p, { tune: tuner.multipliers(), liked: likedIds(), discovery: 0.8 }).filter((s) => (p.artistAffinity.get(artistKey(s.track.artist)) ?? 0) > 0.05 || s.track.genres.some((g) => (p.genreAffinity.get(g) ?? 0) > 0.2))
+  const picked = diversify(ranked, 2).slice(0, limit)
+  tuner.offer(picked)
+  return picked.map((s) => ({ track: s.track, reason: 'NEW_DISCOVERY' as Reason, caption: (p.artistAffinity.get(artistKey(s.track.artist)) ?? 0) > 0.05 ? `New from ${s.track.artist}` : 'New to you, close to your taste' }))
 }
 
 /** Rediscover: loved before, quiet lately. */
@@ -168,9 +176,9 @@ export function dailyMixes(): DailyMix[] {
     const co = coListenedArtists(seed, 3).map((a) => a.key)
     const cluster = [seed, ...co.filter((c) => !used.has(c))].slice(0, 3)
     cluster.forEach((c) => used.add(c))
-    const tracks = trackRegistry.all().filter((t) => cluster.includes(artistKey(t.artist)) && isSingle(t) && allows(t))
+    const tracks = verified(trackRegistry.all()).filter((t) => cluster.includes(artistKey(t.artist)) && isSingle(t) && allows(t))
     if (tracks.length < 5) continue
-    const ranked = diversify(rank(tracks, p, { liked: likedIds(), discovery: 0.3 }), 4).slice(0, 30).map((s) => s.track)
+    const ranked = diversify(rank(tracks, p, { tune: tuner.multipliers(), liked: likedIds(), discovery: 0.3 }), 4).slice(0, 30).map((s) => s.track)
     const names = [...new Set(ranked.map((t) => t.artist))].slice(0, 3)
     mixes.push({ id: `daily_${seed}`, title: `Daily Mix ${mixes.length + 1}`, artists: names, tracks: ranked, hue: (mixes.length * 77 + 250) % 360 })
   }
@@ -182,11 +190,12 @@ export async function alternativeUpload(track: Track, want: MediaVariant | null,
   const query = `${track.artist} ${track.title}`.slice(0, 100)
   const results = (await cachedSearch(query, 'SONGS')) ?? (await search(query, 'SONGS').catch(() => null))
   if (!results) return null
-  const candidates = results.tracks.filter((c) => c.id !== track.id && !exclude.has(c.playbackRef) && isSingle(c) && titleSimilarity(c.title, track.title) >= 0.6)
+  const candidates = verified(results.tracks).filter((c) => c.id !== track.id && !exclude.has(c.playbackRef) && isSingle(c) && titleSimilarity(c.title, track.title) >= 0.6)
   const sorted = candidates.sort((a, b) => {
     const v = (x: Track) => (want && x.variant === want ? 0 : x.variant == null ? 1 : 2)
     const ar = (x: Track) => (artistKey(x.artist) === artistKey(track.artist) ? 0 : 1)
-    return v(a) - v(b) || ar(a) - ar(b)
+    // Official uploads (Topic/VEVO/label/artist channel) win ties.
+    return v(a) - v(b) || (b.trust ?? 1) - (a.trust ?? 1) || ar(a) - ar(b)
   })
   return sorted.find((c) => want == null || c.variant === want || c.variant == null) ?? null
 }

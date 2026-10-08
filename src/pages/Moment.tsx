@@ -14,6 +14,8 @@ import { MOODS, MusicError, type Track } from '../lib/types'
 import { allows, likedIds } from '../state/library'
 import { player, usePlayer } from '../state/player'
 import { profile } from '../services/recs'
+import { verified } from '../services/catalog'
+import { tuner } from '../lib/tuner'
 
 async function momentTracks(seeds: string[], energy: number): Promise<Track[]> {
   const pool: Track[] = []
@@ -28,8 +30,10 @@ async function momentTracks(seeds: string[], energy: number): Promise<Track[]> {
     try { pool.push(...(await search(q, 'SONGS')).tracks) } catch (e) { lastErr = e }
   }
   if (!pool.length && lastErr) throw lastErr
-  const ranked = rank(pool.filter((t) => isSingle(t) && allows(t)), profile(), { liked: likedIds(), targetEnergy: energy, discovery: 0.4 })
-  return diversify(ranked, 2).map((s) => s.track).slice(0, 40)
+  const ranked = rank(verified(pool).filter((t) => isSingle(t) && allows(t)), profile(), { tune: tuner.multipliers(), liked: likedIds(), targetEnergy: energy, discovery: 0.4 })
+  const picked = diversify(ranked, 2).slice(0, 40)
+  tuner.offer(picked)
+  return picked.map((s) => s.track)
 }
 
 export default function MomentPage() {

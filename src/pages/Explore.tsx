@@ -17,6 +17,9 @@ import { trackRegistry } from '../state/tracks'
 import { player, usePlayer } from '../state/player'
 import { regionCode } from '../state/settings'
 import { useYoutubeReady } from '../services/status'
+import { splitByTrust, verified } from '../services/catalog'
+import { useVoice } from '../services/voice'
+import { useSettings } from '../state/settings'
 
 const GENRES: { name: string; q: string; hue: number }[] = [
   { name: 'Pop', q: 'pop songs', hue: 330 }, { name: 'Hip-Hop', q: 'hip hop songs', hue: 28 }, { name: 'Bollywood', q: 'bollywood songs', hue: 12 },
@@ -110,8 +113,10 @@ function LocalMatches({ q }: { q: string }) {
   const playlists = useLibrary((s) => s.playlists)
   const nav = useNavigate()
   const { tracks, lists } = useMemo(() => {
-    const seen = new Set<string>()
-    const pool = [...likedTracks(), ...trackRegistry.all().reverse()].filter((t) => (seen.has(t.id) ? false : (seen.add(t.id), true)))
+    // Only your library: likes, playlists and history (never every track the site has fetched).
+    const s = useLibrary.getState()
+    const ids = new Set<string>([...likedTracks().map((t) => t.id), ...Object.values(s.playlists).filter((p) => !p.deleted).flatMap((p) => p.trackIds), ...s.events.filter((e) => !e.deleted).map((e) => e.trackId)])
+    const pool = verified(trackRegistry.many([...ids]))
     const tracks = pool.map((t) => ({ t, s: Math.max(matchScore(q, t.title), matchScore(q, `${t.title} ${t.artist}`), matchScore(q, t.artist) * 0.85) }))
       .filter((x) => x.s >= 0.6).sort((a, b) => b.s - a.s).slice(0, 5).map((x) => x.t)
     const lists = visiblePlaylists(playlists).filter((p) => matchScore(q, p.name) >= 0.6).slice(0, 4)
@@ -141,7 +146,10 @@ function Results({ q, filter }: { q: string; filter: SearchFilter }) {
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<MusicError | null>(null)
+  const [showAll, setShowAll] = useState(false)
+  const verifiedOnly = useSettings((s) => s.verifiedOnly)
   const debounced = useDebounced(q, DEBOUNCE_MS)
+  useEffect(() => setShowAll(false), [q, filter])
   const reqId = useRef(0)
 
   // Instant: cached results for the exact query, as you type.
@@ -182,11 +190,16 @@ function Results({ q, filter }: { q: string; filter: SearchFilter }) {
     }
   }
 
-  const tracks = useMemo(() => {
+  const { tracks, hiddenCount } = useMemo(() => {
     const all = [...(res?.tracks ?? []), ...more]
-    const ranked = filter === 'VIDEOS' ? rankForListening(all, 'VIDEO') : rankForListening(all, prefer)
-    return filter === 'VIDEOS' ? ranked.filter((t) => t.variant !== 'SONG') : ranked
-  }, [res, more, filter, prefer])
+    const { shown, hidden } = splitByTrust(all)
+    const pool = showAll ? [...shown, ...hidden.filter((t) => t.trust !== -1)] : shown
+    const ranked = filter === 'VIDEOS' ? rankForListening(pool, 'VIDEO') : rankForListening(pool, prefer)
+    // Official uploads lead; within a level YouTube's relevance order is kept.
+    const ordered = [...ranked].sort((a, b) => Math.min(2, b.trust ?? 1) - Math.min(2, a.trust ?? 1))
+    return { tracks: filter === 'VIDEOS' ? ordered.filter((t) => t.variant !== 'SONG') : ordered, hiddenCount: showAll ? hidden.filter((t) => t.trust === -1).length : hidden.length }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [res, more, filter, prefer, showAll, verifiedOnly])
 
   if (error && !res) {
     return <div className="section"><Notice tone={error.kind === 'quota' ? 'warn' : 'error'} icon={error.kind === 'missingKey' ? 'youtube' : 'info'} action={error.kind === 'missingKey' ? <button className="btn btn-sm btn-secondary" onClick={() => nav('/settings/sources')}>Connect</button> : undefined}>{error.message}</Notice></div>
@@ -199,6 +212,12 @@ function Results({ q, filter }: { q: string; filter: SearchFilter }) {
       <div className="row t-caption" style={{ marginTop: 18, minHeight: 20 }}>
         {loading ? <><Spinner size={12} /> Searching YouTube…</> : res.fromCache ? <>Saved results · {relative(res.fetchedAt)}</> : null}
         {error && res && <span style={{ color: 'var(--warning)' }}>{error.message}</span>}
+        {hiddenCount > 0 && !showAll && (
+          <span className="trust-note">
+            <Icon name="check" size={12} strokeWidth={2.6} /> Official uploads only · {hiddenCount} fan or unofficial {hiddenCount === 1 ? 'upload' : 'uploads'} hidden
+            {verifiedOnly && <button className="link" onClick={() => setShowAll(true)}>Show</button>}
+          </span>
+        )}
       </div>
       {filter === 'ALL' && top && (
         <section className="section top-section">
@@ -260,6 +279,7 @@ export default function Explore() {
   const filter = (params.get('f') as SearchFilter) || 'ALL'
   const [text, setText] = useState(q)
   const input = useRef<HTMLInputElement>(null)
+  const voice = useVoice((t) => onChange(t), (t) => setText(t))
   useEffect(() => { setText(q) }, [q])
   useEffect(() => { if (params.get('focus')) input.current?.focus() }, [params])
 
@@ -286,6 +306,7 @@ export default function Explore() {
         <div className="search-box glass">
           <Icon name="search" size={19} />
           <input ref={input} value={text} onChange={(e) => onChange(e.target.value)} placeholder="Songs, artists, playlists — or paste a YouTube link" aria-label="Search" autoComplete="off" spellCheck={false} />
+          {voice.supported && <button className={`icon-btn sm ${voice.listening ? 'on recording' : ''}`} aria-label="Search by voice" onClick={voice.toggle}><Icon name="mic" size={16} /></button>}
           <AnimatePresence>{text && <motion.button initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="icon-btn sm" aria-label="Clear" onClick={() => onChange('')}><Icon name="close" size={16} /></motion.button>}</AnimatePresence>
         </div>
         {q && (
