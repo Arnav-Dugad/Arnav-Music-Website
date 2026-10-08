@@ -309,3 +309,20 @@ input[type='range'].range::-moz-range-thumb { width: 14px; height: 14px; border:
 @media (hover: none) {
   .hover-only { display: none !important; }
 }
+
+/* ── Phone layout polish ───────────────────────────────────────────────── */
+@media (max-width: 700px) {
+  /* Header actions become a swipeable strip instead of being cut off. */
+  .page-header { align-items: flex-start; gap: 14px; }
+  .page-header-actions { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; max-width: calc(100% + 2 * var(--gutter)); margin: 0 calc(-1 * var(--gutter)); padding: 2px var(--gutter); -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); }
+  .page-header-actions::-webkit-scrollbar, .lib-tabs::-webkit-scrollbar { display: none; }
+  .page-header-actions > *, .page-header-actions .row > * { flex: none; }
+  .page-header-actions .row { flex-wrap: nowrap; }
+  .lib-tabs { margin: 0 calc(-1 * var(--gutter)); padding: 0 var(--gutter); max-width: calc(100% + 2 * var(--gutter)); -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); }
+  .genre-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .genre-tile { height: 86px; font-size: 17px; padding: 14px; }
+  .ai-suggestions { justify-content: flex-start; }
+  .ai-suggestions .chip { flex: 0 1 auto; max-width: 100%; }
+  .pl-actions { flex-wrap: wrap; }
+  .t-hero { overflow-wrap: anywhere; }
+}

@@ -198,6 +198,12 @@ export function videoToTrack(v: YtVideo, query?: string): Track {
   }
 }
 
+/** YouTube thumbnails without the black bars of hqdefault (for square crops): best first. */
+export function barlessThumbs(url: string): string[] {
+  const m = /^https:\/\/i\d?\.ytimg\.com\/vi\/([A-Za-z0-9_-]{11})\//.exec(url)
+  return m ? [`https://i.ytimg.com/vi/${m[1]}/hq720.jpg`, `https://i.ytimg.com/vi/${m[1]}/mqdefault.jpg`] : [url]
+}
+
 /** Square-ish, high quality artwork for a YouTube video id. */
 export function artworkFor(t: Pick<Track, 'artworkUrl' | 'playbackRef'>, size: 'sm' | 'lg' = 'lg'): string {
   const url = t.artworkUrl

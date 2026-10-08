@@ -82,8 +82,10 @@
   .np-stage { justify-content: space-evenly; flex: 1; width: min(var(--cover), 100%); }
   .np-video { width: 100%; left: 0; transform: none; }
   .np-context { display: none; }
-  .np-top { grid-template-columns: 44px 1fr 44px; }
+  .np-top { grid-template-columns: 44px 1fr 40px 40px; }
   .np-top-right { display: contents; }
+  .np-grabber { top: 4px; }
+  .np-top .np-mode { margin-top: 6px; }
   .np-mode { justify-self: center; }
   .np-top { padding: 0 10px; padding-top: env(safe-area-inset-top); }
   .np.mobile-panel .np-stage { display: none; }
@@ -142,6 +144,7 @@
 .lyr-version:hover { background: rgba(255,255,255,0.09); }
 .lyr-version.on { background: rgba(255,255,255,0.14); }
 .lyr-version > svg { grid-row: 1 / span 2; grid-column: 2; align-self: center; }
+.lyr-version > .lyr-version-t, .lyr-version > .t-caption { grid-column: 1; min-width: 0; }
 .lyr-version-t { font-weight: 620; font-size: 14px; }
 .lyr-line[data-state='active'] .w { text-shadow: 0 0 0 transparent; }
 .lyr-bg { display: block; font-size: 0.6em; font-weight: 680; opacity: 0.7; margin-top: 0.25em; }

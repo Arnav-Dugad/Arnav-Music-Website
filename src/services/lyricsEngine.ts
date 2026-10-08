@@ -224,7 +224,10 @@ export function rescore(pick: LyricsPick, track: Track, descriptionLyrics: strin
     communityVotes: pick.community?.votes ?? 0,
     yourChoice: prefs().lyricsFix[track.id]?.choice ?? null,
   }
+  const seenText = new Set<string>()
   const candidates = pick.candidates.map((c) => scoreCandidate(c, ctx)).sort((a, b) => b.score - a.score)
+    // The same lyrics uploaded twice (same words and timing) is one version.
+    .filter((c) => { const k = `${c.synced ? 's' : 'p'}|${c.raw.replace(/\s+/g, ' ').slice(0, 400)}`; if (seenText.has(k)) return false; seenText.add(k); return true })
   const best = candidates[0]
   const ok = best && best.score >= 35
   return { ...pick, candidates, chosen: ok ? best.key : null, status: ok ? 'found' : pick.status === 'instrumental' ? 'instrumental' : 'none' }

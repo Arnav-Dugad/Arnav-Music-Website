@@ -3,6 +3,7 @@ import {
   Timestamp, collection, deleteDoc, doc, getDocs, getDocsFromServer, limit, onSnapshot, orderBy, query, runTransaction,
   serverTimestamp, setDoc, startAfter, where, writeBatch, type DocumentData, type QueryDocumentSnapshot,
 } from 'firebase/firestore'
+import { applyWebRecord, pushWeb, watchWebEdits } from './webSync'
 import { firebaseAuth, firestore, watchAuth } from '../lib/firebase'
 import { idbGet, idbSet, ls } from '../lib/idb'
 import { useUsage } from '../lib/usage'
@@ -238,6 +239,9 @@ async function pullLive(uid: string, journal: Journal): Promise<number> {
             cloudId: d.id, localId: `c${d.id.slice(2, 17)}`, dirty: false, device: typeof data.deviceId === 'string' ? data.deviceId : undefined,
           })
         } catch { /* malformed record — ignore */ }
+      } else if (kind === 'web' && value && !data.deleted) {
+        applyWebRecord(d.id, value, data.deviceId === deviceId)
+        journal[d.id] = { rev, value }
       } else if (kind === 'setting' && value && !data.deleted) {
         if (data.deviceId !== deviceId) applyRemoteSetting(uid, d.id, value)
         journal[d.id] = { rev, value }
@@ -375,6 +379,8 @@ async function syncOnce() {
     await pushLive(uid, journal)
     await pushQueue(uid, journal).catch(() => undefined)
     await pushSettings(uid, deviceId, journal).catch(() => 0)
+    // Web-only data (needs the updated rules: kind "web"); the rest of sync never depends on it.
+    await pushWeb(firestore(), uid, deviceId, journal).catch((e) => console.warn('[Arnav Music] web sync', e instanceof Error ? e.message : e))
     await idbSet(`journal_${uid}`, journal)
     if (useAuth.getState().user?.uid !== uid) return
     observeLive(uid)
@@ -479,6 +485,7 @@ let started = false
 export function startSync() {
   if (started) return
   started = true
+  watchWebEdits(() => requestSync(6000))
   watchAuth((u) => {
     refreshAuthUser()
     stopLive()

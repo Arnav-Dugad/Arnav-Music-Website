@@ -381,3 +381,51 @@ button.heat-cell:hover { outline: 2px solid var(--text); outline-offset: 1px; }
 .album-missing-row { display: flex; align-items: center; gap: 14px; padding: 10px 12px; border-radius: 12px; text-align: left; opacity: 0.78; transition: background .2s, opacity .2s; }
 .album-missing-row:hover { background: var(--surface-2); opacity: 1; }
 .album-missing-row .tnum { min-width: 22px; font-variant-numeric: tabular-nums; }
+
+/* ── Wrapped story ─────────────────────────────────────────────────────── */
+.wrapped { position: fixed; inset: 0; z-index: 80; background: #050507; display: flex; flex-direction: column; align-items: center; padding: 14px 16px calc(14px + env(safe-area-inset-bottom)); gap: 12px; color: #fff; }
+.wrapped-top { width: min(100%, 520px); display: flex; align-items: center; gap: 10px; }
+.wrapped-stage { position: relative; flex: 1; min-height: 0; aspect-ratio: 9 / 16; max-width: 100%; border-radius: 26px; overflow: hidden; box-shadow: 0 40px 120px rgba(0,0,0,.6); }
+.wrapped-stage canvas { width: 100%; height: 100%; display: block; }
+.wrapped-bars { position: absolute; z-index: 2; top: 12px; left: 12px; right: 12px; display: flex; gap: 4px; }
+.wrapped-bars span { flex: 1; height: 3px; border-radius: 3px; background: rgba(255,255,255,0.28); overflow: hidden; position: relative; }
+.wrapped-bars span.done { background: #fff; }
+.wrapped-bars span.on::after { content: ''; position: absolute; inset: 0; background: #fff; transform-origin: left; animation: wrapped-bar linear forwards; }
+@keyframes wrapped-bar { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.wrapped-tap { position: absolute; top: 0; bottom: 0; width: 38%; z-index: 1; background: transparent; }
+.wrapped-tap.l { left: 0; } .wrapped-tap.r { right: 0; width: 62%; }
+.wrapped-loading { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,.4); }
+.wrapped-note { text-align: center; max-width: 520px; color: rgba(255,255,255,.55); }
+@media (max-width: 600px) { .wrapped-stage { border-radius: 18px; width: 100%; flex: none; height: auto; max-height: calc(100dvh - 130px); } }
+
+/* ── Album wall ───────────────────────────────────────────────────────── */
+.wall { position: fixed; inset: 0; z-index: 80; background: radial-gradient(120% 90% at 50% 40%, #1a1730 0%, #07070b 70%); overflow: hidden; touch-action: none; user-select: none; }
+.wall-hud { position: absolute; z-index: 2; top: 16px; left: 16px; display: flex; gap: 12px; align-items: center; color: #fff; }
+.wall-scene { position: absolute; inset: 0; perspective: 1100px; perspective-origin: 50% 46%; }
+.wall-world { position: absolute; left: 50%; top: 50%; transform-style: preserve-3d; will-change: transform; }
+.wall-tile { position: absolute; width: 240px; height: 240px; margin: -120px 0 0 -120px; border-radius: 18px; overflow: hidden; padding: 0; transform-style: preserve-3d; box-shadow: 0 30px 80px rgba(0,0,0,.55); transition: box-shadow .3s; background: #111; }
+.wall-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.wall-tile:hover { box-shadow: 0 0 0 3px rgba(255,255,255,.85), 0 30px 90px rgba(0,0,0,.6); }
+.wall-cap { position: absolute; left: 0; right: 0; bottom: 0; padding: 26px 12px 10px; display: flex; flex-direction: column; text-align: left; color: #fff; font-size: 13px; background: linear-gradient(to top, rgba(0,0,0,.75), transparent); opacity: 0; transition: opacity .25s; }
+.wall-cap b { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wall-cap i { font-style: normal; opacity: .75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wall-tile:hover .wall-cap, .wall-tile:focus-visible .wall-cap { opacity: 1; }
+@media (max-width: 600px) { .wall-tile { width: 160px; height: 160px; margin: -80px 0 0 -80px; } }
+
+/* ── Film / era / composer heatmap ─────────────────────────────────────── */
+.dimheat { display: flex; flex-direction: column; gap: 14px; }
+.dimheat-grid { display: grid; grid-template-columns: minmax(110px, 200px) repeat(var(--cols), minmax(14px, 1fr)); gap: 2px; align-items: center; }
+.dimheat-row { display: contents; }
+.dimheat-col { font-size: 11px; color: var(--text-3); text-align: center; padding-bottom: 4px; }
+.dimheat-label { font-size: 13px; font-weight: 600; text-align: left; padding-right: 10px; color: var(--text-2); }
+.dimheat-label:disabled { cursor: default; text-decoration: none; }
+.dimheat-cell { aspect-ratio: 1; border-radius: 4px; background: color-mix(in srgb, var(--accent) calc(var(--l, 0) * 100%), var(--surface-2)); transition: transform .15s; }
+.dimheat-cell:hover { transform: scale(1.18); box-shadow: 0 0 0 2px var(--bg); }
+.dimheat-foot { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding-top: 8px; }
+.dimheat-legend { display: inline-flex; align-items: center; gap: 3px; }
+.dimheat-legend i { width: 12px; height: 12px; border-radius: 3px; background: color-mix(in srgb, var(--accent) calc(var(--l) * 100%), var(--surface-2)); }
+.dimheat-table-wrap { overflow-x: auto; }
+.dimheat-table { border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.dimheat-table th, .dimheat-table td { padding: 6px 8px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.dimheat-table th[scope='row'], .dimheat-table thead th:first-child { text-align: left; }
+@media (max-width: 600px) { .dimheat-grid { grid-template-columns: minmax(84px, 120px) repeat(var(--cols), minmax(10px, 1fr)); } .dimheat-label { font-size: 12px; } }

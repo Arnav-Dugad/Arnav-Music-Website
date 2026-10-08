@@ -265,7 +265,7 @@ export function PageHeader({ title, subtitle, actions, eyebrow }: { title: React
         <h1 className="t-large">{title}</h1>
         {subtitle && <div className="t-sub" style={{ marginTop: 6 }}>{subtitle}</div>}
       </div>
-      {actions && <div className="row" style={{ gap: 8 }}>{actions}</div>}
+      {actions && <div className="row page-header-actions" style={{ gap: 8 }}>{actions}</div>}
     </header>
   )
 }

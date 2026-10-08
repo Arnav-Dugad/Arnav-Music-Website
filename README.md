@@ -30,6 +30,12 @@ A premium, Apple-style music web app: YouTube discovery through the official API
 - **AI**: queue chat ("swap the sad ones for upbeat ones"), a daily AI DJ with short spoken intros, AI playlist names and descriptions, voice prompts, and weather/time-aware moods.
 - **Import & tidy**: Spotify (data-export ZIP/JSON) and CSV import with matching to official uploads; a resumable importer with undo/redo; a duplicate finder with undo; and a recommendation tuner that learns from what you finish and skip.
 - **Phone ↔ web**: settings sync with the app (same `liveRecords` `s_*` records), Continue on phone (QR / Android intent), a send-queue-to-phone option, a list of signed-in devices, and linking Google to an email account to import YouTube playlists.
+- **Smart lyrics**: candidates from LRCLIB (exact match plus two searches), NetEase and the version other listeners chose. Each is scored on the real length of the audio release (Apple Music), title, credited artists, timestamps that make sense, the uploader's own lyrics in the video description, and your preferred script. Remixes and reprises are left out. Timing then comes from your fix, other listeners' fixes, or an automatic shift for music videos with intro scenes. **Fix lyrics** lets you nudge ±0.1/0.5 s, tap to sync, ask Arnav AI to line them up (Gemini listens and a robust line fit sets offset and tempo), or choose another version. Fixes are shared. Words rise and sharpen as they're sung; the dock has a wide lyrics sidebar with the translation beside each line.
+- **Free music data** (no keys): iTunes Search (albums, tracklists, exact lengths; JSONP from the browser), MusicBrainz (writers, ISRC), Wikidata (film director, cast, year, Wikipedia/IMDb), Deezer (tempo, loudness), NetEase (synced lyrics) and the YouTube description (the app's credits parser plus film credits).
+- **Credits pages** (`/credits/<id>`), **Apple Music album pages for any label** (tracklist matched to official uploads: the artist's own album playlist, label uploads, Topic tracks), discography shelves on every singer page.
+- **Automix**: a two-deck player for gapless playback, crossfade and smart transitions (fade length per pair; gapless within an album; earlier before a video's outro). Synced with the app's `gapless` / `crossfadeMs` / `smartTransitions`; playlists can have their own style.
+- **Look & motion**: player-bar presets (compact, wide, studio with a scrubbable song map), vinyl mode, a WebGL background that follows the song's energy and beat, per-album colour themes across the page, a card-to-cover morph (View Transitions), liquid queue reordering, a 3D album wall (`/wall`), and a monthly **Wrapped** story that exports as a shareable video (`/wrapped`).
+- **Taste DNA**: a heatmap of your last 12 months by film/album, era and composer.
 - **Everywhere**: ⌘K command palette, keyboard shortcuts (`?`), Media Session (hardware keys / OS media controls), sleep timer, speed, endless radio, unplayable-video rescue, Start radio / Not interested / Don't recommend artist, sharing (`/track/<id>`), PWA manifest, light/dark/auto, artwork-tinted or fixed accent, glass on/off, three motion levels, high contrast, and responsive layouts (sidebar + floating player on desktop; tab bar + mini player on phones).
 
 ## Architecture
@@ -57,9 +63,14 @@ tests/               Unit tests ported from the Android app's core/domain tests
 | Listening history | `users/{uid}/liveRecords/h_<sha256>` | `SharedListen` JSON, server timestamps, consecutive revisions, tombstones |
 | Shared queue | `users/{uid}/liveRecords/q_shared` | Kotlin `Track` JSON; shown as a handoff card, never auto-plays |
 | Settings | `users/{uid}/liveRecords/s_<field>` | Same field names and enum values as the app; only settings changed on the web are pushed |
+| Web extras | `users/{uid}/liveRecords/w_<family>` (kind `web`) | Playlist automix, lyric fixes, web-only settings, hidden songs / blocked artists / saved YouTube playlists / recent searches, tuner. The app skips unknown kinds. **Needs the updated rules.** |
+| Phone backups | `users/{uid}/backups` + `vaultChunks` (read only) | Settings → From your phone brings in older history, searches, hidden songs, blocked artists and the lyrics you curated on the phone |
 | AI | Firebase AI Logic (Gemini Developer API) | Same session prompt contract (`session-v4`) |
 
 Hardened rules for both clients live in `firebase/firestore.rules`. `firebase/tests` replays the app's own rule tests plus every web write in the Firebase emulator (likes, tombstones, playlists, history, queue, settings and cross-account denial): all pass. Deploy them with `firebase deploy --only firestore:rules` from a project owner account.
+
+### Edge API additions
+`/api/meta` (iTunes, MusicBrainz, Wikidata, Deezer, NetEase; allow-listed and cached in KV), `/api/credits` (one cached credits record per video for everyone), `/api/community` (lyrics version and timing listeners agreed on: median of up to 25 fixes), `/api/known` (artist and film names learned only from YouTube Topic data and Wikidata). `videos`, `search` and `playlistItems` responses carry `arnav`: the shared parse of each title with those names, so every visitor sees the same clean metadata.
 
 ## Configuration
 | Secret / setting | Where | Notes |

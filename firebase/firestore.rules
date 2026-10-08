@@ -83,6 +83,8 @@ service cloud.firestore {
             && d.revision is int && d.revision > 0 && d.revision <= 2147483647
             && ((d.kind == 'history' && recordId.matches('^h_[0-9a-f]{64}$') && str(d.value, 4000))
               || (d.kind == 'queue' && recordId == 'q_shared' && str(d.value, 200000) && !d.deleted)
+              // Web-only data that follows you between browsers (the Android app skips unknown kinds).
+              || (d.kind == 'web' && recordId.matches('^w_[a-z][A-Za-z0-9_]{0,40}$') && str(d.value, 200000))
               || (d.kind == 'setting' && recordId in ['s_themeMode','s_accentMode','s_presetAccent','s_glass','s_motion','s_artworkMotion','s_gyroParallax','s_haptics','s_performance','s_highContrast','s_reduceTransparency','s_libraryLayout','s_gapless','s_fadeMs','s_crossfadeMs','s_skipSilence','s_playbackSpeed','s_pauseOnDisconnect','s_aiEnabled','s_aiPersonalization','s_explanations','s_dailyAiLimit','s_youtubeDailyBudget','s_weeklyRecapNotification','s_selectedMoods','s_seedArtists','s_regionCode','s_autoUpdate','s_updateWifiOnly','s_preferVideos','s_autoReplaceUnavailable','s_floatingPlayer','s_beatVisuals','s_ambientEdgeGlow','s_analyzeLocalAudio','s_miniPlayerLyrics','s_smartTransitions','s_onlineLyrics','s_lyricsTranslation','s_lyricsRomanization','s_autoTagLocal','s_widgetMaterialYou','s_endlessRadio','s_autoAiLyrics','s_cropArtTracks','s_movingGradient','s_doubleTapSeek','s_coverParticles','s_beatDropHaptics','s_studio'] && str(d.value, 8000) && !d.deleted));
         }
         allow create: if isOwner(uid) && validLive() && request.resource.data.revision == 1;

@@ -62,6 +62,8 @@ function SleepBadge() {
 function Cover({ track, playing, showVideo }: { track: Track; playing: boolean; showVideo: boolean }) {
   const breathing = useSettings((s) => s.coverBreathing && s.motion !== 'off')
   const vinyl = useSettings((s) => s.vinylMode)
+  // On a phone the record peeks out less, so the cover stays on screen.
+  const narrow = typeof window !== 'undefined' && window.innerWidth < 640
   const [ripple, setRipple] = useState<{ side: 'l' | 'r'; n: number; secs: number } | null>(null)
   const lastTap = useRef<{ t: number; side: 'l' | 'r'; secs: number }>({ t: 0, side: 'l', secs: 0 })
   const x = useMotionValue(0)
@@ -111,7 +113,7 @@ function Cover({ track, playing, showVideo }: { track: Track; playing: boolean; 
           >
             {vinyl && (
               // The record slides out of its sleeve and spins (33⅓ rpm) while the song plays.
-              <motion.div className={`vinyl ${playing ? 'spin' : ''}`} initial={false} animate={{ x: playing ? '30%' : '0%', opacity: 1 }} transition={{ type: 'spring', stiffness: 90, damping: 16 }} aria-hidden>
+              <motion.div className={`vinyl ${playing ? 'spin' : ''}`} initial={false} animate={{ x: playing ? (narrow ? '20%' : '30%') : '0%', opacity: 1 }} transition={{ type: 'spring', stiffness: 90, damping: 16 }} aria-hidden>
                 <div className="vinyl-spin">
                   <div className="vinyl-grooves" />
                   <div className="vinyl-label"><Artwork src={artworkFor(track, 'sm')} seed={track.artist} /></div>
@@ -119,7 +121,7 @@ function Cover({ track, playing, showVideo }: { track: Track; playing: boolean; 
                 </div>
               </motion.div>
             )}
-            <motion.div className="vinyl-sleeve" initial={false} animate={{ x: vinyl && playing ? '-16%' : '0%', rotate: vinyl && playing ? -2 : 0 }} transition={{ type: 'spring', stiffness: 90, damping: 16 }}>
+            <motion.div className="vinyl-sleeve" initial={false} animate={{ x: vinyl && playing ? (narrow ? '-9%' : '-16%') : '0%', rotate: vinyl && playing ? -2 : 0, scale: vinyl && narrow ? 0.9 : 1 }} transition={{ type: 'spring', stiffness: 90, damping: 16 }}>
             <motion.div layoutId="np-art" className="np-cover" transition={spring}>
               <AnimatePresence mode="popLayout" initial={false}>
                 <motion.div

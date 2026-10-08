@@ -90,6 +90,8 @@
 .vol.compact { width: 120px; }
 
 /* ── Mobile mini player + tab bar ─────────────────────────────────────── */
+/* Full-screen experiences (Wrapped, album wall): no bars over them. */
+.app.immersive .tabbar, .app.immersive .mini, .app.immersive .pbar, .app.immersive .dock { display: none !important; }
 .tabbar {
   position: fixed; z-index: 30; left: 0; right: 0; bottom: 0; height: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
   padding: 0 6px env(safe-area-inset-bottom); display: grid; grid-template-columns: repeat(5, 1fr); border-width: 1px 0 0; border-radius: 0;

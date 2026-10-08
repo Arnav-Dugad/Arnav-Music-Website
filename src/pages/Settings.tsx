@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { importPhoneBackup, latestPhoneBackup, type ImportResult, type PhoneBackup } from '../services/phoneBackup'
 import { useNavigate, useParams } from 'react-router-dom'
 import { motion } from 'motion/react'
 import { Icon, Logo, type IconName } from '../components/Icon'
@@ -293,6 +294,33 @@ function Sources() {
   )
 }
 
+function PhoneBackupGroup({ uid }: { uid: string }) {
+  const [backup, setBackup] = useState<PhoneBackup | null | undefined>(undefined)
+  const [progress, setProgress] = useState<number | null>(null)
+  const [result, setResult] = useState<ImportResult | null>(null)
+  useEffect(() => { void latestPhoneBackup(uid).then(setBackup).catch(() => setBackup(null)) }, [uid])
+  const run = async () => {
+    if (!backup) return
+    setProgress(0)
+    try { setResult(await importPhoneBackup(uid, backup, setProgress)) } catch (e) { toast(e instanceof Error ? e.message : 'The backup couldn’t be opened') } finally { setProgress(null) }
+  }
+  return (
+    <Group title="From your phone">
+      <Row
+        title="Bring in your phone’s library"
+        sub={backup === undefined ? 'Looking for the app’s cloud backup…' : backup
+          ? `Backup from ${backup.device} · ${relative(backup.createdAt)} · ${(backup.counts.play_events ?? 0).toLocaleString()} plays, ${(backup.counts.lyrics ?? 0).toLocaleString()} lyrics, ${(backup.counts.recent_searches ?? 0).toLocaleString()} searches. Adds what isn’t synced live: older listening history, recent searches, hidden songs, blocked artists and the lyrics you saved or re-timed. Nothing on the phone changes.`
+          : 'No app backup yet. The app makes one about once an hour while “Cloud sync & backup” is on in its settings.'}
+      >
+        <button className="btn btn-secondary btn-sm" disabled={!backup || progress != null} onClick={() => void run()}>
+          {progress != null ? <><Spinner size={13} /> {Math.round(progress * 100)}%</> : <><Icon name="download" size={14} /> Bring in</>}
+        </button>
+      </Row>
+      {result && <Row title="Brought in" sub={`${result.history.toLocaleString()} plays · ${result.searches} searches · ${result.hidden} hidden songs · ${result.blocked} blocked artists · ${result.lyrics} lyrics`} />}
+    </Group>
+  )
+}
+
 function SyncSection() {
   const user = useAuth((s) => s.user)
   const sync = useSync()
@@ -302,7 +330,7 @@ function SyncSection() {
   return (
     <>
       <Group>
-        <Bool k="cloudSync" title="Cloud sync" sub="Likes, playlists, listening history and your queue sync with the Android app through your Firebase account" />
+        <Bool k="cloudSync" title="Cloud sync" sub="Likes, playlists, listening history, your queue and settings sync with the Android app. Web extras — playlist automix, lyric fixes, hidden songs, blocked artists, saved YouTube playlists, recent searches and the recommendation tuner — follow you to every browser." />
         <Bool k="syncSettings" title="Sync settings with my phone" sub="Theme, accent, motion, Arnav AI, playback, lyrics and taste preferences follow you both ways. Phone-only choices (like OLED) are kept on the phone." />
         {user && cloud && <Row title="Continue on your phone" sub="Send your queue, scan a QR code, or see your devices"><button className="btn btn-secondary btn-sm" onClick={() => ui().set({ phoneOpen: true })}><Icon name="phone" size={14} /> Open</button></Row>}
         <Row title="Status" sub={sync.error ?? (sync.lastSyncedAt ? `Last synced ${relative(sync.lastSyncedAt)}` : user ? 'Not synced yet' : 'Sign in to sync')}>
@@ -322,6 +350,7 @@ function SyncSection() {
         <Row title="Pulled from your devices this session" sub={`${sync.pulled.likes} likes · ${sync.pulled.playlists} playlists · ${sync.pulled.history} plays`} />
         <Row title="This browser" sub={<span className="mono">{deviceId}</span>} />
       </Group>
+      {user && cloud && <PhoneBackupGroup uid={user.uid} />}
       {user && (
         <Group title="Danger zone">
           <Row title="Delete cloud data" sub="Removes likes, playlists, history, backups and devices from your account’s cloud. Local data stays.">

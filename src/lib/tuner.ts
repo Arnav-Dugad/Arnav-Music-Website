@@ -47,6 +47,16 @@ export const tuner = {
     listeners.forEach((l) => l())
   },
 
+  /** Takes another browser's newer weights (web sync). */
+  adopt(remote: Partial<TunerState>) {
+    if (!remote.m || typeof remote.updatedAt !== 'number' || remote.updatedAt <= state.updatedAt) return
+    const m = { ...state.m }
+    for (const k of SIGNALS) { const v = Number(remote.m[k]); if (Number.isFinite(v)) m[k] = Math.min(2.5, Math.max(0.4, v)) }
+    state = { m, plays: Number(remote.plays) || state.plays, finished: Number(remote.finished) || state.finished, skipped: Number(remote.skipped) || state.skipped, updatedAt: remote.updatedAt }
+    ls.set(KEY, state)
+    listeners.forEach((l) => l())
+  },
+
   reset() {
     state = fresh()
     ls.set(KEY, state)

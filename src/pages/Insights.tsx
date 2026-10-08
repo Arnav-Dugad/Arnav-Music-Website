@@ -14,6 +14,7 @@ import { likedIds, liveEvents, useLibrary } from '../state/library'
 import { trackRegistry } from '../state/tracks'
 import { player } from '../state/player'
 import { coListenedArtists } from '../services/recs'
+import { DimHeatmap } from '../components/DimHeatmap'
 
 type Period = 'week' | 'month' | 'year' | 'all'
 const DAY = 86_400_000
@@ -86,7 +87,7 @@ export default function Insights() {
 
   return (
     <div className="page insights">
-      <PageHeader eyebrow="Taste DNA" title={persona.title} subtitle={persona.line} actions={<button className="btn btn-secondary btn-sm" onClick={exportCsv}><Icon name="download" size={15} /> Export CSV</button>} />
+      <PageHeader eyebrow="Taste DNA" title={persona.title} subtitle={persona.line} actions={<div className="row" style={{ gap: 8 }}><button className="btn btn-primary btn-sm" onClick={() => nav('/wrapped')}><Icon name="story" size={15} /> Your month, wrapped</button><button className="btn btn-secondary btn-sm" onClick={() => nav('/wall')}><Icon name="wall" size={15} /> Album wall</button><button className="btn btn-secondary btn-sm" onClick={exportCsv}><Icon name="download" size={15} /> Export CSV</button></div>} />
 
       <div className="row" style={{ marginTop: 22 }}>
         <Segmented id="period" value={period} onChange={setPeriod} options={[{ value: 'week', label: 'Week' }, { value: 'month', label: 'Month' }, { value: 'year', label: 'Year' }, { value: 'all', label: 'All time' }]} />
@@ -131,6 +132,11 @@ export default function Insights() {
           <Gauge value={d.profile.skipRate} label="Skips" sub="Skipped early" />
           {d.discovery != null && <Gauge value={d.discovery} label="This week" sub="Listening that was new" />}
         </div>
+      </section>
+
+      <section className="section">
+        <div className="section-head"><div><h2>By film, era and composer</h2><div className="t-sub">The last 12 months — what you played, grouped</div></div></div>
+        <DimHeatmap events={liveEvents(events)} />
       </section>
 
       <section className="section">

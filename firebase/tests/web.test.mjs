@@ -77,6 +77,23 @@ test('web: settings records the Android app reads (create + update, allowlisted 
   await assertFails(push('s_youtubeKey', '"secret"'))
 })
 
+test('web: w_* records (automix, lyric fixes, settings, library, tuner) — own account only', async () => {
+  const db = env.authenticatedContext('alice').firestore()
+  const push = (id, value, kind = 'web', uid = 'alice', d = db) => runTransaction(d, async (tx) => {
+    const ref = doc(d, `users/${uid}/liveRecords`, id)
+    const ex = await tx.get(ref)
+    tx.set(ref, { kind, value, revision: Number(ex.exists() ? ex.data().revision ?? 0 : 0) + 1, deleted: false, deviceId, updatedAt: serverTimestamp(), schema: 1 })
+  })
+  for (const id of ['w_automix', 'w_lyrics', 'w_settings', 'w_library', 'w_tuner']) await assertSucceeds(push(id, JSON.stringify({ at: now, data: {} })))
+  await assertSucceeds(push('w_lyrics', JSON.stringify({ at: now + 1, data: { 'yt:4NRXx6U8ABQ': { choice: 'lrclib:1', offsetMs: 1200, at: now } } })))
+  await assertFails(push('w_Bad-id', '{}'))
+  await assertFails(push('x_lyrics', '{}'))
+  await assertFails(push('w_lyrics', 'x'.repeat(200001)))
+  await assertFails(push('w_lyrics', '{}', 'setting'))
+  const bob = env.authenticatedContext('bob').firestore()
+  await assertFails(push('w_lyrics', '{}', 'web', 'alice', bob))
+})
+
 test('hardening: rejects malformed like ids, mismatched tracks and bad playlist ids', async () => {
   const db = env.authenticatedContext('alice').firestore()
   await assertFails(setDoc(doc(db, 'users/alice/likes/local:1234'), like('local:1234', null)))

@@ -210,6 +210,8 @@ export function CommandPalette() {
       { id: 'lib', group: 'Go to', icon: 'library', label: 'Library', run: go('/library') },
       { id: 'liked', group: 'Go to', icon: 'heartFill', label: 'Liked Songs', run: go('/playlist/liked') },
       { id: 'dna', group: 'Go to', icon: 'chart', label: 'Taste DNA', run: go('/insights') },
+      { id: 'wrapped', group: 'Go to', icon: 'story', label: 'Your month, wrapped', run: go('/wrapped') },
+      { id: 'wall', group: 'Go to', icon: 'wall', label: 'Album wall', hint: '3D', run: go('/wall') },
       { id: 'set', group: 'Go to', icon: 'gear', label: 'Settings', run: go('/settings') },
       { id: 'theme', group: 'Settings', icon: s.themeMode === 'light' ? 'moon' : 'sun', label: s.themeMode === 'light' ? 'Switch to dark appearance' : 'Switch to light appearance', run: () => setThemeWithReveal(s.themeMode === 'light' ? 'dark' : 'light') },
       { id: 'keys', group: 'Settings', icon: 'keyboard', label: 'Keyboard shortcuts', hint: '?', run: () => ui().set({ shortcutsOpen: true }) },
@@ -267,7 +269,7 @@ export function CommandPalette() {
           <motion.div className="palette glass-thick" initial={{ opacity: 0, y: -14, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -10, scale: 0.98 }} transition={spring} onClick={(e) => e.stopPropagation()}>
             <div className="palette-input">
               <Icon name="search" size={19} />
-              <input ref={inputRef} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onKey} placeholder="Search songs, commands, moments — or ask Arnav AI" aria-label="Command palette" />
+              <input ref={inputRef} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onKey} placeholder="Go to a singer, album, film or mood — search songs or ask Arnav AI" aria-label="Command palette" />
               <span className="kbd">esc</span>
             </div>
             <div className="palette-list" role="listbox">
