@@ -220,7 +220,9 @@ function NowPlayingView({ track }: { track: Track }) {
   const [sleepOpen, setSleepOpen] = useState(false)
   const idleTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const close = () => player().setExpanded(false)
-  const showVideo = mode === 'VIDEO'
+  // An audio upload (a Topic "art track") is only the cover as a video: show the real artwork instead.
+  const artTrack = track?.variant === 'SONG' || /- Topic$/i.test(track?.channelTitle ?? '')
+  const showVideo = mode === 'VIDEO' && !artTrack
   const dragControls = useDragControls()
 
   useEffect(() => {
@@ -286,14 +288,23 @@ function NowPlayingView({ track }: { track: Track }) {
             <Segmented id="np-mode" size="sm" value={mode} onChange={(m) => void setMode(m)} options={[{ value: 'SONG', label: 'Song' }, { value: 'VIDEO', label: resolving ? <><Spinner size={11} /> Video</> : 'Video' }]} />
           </div>
           <button className="icon-btn" aria-label="Send to friends" title="Send to friends" onClick={() => useSendSheet.getState().open(track)}><Icon name="send" size={18} /></button>
-          <button className="icon-btn" aria-label="Continue on your phone" title="Continue on your phone" onClick={() => ui().set({ phoneOpen: true })}><Icon name="phone" size={19} /></button>
+          <button className="icon-btn np-phone" aria-label="Continue on your phone" title="Continue on your phone" onClick={() => ui().set({ phoneOpen: true })}><Icon name="phone" size={19} /></button>
           <button className="icon-btn" aria-label="More" onClick={(e) => openTrackMenu(e, track)}><Icon name="more" size={20} /></button>
         </div>
       </header>
 
       <div className="np-body">
         <section className="np-stage">
-          <Cover track={track} playing={playing} showVideo={showVideo} compact={split} />
+          <div className="np-cover-wrap">
+            <Cover track={track} playing={playing} showVideo={showVideo} compact={split} />
+            <AnimatePresence>
+              {mode === 'VIDEO' && artTrack && (
+                <motion.div className="np-video-note glass-thin" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }}>
+                  {resolving ? <><Spinner size={12} /> Finding the music video…</> : <><Icon name="info" size={13} /> No music video for this song</>}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
           <div className="np-info">
             <div className="np-meta">
               <AnimatePresence mode="wait" initial={false}>

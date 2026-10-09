@@ -17,8 +17,9 @@ export function SectionStrip() {
   if (!sections.length || !d || trackId !== current) return null
   return (
     <div className="sec-strip" role="group" aria-label="Song sections">
-      {sections.map((s, i) => (
-        <button key={i} className={`sec ${s.kind}`} style={{ left: `${(s.start / d) * 100}%`, width: `${Math.max(0.6, ((s.end - s.start) / d) * 100)}%` }}
+      {/* Sections are clamped to this upload's length (lyrics can be timed to a longer release). */}
+      {sections.filter((s) => s.start < d - 500).map((s, i) => (
+        <button key={i} className={`sec ${s.kind}`} style={{ left: `${(s.start / d) * 100}%`, width: `${Math.max(0.6, ((Math.min(s.end, d) - s.start) / d) * 100)}%` }}
           onClick={() => player().seek(Math.max(0, s.start - 200))} aria-label={`${SECTION_LABEL[s.kind]} at ${fmt(s.start)}`} title={`${SECTION_LABEL[s.kind]} · ${fmt(s.start)}`} />
       ))}
     </div>

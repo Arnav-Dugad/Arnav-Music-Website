@@ -3,7 +3,9 @@ import { currentTrack, player, usePlayer, useProgress, type QueueItem } from '..
 import { lib } from '../state/library'
 import { defaultAutomix, settings, type AutomixStyle } from '../state/settings'
 import { prefs } from '../state/prefs'
-import { ls } from '../lib/idb'
+import { idbGet, idbSet, ls } from '../lib/idb'
+import { ytQuotaState } from '../lib/youtube'
+import { remember } from '../state/tracks'
 import { artistKey, type MediaVariant, type Track } from '../lib/types'
 import { alternativeUpload, radioFor } from '../services/recs'
 import { artworkFor } from '../lib/classify'
@@ -415,30 +417,70 @@ export async function rescue(auto = false): Promise<boolean> {
 }
 
 /** Song/Video switch (like YouTube Music). Keeps your position. */
-export async function setMode(mode: MediaVariant) {
+/**
+ * Song / Video, like YouTube Music: Song shows the artwork, Video plays the song's real music
+ * video. An audio upload (a Topic "art track" is just the cover as a video) is swapped for the
+ * official music video; a music video is swapped for the audio release in Song mode when one
+ * exists. Each pair is found once per browser (and the edge cache shares the search).
+ */
+export async function setMode(mode: MediaVariant, quiet = false) {
   const p = player()
-  if (p.mode === mode) return
-  p.patch({ mode })
+  if (p.mode !== mode) p.patch({ mode })
   const t = currentTrack()
-  if (!t || t.variant == null || t.variant === mode) return
-  const paired = altPairs.get(t.id)
-  if (paired) {
-    p.replaceCurrent(paired)
-    return
+  if (!t) return
+  // Already the right kind of upload (an unknown kind counts as a video only when it isn't an art track).
+  if (t.variant === mode || (mode === 'VIDEO' && t.variant == null && !/- Topic$/i.test(t.channelTitle ?? ''))) return
+  if (mode === 'SONG' && t.variant == null) return
+  const alt = await counterpart(t, mode)
+  if (currentTrack()?.id !== t.id || player().mode !== mode) return
+  if (alt) { player().replaceCurrent(alt); return }
+  if (mode === 'VIDEO') {
+    noVideo.add(t.id)
+    // You asked for the video: say so and go back to Song. Automatic switches just show the artwork.
+    if (!quiet) { player().patch({ mode: 'SONG' }); toast('This song has no music video — showing the artwork') }
+  } else if (!quiet) toast('No audio-only upload found — showing the artwork over the video’s sound')
+}
+
+/** Songs known to have no music video (Video mode shows their artwork instead of asking again). */
+const noVideo = new Set<string>()
+export const hasNoVideo = (id: string) => noVideo.has(id)
+
+async function counterpart(t: Track, mode: MediaVariant): Promise<Track | null> {
+  const paired = altPairs.get(`${t.id}|${mode}`)
+  if (paired) return paired
+  const key = `alt|v2|${t.id}|${mode}`
+  const saved = await idbGet<{ alt: Track | null; at: number }>(key, 'cache')
+  if (saved && (saved.alt || Date.now() - saved.at < 3 * 86_400_000)) {
+    if (saved.alt) { remember(saved.alt); altPairs.set(`${t.id}|${mode}`, saved.alt); altPairs.set(`${saved.alt.id}|${t.variant ?? (mode === 'VIDEO' ? 'SONG' : 'VIDEO')}`, t) }
+    return saved.alt
   }
-  p.patch({ resolvingMode: true })
+  player().patch({ resolvingMode: true })
   try {
-    const alt = await alternativeUpload(t, mode, failedRefs)
-    if (alt && currentTrack()?.id === t.id && alt.variant === mode) {
-      altPairs.set(t.id, alt)
-      altPairs.set(alt.id, t)
-      player().replaceCurrent(alt)
-    } else if (!alt) {
-      toast(mode === 'SONG' ? 'No audio-only upload found — showing artwork' : 'No music video found for this song')
+    const alt = await alternativeUpload(t, mode, failedRefs).catch(() => null)
+    const ok = alt && alt.variant === mode ? alt : alt && mode === 'VIDEO' && alt.variant == null && !/- Topic$/i.test(alt.channelTitle ?? '') ? { ...alt, variant: 'VIDEO' as const } : null
+    if (ok) {
+      altPairs.set(`${t.id}|${mode}`, ok)
+      altPairs.set(`${ok.id}|${t.variant ?? 'SONG'}`, t)
     }
+    // A quota or network failure isn't "no video": only real answers are remembered.
+    if (alt !== undefined && ytQuotaState() !== 'EXHAUSTED') void idbSet(key, { alt: ok, at: Date.now() }, 'cache')
+    return ok
   } finally {
     player().patch({ resolvingMode: false })
   }
+}
+
+/** In Video mode every new song switches to its music video — when Now Playing is on screen. */
+let autoVideoTimer: ReturnType<typeof setTimeout> | null = null
+function autoVideo() {
+  if (autoVideoTimer) clearTimeout(autoVideoTimer)
+  autoVideoTimer = setTimeout(() => {
+    const p = player()
+    const t = currentTrack()
+    if (p.mode !== 'VIDEO' || !t || t.variant === 'VIDEO' || noVideo.has(t.id)) return
+    if (!p.expanded && !(settings().dockedPlayer && matchMedia('(min-width: 1024px)').matches)) return
+    void setMode('VIDEO', true)
+  }, 700)
 }
 
 async function maybeRadio() {
@@ -587,9 +629,10 @@ export async function startController(hostA: HTMLElement, hostB: HTMLElement) {
 
   usePlayer.subscribe((st, prev) => {
     if (st.queue !== prev.queue || st.index !== prev.index) {
-      if (st.queue[st.index]?.key !== prev.queue[prev.index]?.key) radioTried = new Set([...radioTried].slice(-50))
+      if (st.queue[st.index]?.key !== prev.queue[prev.index]?.key) { radioTried = new Set([...radioTried].slice(-50)); autoVideo() }
       syncTrack(prev.isPlaying)
     }
+    if (st.expanded && !prev.expanded) autoVideo()
     if (st.wantPlaying !== prev.wantPlaying && yt) {
       if (st.wantPlaying) {
         if (!currentKey && st.queue[st.index]) syncTrack(false)

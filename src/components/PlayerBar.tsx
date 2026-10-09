@@ -151,6 +151,10 @@ export function MiniPlayer() {
   return (
     <motion.div
       className="mini glass-thick"
+      role="button"
+      tabIndex={0}
+      aria-label={`Open Now Playing: ${track.title}`}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); player().setExpanded(true) } }}
       initial={{ y: 100, opacity: 0 }}
       animate={{ y: expanded ? 100 : 0, opacity: expanded ? 0 : 1 }}
       transition={spring}

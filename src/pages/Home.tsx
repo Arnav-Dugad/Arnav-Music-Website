@@ -80,7 +80,7 @@ function Hero() {
         <h1 className="t-hero">{greeting(hour)}{name ? <>, <span className="gradient-text">{name}</span></> : ''}.</h1>
         <form className="ask glass" onSubmit={(e) => { e.preventDefault(); nav(q.trim() ? `/ai?q=${encodeURIComponent(q.trim())}` : '/ai') }}>
           <Icon name="sparkles" size={18} className="ask-icon" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ask Arnav AI — “45 minutes of upbeat coding music”" aria-label="Ask Arnav AI" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={matchMedia('(max-width: 700px)').matches ? 'Ask Arnav AI for a vibe…' : 'Ask Arnav AI — “45 minutes of upbeat coding music”'} aria-label="Ask Arnav AI" />
           <button type="submit" className="btn btn-primary btn-sm">Create</button>
         </form>
         <div className="hero-chips">

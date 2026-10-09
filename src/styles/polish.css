@@ -114,3 +114,46 @@ button:disabled, .btn:disabled, .chip:disabled { cursor: not-allowed; }
 @media (max-width: 700px) { .page.center { padding-top: 20px; } }
 /* Friends setup: the input and button line up on phones too. */
 @media (max-width: 700px) { .fr-setup .field, .fr-setup .btn { height: 52px; width: 100%; justify-content: center; } }
+
+/* Video mode on an audio-only upload: the artwork stays, with a quiet note. */
+.np-cover-wrap { position: relative; width: 100%; display: grid; place-items: center; }
+.np-video-note { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 99px; font-size: 12.5px; font-weight: 600; color: rgba(255,255,255,.9); white-space: nowrap; z-index: 3; pointer-events: none; }
+
+/* ── Scrollbars that don't bleed into the design ───────────────────────── */
+/* Thin and invisible until you hover the area that scrolls (Chrome, Edge, Firefox). */
+.main-scroll, .dock-panel *, .lyr.plain, .sb-playlists, .sheet, .q-list { scrollbar-width: thin; scrollbar-color: transparent transparent; transition: scrollbar-color .3s; }
+.main-scroll:hover, .dock-panel *:hover, .lyr.plain:hover, .sb-playlists:hover, .sheet:hover, .q-list:hover { scrollbar-color: rgba(255,255,255,.16) transparent; }
+:root[data-theme='light'] .main-scroll:hover, :root[data-theme='light'] .sb-playlists:hover { scrollbar-color: rgba(0,0,0,.18) transparent; }
+/* Lyrics never show a scrollbar at all — they're scrolled by the song (and by touch / wheel). */
+.lyr, .lyr.plain, .cine .lyr { scrollbar-width: none; }
+.lyr::-webkit-scrollbar, .lyr.plain::-webkit-scrollbar { display: none; }
+
+/* ── Docked Now Playing ───────────────────────────────────────────────── */
+/* The player bar stops at the dock, so the dock uses its full height. */
+.dock-inner { padding: 16px 18px calc(18px + env(safe-area-inset-bottom)); }
+.dock .lyr-bar { gap: 8px; row-gap: 8px; padding-top: 12px; }
+.dock .lyr-bar > .grow { flex: 1 1 0; min-width: 0; }
+.dock .lyr-bar .lyr-select { max-width: 132px; }
+.dock .lyr.plain { padding-right: 4px; }
+/* The page and the dock meet on a hairline, not a gap. */
+.app.docked .main-scroll { box-shadow: inset -1px 0 0 rgba(255,255,255,.04); }
+
+/* ── Phones: nothing bleeds between the mini player and the tab bar ────── */
+@media (max-width: 1023px) {
+  .app.mobile.has-track::after {
+    content: ''; position: fixed; left: 0; right: 0; bottom: 0; z-index: 29; pointer-events: none;
+    height: calc(var(--tabbar-h) + var(--player-h) + 26px + env(safe-area-inset-bottom));
+    background: linear-gradient(to top, var(--bg) 0%, var(--bg) 72%, color-mix(in srgb, var(--bg) 70%, transparent) 86%, transparent);
+  }
+  .app.mobile.onboarding::after { display: none; }
+}
+@media (hover: none) { .main-scroll { scrollbar-width: none; } .main-scroll::-webkit-scrollbar { display: none; } }
+
+/* ── Now Playing on phones ─────────────────────────────────────────────── */
+.sec-strip { overflow: hidden; border-radius: 3px; }
+@media (max-width: 1023px) {
+  .np-top .np-phone { display: none; }
+  .np-top { padding-top: calc(env(safe-area-inset-top) + 8px); height: 76px; }
+  .np-grabber { top: calc(env(safe-area-inset-top) + 4px); }
+  .np-top .np-mode { margin-top: 4px; }
+}

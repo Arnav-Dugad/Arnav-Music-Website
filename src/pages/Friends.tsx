@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'motion/react'
 import { Icon } from '../components/Icon'
-import { Artwork, Empty, Notice, PageHeader, Segmented, SkeletonRows, Spinner } from '../components/ui'
+import { Artwork, Empty, Eq, Notice, PageHeader, Segmented, SkeletonRows, Spinner } from '../components/ui'
 import { Qr } from '../components/PhoneLink'
 import { Avatar, AvatarStack, NowCard, useListeningNow } from '../components/Social'
 import { toast } from '../state/ui'
@@ -32,10 +32,20 @@ export default function FriendsPage() {
   if (!me) return <Setup inviteCode={code ?? null} />
 
   return (
-    <div className="page friends">
-      <PageHeader eyebrow="Friends" title="Music is better together." subtitle="See what your friends play, listen along in one tap, and send each other songs." />
-      {code && <InviteCard code={code} />}
-      <MyCard />
+    <div className="page friends fr-page">
+     <div className="fr-layout">
+      <header className="fr-head">
+        <div className="t-eyebrow">Friends</div>
+        <h1 className="t-large">Music is better together.</h1>
+        <p className="t-sub">See what your friends play, listen along in one tap, and send each other songs.</p>
+      </header>
+      <aside className="fr-rail">
+        {code && <InviteCard code={code} />}
+        <MyCard />
+        <AddFriend />
+        <Requests />
+      </aside>
+      <div className="fr-main">
       <ListeningNow />
       <div className="fr-tabs">
         <Segmented id="fr-tab" value={tab} onChange={setTab} options={[
@@ -53,6 +63,8 @@ export default function FriendsPage() {
           {tab === 'charts' && <ChartsTab />}
         </motion.div>
       </AnimatePresence>
+      </div>
+     </div>
     </div>
   )
 }
@@ -127,84 +139,114 @@ function MyCard() {
   const nav = useNavigate()
   const me = useSocial((s) => s.me)!
   const connected = useSocial((s) => s.connected)
+  const friends = useSocial((s) => s.friends.length)
+  const live = useListeningNow().filter((f) => f.now?.playing).length
   const [qr, setQr] = useState(false)
   const link = inviteLink(me.code)
   const share = async () => {
-    const text = `Add me on Arnav Music — let’s listen together 🎧`
+    const text = 'Add me on Arnav Music — let’s listen together 🎧'
     if (navigator.share) await navigator.share({ title: 'Arnav Music', text, url: link }).catch(() => undefined)
     else { await navigator.clipboard.writeText(link).catch(() => undefined); toast('Invite link copied') }
   }
   return (
-    <section className="fr-me glass">
-      <button className="fr-me-id" onClick={() => nav(`/u/${me.handle}`)}>
-        <Avatar p={me} size={58} ring />
+    <section className="fr-me glass" style={{ ['--c' as string]: me.color }}>
+      <div className="fr-me-glow" aria-hidden />
+      <button className="fr-me-id" onClick={() => nav(`/u/${me.handle}`)} aria-label="Your profile">
+        <Avatar p={me} size={56} ring />
         <span className="col" style={{ gap: 2, minWidth: 0 }}>
-          <span className="t-title ellipsis">{me.name}</span>
-          <span className="t-caption ellipsis">@{me.handle} · <span className={`fr-live ${connected ? 'on' : ''}`}>{connected ? 'Live' : 'Connecting…'}</span></span>
+          <span className="fr-me-name ellipsis">{me.name}</span>
+          <span className="t-caption ellipsis">@{me.handle}</span>
         </span>
+        <span className={`fr-live ${connected ? 'on' : ''}`}><i />{connected ? 'Live' : 'Connecting'}</span>
       </button>
-      <div className="fr-me-actions">
-        <button className="btn btn-primary btn-sm" onClick={() => void share()}><Icon name="share" size={14} /> Invite friends</button>
-        <button className={`btn btn-secondary btn-sm ${qr ? 'on' : ''}`} onClick={() => setQr(!qr)}><Icon name="grid" size={14} /> QR</button>
-        <PrivacyPicker />
+      <div className="fr-stats">
+        <div><b>{friends}</b><span>friend{friends === 1 ? '' : 's'}</span></div>
+        <div><b>{live}</b><span>listening now</span></div>
       </div>
-      <AnimatePresence>
+      <div className="fr-me-actions">
+        <button className="btn btn-primary" onClick={() => void share()}><Icon name="userPlus" size={15} /> Invite friends</button>
+        <button className={`icon-btn fr-qr-btn ${qr ? 'on' : ''}`} aria-label="Show QR code" aria-pressed={qr} onClick={() => setQr(!qr)}><Icon name="grid" size={17} /></button>
+        <button className="icon-btn fr-qr-btn" aria-label="Copy invite link" onClick={() => { void navigator.clipboard.writeText(link); toast('Invite link copied') }}><Icon name="link" size={17} /></button>
+      </div>
+      <AnimatePresence initial={false}>
         {qr && (
-          <motion.div className="fr-qr" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}>
+          <motion.div className="fr-qr" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ type: 'spring', stiffness: 320, damping: 32 }}>
             <div className="fr-qr-inner">
-              <Qr text={link} />
-              <div className="col" style={{ gap: 6 }}>
+              <div className="fr-qr-code"><Qr text={link} /></div>
+              <div className="col" style={{ gap: 4, minWidth: 0 }}>
                 <b>Scan to add {me.name.split(' ')[0]}</b>
-                <span className="t-caption">Anyone who opens this becomes your friend.</span>
+                <span className="t-caption">Whoever opens it becomes your friend.</span>
                 <code className="fr-link ellipsis">{link.replace(/^https?:\/\//, '')}</code>
-                <button className="btn btn-ghost btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => { void navigator.clipboard.writeText(link); toast('Invite link copied') }}><Icon name="link" size={13} /> Copy link</button>
               </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
+      <PrivacyPicker />
     </section>
   )
 }
 
+/** Who sees what you play — three clear choices, always visible. */
 function PrivacyPicker() {
   const privacy = useSocial((s) => s.me?.privacy ?? 'friends')
-  const label = { everyone: 'Everyone sees', friends: 'Friends see', off: 'Private session' }[privacy]
-  const [open, setOpen] = useState(false)
   const pick = async (p: 'everyone' | 'friends' | 'off') => {
-    setOpen(false)
+    if (p === privacy) return
     try { await updateProfile({ privacy: p }); toast(p === 'off' ? 'Private session — friends won’t see what you play' : p === 'everyone' ? 'Anyone with your profile sees what you play' : 'Only friends see what you play') } catch { toast('Couldn’t change that') }
   }
   return (
     <div className="fr-privacy">
-      <button className={`btn btn-ghost btn-sm ${privacy === 'off' ? 'private' : ''}`} onClick={() => setOpen(!open)} aria-expanded={open}>
-        <Icon name={privacy === 'off' ? 'moon' : 'globe'} size={14} /> {label}
-      </button>
-      <AnimatePresence>
-        {open && (
-          <motion.div className="fr-privacy-menu glass-thick" initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -4 }}>
-            {([['friends', 'Friends', 'Friends see what you play'], ['everyone', 'Everyone', 'Anyone who opens your profile'], ['off', 'Private session', 'Nobody sees what you play']] as const).map(([v, t, d]) => (
-              <button key={v} className={privacy === v ? 'on' : ''} onClick={() => void pick(v)}>
-                <span className="col" style={{ gap: 0 }}><b>{t}</b><span className="t-caption">{d}</span></span>
-                {privacy === v && <Icon name="check" size={15} />}
-              </button>
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <div className="t-caption">Who sees what you play</div>
+      <Segmented id="fr-privacy" size="sm" value={privacy} onChange={(v) => void pick(v)} options={[
+        { value: 'friends', label: 'Friends' },
+        { value: 'everyone', label: 'Everyone' },
+        { value: 'off', label: <span className="row" style={{ gap: 5 }}><Icon name="moon" size={12} /> Private</span> },
+      ]} />
     </div>
+  )
+}
+
+function Requests() {
+  const nav = useNavigate()
+  const incoming = useSocial((s) => s.incoming)
+  const outgoing = useSocial((s) => s.outgoing)
+  if (!incoming.length && !outgoing.length) return null
+  return (
+    <section className="fr-panel glass">
+      <div className="fr-panel-head"><span className="t-title">Requests</span>{incoming.length > 0 && <span className="sc-badge">{incoming.length}</span>}</div>
+      <AnimatePresence initial={false}>
+        {incoming.map((p) => (
+          <motion.div key={p.id} layout className="fr-req" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, height: 0 }}>
+            <button className="fr-row-who" onClick={() => nav(`/u/${p.handle}`)}><Avatar p={p} size={38} /><span className="col" style={{ gap: 0, minWidth: 0 }}><b className="ellipsis">{p.name}</b><span className="t-caption ellipsis">@{p.handle}</span></span></button>
+            <button className="btn btn-primary btn-sm" onClick={() => void respond(p.id, true).then(() => toast(`You and ${p.name} are friends now 🎉`))}>Accept</button>
+            <button className="icon-btn sm" aria-label={`Decline ${p.name}`} onClick={() => void respond(p.id, false)}><Icon name="close" size={14} /></button>
+          </motion.div>
+        ))}
+      </AnimatePresence>
+      {outgoing.length > 0 && (
+        <div className="fr-sent">
+          <span className="t-caption">Waiting for</span>
+          <div className="fr-chips">{outgoing.map((p) => <button key={p.id} className="chip" onClick={() => nav(`/u/${p.handle}`)}><Avatar p={p} size={20} /> {p.name.split(' ')[0]}</button>)}</div>
+        </div>
+      )}
+    </section>
   )
 }
 
 function ListeningNow() {
   const live = useListeningNow()
-  if (!live.length) return null
+  const friends = useSocial((s) => s.friends.length)
+  if (!friends) return null
   return (
-    <section className="section">
-      <div className="section-head"><h2>Listening now</h2><span className="t-caption">{live.filter((f) => f.now?.playing).length} playing</span></div>
-      <div className="fr-now-row">
-        <AnimatePresence initial={false}>{live.map((f) => <NowCard key={f.id} f={f} />)}</AnimatePresence>
-      </div>
+    <section className="fr-section">
+      <div className="section-head"><h2>Listening now</h2>{live.length > 0 && <span className="t-caption">{live.filter((f) => f.now?.playing).length} playing</span>}</div>
+      {live.length ? (
+        <div className="fr-now-row">
+          <AnimatePresence initial={false}>{live.map((f) => <NowCard key={f.id} f={f} />)}</AnimatePresence>
+        </div>
+      ) : (
+        <div className="fr-quiet glass"><span className="fr-quiet-eq" aria-hidden><i /><i /><i /><i /></span><span className="t-sub">No one’s playing right now — they’ll show up here the moment they press play.</span></div>
+      )}
     </section>
   )
 }
@@ -213,63 +255,46 @@ function ListeningNow() {
 function FriendsTab() {
   const nav = useNavigate()
   const friends = useSocial((s) => s.friends)
-  const incoming = useSocial((s) => s.incoming)
-  const outgoing = useSocial((s) => s.outgoing)
   const presence = useSocial((s) => s.presence)
+  const me = useSocial((s) => s.me)
   const mine = useMemo(() => myTaste(), [])
   const sorted = useMemo(() => [...friends].sort((a, b) => Number(presence[b.id]?.online ?? b.online) - Number(presence[a.id]?.online ?? a.online) || (b.seen ?? 0) - (a.seen ?? 0)), [friends, presence])
+  if (!friends.length) {
+    const link = me ? inviteLink(me.code) : ''
+    return (
+      <div className="fr-empty glass">
+        <div className="fr-empty-art" aria-hidden>{['#ff5f6d', '#4cc9f0', '#ffd23f'].map((c) => <span key={c} style={{ ['--c' as string]: c }} />)}</div>
+        <div className="t-title">Bring your friends</div>
+        <p className="t-sub">Send your invite link — whoever opens it is added straight away. Or find someone by their @name.</p>
+        <div className="row" style={{ justifyContent: 'center', flexWrap: 'wrap' }}>
+          <button className="btn btn-primary" onClick={() => { if (navigator.share) void navigator.share({ title: 'Arnav Music', url: link }).catch(() => undefined); else { void navigator.clipboard.writeText(link); toast('Invite link copied') } }}><Icon name="share" size={15} /> Share invite link</button>
+        </div>
+      </div>
+    )
+  }
   return (
-    <div className="col" style={{ gap: 22 }}>
-      <AddFriend />
-      {incoming.length > 0 && (
-        <section>
-          <div className="section-head"><h2>Requests</h2></div>
-          <div className="fr-list">
-            <AnimatePresence initial={false}>
-              {incoming.map((p) => (
-                <motion.div key={p.id} layout className="fr-row glass" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, height: 0 }}>
-                  <button className="fr-row-who" onClick={() => nav(`/u/${p.handle}`)}><Avatar p={p} size={42} /><span className="col" style={{ gap: 0, minWidth: 0 }}><b className="ellipsis">{p.name}</b><span className="t-caption">@{p.handle} wants to be friends</span></span></button>
-                  <button className="btn btn-primary btn-sm" onClick={() => void respond(p.id, true).then(() => toast(`You and ${p.name} are friends now 🎉`))}>Accept</button>
-                  <button className="btn btn-ghost btn-sm" onClick={() => void respond(p.id, false)}>Decline</button>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </div>
-        </section>
-      )}
-      <section>
-        <div className="section-head"><h2>Your friends</h2><span className="t-caption">{friends.length}</span></div>
-        {!friends.length ? (
-          <Empty icon="users" title="No friends yet" body="Search for someone’s @name above, or send your invite link — they’re added the moment they open it." />
-        ) : (
-          <div className="fr-list">
-            {sorted.map((f) => {
-              const online = presence[f.id]?.online ?? f.online
-              const now = presence[f.id]?.now ?? f.now
-              const match = tasteMatch(mine, f.taste)
-              return (
-                <motion.button key={f.id} layout className="fr-row glass" onClick={() => nav(`/u/${f.handle}`)}>
-                  <Avatar p={f} size={44} online={online} />
-                  <span className="grow col" style={{ gap: 1, minWidth: 0, textAlign: 'left' }}>
-                    <b className="ellipsis">{f.name}</b>
-                    <span className="t-caption ellipsis">
-                      {now?.track && now.playing ? <><Icon name="headphones" size={11} /> {now.track.title} · {now.track.artist}</> : online ? 'Online' : f.seen ? `Active ${relative(f.seen)}` : `@${f.handle}`}
-                    </span>
-                  </span>
-                  {match != null && <span className="fr-match" title="Taste match" style={{ ['--m' as string]: match / 100 }}><span>{match}%</span></span>}
-                  <Icon name="chevronRight" size={16} className="subtle" />
-                </motion.button>
-              )
-            })}
-          </div>
-        )}
-      </section>
-      {outgoing.length > 0 && (
-        <section>
-          <div className="section-head"><h2>Sent requests</h2></div>
-          <div className="fr-chips">{outgoing.map((p) => <button key={p.id} className="chip" onClick={() => nav(`/u/${p.handle}`)}><Avatar p={p} size={20} /> {p.name} · pending</button>)}</div>
-        </section>
-      )}
+    <div className="fr-grid">
+      {sorted.map((f, i) => {
+        const online = presence[f.id]?.online ?? f.online
+        const now = presence[f.id]?.now ?? f.now
+        const match = tasteMatch(mine, f.taste)
+        const playing = !!now?.track && now.playing
+        return (
+          <motion.button key={f.id} layout className={`fr-card glass ${playing ? 'playing' : ''}`} onClick={() => nav(`/u/${f.handle}`)}
+            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 12) * 0.025 }} style={{ ['--c' as string]: f.color }}>
+            <Avatar p={f} size={48} online={online} />
+            <span className="fr-card-text">
+              <b className="ellipsis">{f.name}</b>
+              <span className="t-caption ellipsis">
+                {playing ? <><Eq playing /> {now!.track!.title}</> : online ? 'Online' : f.seen ? `Active ${relative(f.seen)}` : `@${f.handle}`}
+              </span>
+            </span>
+            {match != null
+              ? <span className="fr-match" title="Taste match" style={{ ['--m' as string]: match / 100 }}><span>{match}%</span></span>
+              : <Icon name="chevronRight" size={16} className="subtle" />}
+          </motion.button>
+        )
+      })}
     </div>
   )
 }
