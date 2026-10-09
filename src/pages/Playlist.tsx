@@ -20,6 +20,10 @@ import { player } from '../state/player'
 import { toast } from '../state/ui'
 import { dailyMixes } from '../services/recs'
 import { namePlaylist } from '../lib/aiFeatures'
+import { hasProfile, loadPubs, publicLink, publishPlaylist, unpublishPlaylist, useSocial } from '../services/social'
+import { useMusicVideos, videosReady } from '../services/musicVideos'
+import { setMode } from '../player/controller'
+import { useSettings } from '../state/settings'
 
 interface View {
   kind: 'liked' | 'local' | 'smart' | 'daily' | 'remote'
@@ -141,8 +145,14 @@ export default function PlaylistPage() {
             {p && <button className="icon-btn" aria-label="Edit details" title="Edit details" onClick={() => setEditOpen(true)}><Icon name="edit" size={18} /></button>}
             {p && view.tracks.length > 1 && <button className={`icon-btn ${reordering ? 'on' : ''}`} aria-label="Reorder" title="Reorder songs" onClick={() => setReordering((r) => !r)}><Icon name="drag" size={18} /></button>}
             <button className="icon-btn" aria-label="Download lyrics" title="Download lyrics for offline" disabled={!!lyricsJob || !view.tracks.length} onClick={() => void downloadLyrics()}>{lyricsJob ? <Spinner size={16} /> : <Icon name="lyrics" size={18} />}</button>
-            <button className="icon-btn" aria-label="Share" title="Copy link" onClick={() => { void navigator.clipboard?.writeText(location.href).then(() => toast('Link copied')) }}><Icon name="link" size={18} /></button>
+            {p ? (
+              <PublicButton id={id} title={view.title} description={view.description ?? null} tracks={view.tracks} art={p.artworkUrl ?? null} />
+            ) : (
+              <button className="icon-btn" aria-label="Share" title="Copy link" onClick={() => { void navigator.clipboard?.writeText(location.href).then(() => toast('Link copied')) }}><Icon name="link" size={18} /></button>
+            )}
           </div>
+          {p && <PublicBar id={id} />}
+          {(view.kind === 'local' || view.kind === 'liked') && view.tracks.length > 0 && <VideosLine tracks={view.tracks} title={view.title} id={id} />}
           {lyricsJob && <div className="t-caption" style={{ marginTop: 8 }}>Fetching lyrics {lyricsJob.done}/{lyricsJob.total}…</div>}
         </div>
       </motion.header>
@@ -217,5 +227,71 @@ function EditSheet({ open, onClose, id }: { open: boolean; onClose: () => void; 
       </form>
       <div className="t-caption" style={{ marginTop: 14 }}>Changes sync to your phone when you’re signed in.</div>
     </Sheet>
+  )
+}
+
+/** Copies a link, or opens the share sheet where there is one (phones). */
+async function shareLink(url: string, title: string) {
+  if (navigator.share && matchMedia('(pointer: coarse)').matches) { try { await navigator.share({ title, url }); return } catch { /* cancelled */ } }
+  await navigator.clipboard?.writeText(url).catch(() => undefined)
+  toast('Link copied — anyone with it can listen')
+}
+
+/** Make public / share: one of your playlists, as a link anyone can open. */
+function PublicButton({ id, title, description, tracks, art }: { id: string; title: string; description: string | null; tracks: Track[]; art: string | null }) {
+  const pub = useSocial((s) => s.pubs?.find((x) => x.src === id) ?? null)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => { if (useSocial.getState().pubs === null && hasProfile()) void loadPubs().catch(() => undefined) }, [])
+  const make = async () => {
+    if (!tracks.length) { toast('Add a few songs before making it public'); return }
+    setBusy(true)
+    try {
+      const pid = await publishPlaylist(id, { title, description, tracks, art })
+      await shareLink(publicLink(pid), title)
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Couldn’t make it public — try again')
+    } finally { setBusy(false) }
+  }
+  if (pub) return <button className="icon-btn on" aria-label="Share public link" title="Share public link" onClick={() => void shareLink(publicLink(pub.id), title)}><Icon name="share" size={18} /></button>
+  return (
+    <button className="btn btn-secondary pl-make-public" disabled={busy} onClick={() => void make()} title="Anyone with the link can listen">
+      {busy ? <Spinner size={14} /> : <Icon name="globe" size={16} />} Make public
+    </button>
+  )
+}
+
+/** Under a public playlist's buttons: it's public, the link, and a way back to private. */
+function PublicBar({ id }: { id: string }) {
+  const pub = useSocial((s) => s.pubs?.find((x) => x.src === id) ?? null)
+  const [busy, setBusy] = useState(false)
+  if (!pub) return null
+  return (
+    <motion.div className="pl-public" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
+      <span className="pl-public-badge"><Icon name="globe" size={13} /> Public</span>
+      <button className="pl-public-link ellipsis" title="Copy link" onClick={() => void shareLink(publicLink(pub.id), pub.title)}>{publicLink(pub.id).replace(/^https?:\/\//, '')}</button>
+      <span className="t-caption">Updates as you edit{pub.saves ? ` · saved by ${pub.saves}` : ''}</span>
+      <button className="link t-caption" disabled={busy} onClick={() => { setBusy(true); void unpublishPlaylist(id).then(() => toast('It’s private again — the link no longer works'), () => toast('Couldn’t change it — try again')).finally(() => setBusy(false)) }}>Make private</button>
+    </motion.div>
+  )
+}
+
+/** "Music videos: 34 of 50 ready · Play videos" — filled in automatically in the background. */
+function VideosLine({ tracks, title, id }: { tracks: Track[]; title: string; id: string }) {
+  useMusicVideos((s) => s.index)
+  const working = useMusicVideos((s) => s.working)
+  const on = useSettings((s) => s.autoVideos)
+  const { ready, total } = videosReady(tracks)
+  if (!on && !ready) return null
+  const play = () => {
+    player().play(tracks, 0, { context: title, contextId: id, shuffle: false })
+    player().setExpanded(true)
+    void setMode('VIDEO', true)
+  }
+  return (
+    <div className="pl-videos t-caption">
+      <Icon name="tv" size={14} />
+      <span>{ready === total ? `Music videos ready for all ${total} songs` : `Music videos ready for ${ready} of ${total} songs`}{ready < total && on ? (working ? ' · finding more…' : ' · more on the way') : ''}</span>
+      {ready > 0 && <button className="link" onClick={play}>Play as videos</button>}
+    </div>
   )
 }

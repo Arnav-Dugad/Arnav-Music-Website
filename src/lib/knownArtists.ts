@@ -1,5 +1,12 @@
 import { artistKey } from './types'
-import { ls } from './idb'
+
+/** localStorage when there is one (the browser); nothing on the edge server, which shares this file. */
+interface KeyValue { getItem(k: string): string | null; setItem(k: string, v: string): void; removeItem(k: string): void }
+const store = (): KeyValue | null => { try { return (globalThis as { localStorage?: KeyValue }).localStorage ?? null } catch { return null } }
+const ls = {
+  get<T>(k: string, fallback: T): T { try { const raw = store()?.getItem(k); return raw == null ? fallback : (JSON.parse(raw) as T) } catch { return fallback } },
+  set(k: string, v: unknown) { try { store()?.setItem(k, JSON.stringify(v)) } catch { /* storage full or blocked */ } },
+}
 
 /**
  * Names known to be artists — learned from YouTube "- Topic" channels (auto-generated, official),
@@ -10,7 +17,7 @@ import { ls } from './idb'
  */
 const KEY = 'arnav.knownArtists.v3'
 const FILMS_KEY = 'arnav.knownFilms.v1'
-try { localStorage.removeItem('arnav.knownArtists'); localStorage.removeItem('arnav.knownArtists.v2') } catch { /* storage blocked */ }
+try { store()?.removeItem('arnav.knownArtists'); store()?.removeItem('arnav.knownArtists.v2') } catch { /* storage blocked */ }
 const known = new Set<string>(ls.get<string[]>(KEY, []))
 const films = new Set<string>(ls.get<string[]>(FILMS_KEY, []))
 /** Server-learned names are kept in memory only (refreshed every few hours). */

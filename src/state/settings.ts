@@ -55,6 +55,8 @@ export interface Settings {
   weatherMoods: boolean
   aiPersonalization: boolean
   explanations: boolean
+  /** Look up the official music video for songs in your playlists and likes in the background. */
+  autoVideos: boolean
   dailyAiLimit: number
   // sources
   youtubeKey: string
@@ -108,6 +110,7 @@ export const DEFAULT_SETTINGS: Settings = {
   weatherMoods: false,
   aiPersonalization: true,
   explanations: true,
+  autoVideos: true,
   dailyAiLimit: 40,
   youtubeKey: '',
   youtubeDailyBudget: 10000,

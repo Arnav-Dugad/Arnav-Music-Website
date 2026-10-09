@@ -545,3 +545,19 @@ button.heat-cell:hover { outline: 2px solid var(--text); outline-offset: 1px; }
 .together-join-music .t-caption { color: inherit; opacity: .85; }
 .together-join-icon { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: rgba(255,255,255,.22); flex: none; }
 .pl-more { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 18px 0 6px; }
+
+/* Public playlists */
+.pl-make-public { height: 40px; gap: 7px; }
+.pl-public { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 14px; padding: 8px 10px 8px 8px; border-radius: 16px; background: var(--surface-2); box-shadow: inset 0 0 0 0.5px var(--hairline); max-width: 640px; }
+.pl-public-badge { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px; border-radius: 12px; font-size: 12px; font-weight: 750; letter-spacing: 0.02em; color: var(--on-accent); background: var(--accent); text-transform: none; }
+.pl-public-link { min-width: 0; max-width: 260px; font-size: 13.5px; font-weight: 650; color: var(--text); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--text) 30%, transparent); text-underline-offset: 3px; }
+.pub-owner { display: inline-flex; align-items: center; gap: 9px; margin-top: 12px; padding: 4px 12px 4px 4px; border-radius: 999px; color: var(--text); background: var(--surface-2); }
+.pub-owner:hover { background: var(--surface-3); }
+.pub-owner b { font-weight: 700; }
+.pf-pubs { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; }
+.pf-pub { display: flex; flex-direction: column; gap: 3px; min-width: 0; text-align: left; color: var(--text); }
+.pf-pub-art { width: 100%; aspect-ratio: 1; border-radius: 14px; overflow: hidden; margin-bottom: 6px; }
+.pf-pub b { font-size: 14.5px; font-weight: 680; }
+@media (max-width: 700px) { .pf-pubs { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; } }
+.pl-videos { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 12px; }
+.pl-videos .link { font-weight: 700; color: var(--text); }

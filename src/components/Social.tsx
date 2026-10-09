@@ -15,10 +15,12 @@ import type { Track } from '../lib/types'
 
 export function Avatar({ p, size = 40, ring = false, online }: { p: Pick<Person, 'name' | 'avatar' | 'color'>; size?: number; ring?: boolean; online?: boolean }) {
   const [broken, setBroken] = useState(false)
+  // While the live connection is coming back, a dot shows the last state we knew and breathes gently.
+  const reconnecting = useSocial((x) => !!x.me && !x.connected)
   return (
     <span className={`sc-avatar ${ring ? 'ring' : ''}`} style={{ width: size, height: size, ['--c' as string]: p.color, fontSize: size * 0.42 }}>
       {p.avatar && !broken ? <img src={p.avatar} alt="" referrerPolicy="no-referrer" onError={() => setBroken(true)} /> : <span>{(p.name.trim()[0] ?? '♪').toUpperCase()}</span>}
-      {online !== undefined && <i className={`sc-dot ${online ? 'on' : ''}`} aria-label={online ? 'Online' : 'Offline'} />}
+      {online !== undefined && <i className={`sc-dot ${online ? 'on' : ''} ${reconnecting ? 'reconnecting' : ''}`} aria-label={reconnecting ? 'Reconnecting…' : online ? 'Online' : 'Offline'} title={reconnecting ? 'Reconnecting…' : undefined} />}
     </span>
   )
 }

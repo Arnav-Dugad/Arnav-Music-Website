@@ -187,6 +187,7 @@ function Playback() {
       <Bool k="verifiedOnly" title="Verified music only" sub="Official uploads only: YouTube Topic art tracks, VEVO, record labels, artists' own channels and established channels. Covers, karaoke, reactions, slowed/8D edits and Shorts are always left out." />
       <Bool k="endlessRadio" title="Endless radio" sub="When the queue ends, keep playing similar songs" />
       <Bool k="autoReplaceUnavailable" title="Rescue unplayable videos" sub="Automatically find another upload when one can’t be embedded" />
+      <Bool k="autoVideos" title="Music videos for my library" sub="Find the official music video of every song in your playlists and Liked Songs in the background, so Video mode switches instantly. Shared with all listeners, so it costs almost nothing." />
       <Bool k="crossfadeOnSkip" title="Smooth transitions" sub="Fade out and in when you skip" />
       <Bool k="explanations" title="Show why" sub="One honest line under each recommendation" />
     </Group>

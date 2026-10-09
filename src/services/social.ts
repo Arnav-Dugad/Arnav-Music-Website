@@ -42,10 +42,16 @@ interface SocialStore {
   listeners: Person[]
   inbox: InboxItem[] | null
   sent: InboxItem[]
+  /** Your public playlists (`src` = the playlist's id in your library). null until loaded. */
+  pubs: PublicSummary[] | null
 }
 
+/** A public playlist, as listed on a profile or in your own library. */
+export interface PublicSummary { id: string; src: string; title: string; count: number; art: string | null; updated: number; saves: number }
+export interface PublicPlaylist { id: string; title: string; description: string | null; tracks: SocialTrack[]; count: number; art: string | null; created: number; updated: number; saves: number }
+
 export const useSocial = create<SocialStore>()(() => ({
-  status: 'none', me: null, friends: [], incoming: [], outgoing: [], unread: 0, presence: {}, connected: false, following: null, listeners: [], inbox: null, sent: [],
+  status: 'none', me: null, friends: [], incoming: [], outgoing: [], unread: 0, presence: {}, connected: false, following: null, listeners: [], inbox: null, sent: [], pubs: null,
 }))
 const st = () => useSocial.getState()
 
@@ -114,7 +120,29 @@ export function startSocial() {
   if (identity()) { useSocial.setState({ status: 'loading' }); void refresh().then(() => { connect(); void linkIfSignedIn() }) }
   useAuth.subscribe((s, p) => { if (s.status === 'signedIn' && p.status !== 'signedIn') void linkIfSignedIn() })
   watchPlayback()
+  watchPublicPlaylists()
   setInterval(() => void uploadTaste(), 30 * 60_000)
+}
+
+/** Keeps public copies in step with your playlists: edit a public playlist and its link updates. */
+function watchPublicPlaylists() {
+  const timers = new Map<string, ReturnType<typeof setTimeout>>()
+  if (identity()) void loadPubs().catch(() => undefined)
+  useLibrary.subscribe((s, prev) => {
+    if (s.playlists === prev.playlists) return
+    for (const pub of st().pubs ?? []) {
+      const now = s.playlists[pub.src]
+      const was = prev.playlists[pub.src]
+      if (!now || now === was) continue
+      if (now.deleted) { void unpublishPlaylist(pub.src).catch(() => undefined); continue }
+      clearTimeout(timers.get(pub.src))
+      timers.set(pub.src, setTimeout(() => {
+        const p = useLibrary.getState().playlists[pub.src]
+        if (!p || p.deleted) return
+        void publishPlaylist(pub.src, { title: p.name, description: p.description, art: p.artworkUrl, tracks: trackRegistry.many(p.trackIds) }).catch(() => undefined)
+      }, 5000))
+    }
+  })
 }
 
 async function linkIfSignedIn() {
@@ -140,8 +168,45 @@ export async function findByCode(code: string): Promise<PersonView | null> {
   return (await api<{ people: PersonView[] }>(`find?code=${encodeURIComponent(code)}`)).people[0] ?? null
 }
 export async function profileOf(handleOrId: string) {
-  return api<{ person: PersonView; recent: { at: number; track: SocialTrack }[]; mutual: number }>(`u/${encodeURIComponent(handleOrId)}`)
+  return api<{ person: PersonView; recent: { at: number; track: SocialTrack }[]; mutual: number; playlists?: PublicSummary[] }>(`u/${encodeURIComponent(handleOrId)}`)
 }
+
+// ── Public playlists ────────────────────────────────────────────────────────
+export const publicLink = (id: string) => `${location.origin}/p/${id}`
+export const pubFor = (src: string) => st().pubs?.find((p) => p.src === src) ?? null
+
+export async function loadPubs(): Promise<PublicSummary[]> {
+  if (!identity()) { useSocial.setState({ pubs: [] }); return [] }
+  const items = (await api<{ items: PublicSummary[] }>('pubs')).items
+  useSocial.setState({ pubs: items })
+  return items
+}
+
+/**
+ * Makes one of your playlists public (or updates its public copy). Without a Friends profile yet,
+ * one is created for you (linked to your account when you're signed in).
+ */
+export async function publishPlaylist(src: string, p: { title: string; description?: string | null; tracks: Track[]; art?: string | null }): Promise<string> {
+  if (!identity()) {
+    const name = useAuth.getState().user?.displayName?.trim() || 'Listener'
+    await createProfile(name)
+  }
+  const r = await api<{ id: string; updated: number }>('publish', { method: 'POST', body: { src, title: p.title, description: p.description ?? null, art: p.art ?? null, tracks: p.tracks.slice(0, 500).map(socialTrack) } })
+  const prev = (st().pubs ?? []).filter((x) => x.src !== src)
+  useSocial.setState({ pubs: [{ id: r.id, src, title: p.title, count: Math.min(500, p.tracks.length), art: p.art ?? p.tracks[0]?.artworkUrl ?? null, updated: r.updated, saves: pubFor(src)?.saves ?? 0 }, ...prev] })
+  return r.id
+}
+
+export async function unpublishPlaylist(src: string): Promise<void> {
+  const r = await api<{ items: PublicSummary[] }>('unpublish', { method: 'POST', body: { src } })
+  useSocial.setState({ pubs: r.items })
+}
+
+/** Anyone's public playlist, by its link id (no profile needed). */
+export async function publicPlaylist(id: string): Promise<{ playlist: PublicPlaylist; owner: Person }> {
+  return api<{ playlist: PublicPlaylist; owner: Person }>(`pl/${encodeURIComponent(id)}`)
+}
+export function markSaved(id: string) { if (identity()) void api('saved', { method: 'POST', body: { id } }).catch(() => undefined) }
 
 /** Sends a request (or accepts theirs). With an invite code you're friends straight away. */
 export async function addFriend(to: { id?: string; handle?: string; code?: string }): Promise<'friends' | 'requested'> {

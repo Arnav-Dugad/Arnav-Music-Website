@@ -71,6 +71,9 @@ export class SocialHub extends DurableObject<Env> {
     // One-time WebSocket tickets: the device key never travels in a URL. Stored (not in memory) so a
     // ticket still works if the hub sleeps between handing it out and the socket connecting.
     this.sql.exec(`CREATE TABLE IF NOT EXISTS tickets (t TEXT PRIMARY KEY, id TEXT NOT NULL, until INTEGER NOT NULL)`)
+    // Public playlists: a snapshot of one of your playlists that anyone with the link can open.
+    this.sql.exec(`CREATE TABLE IF NOT EXISTS pubs (id TEXT PRIMARY KEY, owner TEXT NOT NULL, src TEXT NOT NULL, title TEXT NOT NULL, description TEXT, tracks TEXT NOT NULL, count INTEGER NOT NULL, art TEXT, created INTEGER NOT NULL, updated INTEGER NOT NULL, saves INTEGER NOT NULL DEFAULT 0, UNIQUE (owner, src))`)
+    this.sql.exec(`CREATE INDEX IF NOT EXISTS pubs_owner ON pubs (owner, updated)`)
     // Keep-alive pings are answered without waking the hub (no duration billed, no cold start).
     this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('{"t":"ping"}', '{"t":"pong"}'))
   }
@@ -225,6 +228,8 @@ export class SocialHub extends DurableObject<Env> {
       try { body = text ? JSON.parse(text) : {} } catch { return json({ error: 'bad_json' }, 400) }
     }
     if (path === 'register' && request.method === 'POST') return this.register(body, request)
+    // A public playlist opens for anyone with the link: no profile needed.
+    if (request.method === 'GET' && path.startsWith('pl/')) return this.publicPlaylist(decodeURIComponent(path.slice(3)))
     const me = await this.auth(request)
     if (!me) return json({ error: 'unauthorized' }, 401)
     const seg = path.split('/')
@@ -253,6 +258,14 @@ export class SocialHub extends DurableObject<Env> {
         case 'GET feed': return this.feed(me)
         case 'GET charts': return this.charts(me)
         case 'POST delete': return this.deleteProfile(me)
+        case 'POST publish': return this.publish(me, body)
+        case 'POST unpublish': return this.unpublish(me, body)
+        case 'GET pubs': return json({ items: this.pubsOf(me.id) })
+        case 'POST saved': {
+          const id = clip(body.id, 16)
+          if (id && !this.limited(me.id, `save:${id}`, 1, DAY)) this.sql.exec('UPDATE pubs SET saves = saves + 1 WHERE id = ? AND owner != ?', id, me.id)
+          return json({ ok: true })
+        }
       }
     } catch (e) {
       return json({ error: 'failed', message: e instanceof Error ? e.message.slice(0, 160) : 'unknown' }, 500)
@@ -346,7 +359,9 @@ export class SocialHub extends DurableObject<Env> {
       ? this.sql.exec('SELECT at, track FROM plays WHERE user = ? ORDER BY at DESC LIMIT 30', r.id).toArray().map((x) => ({ at: Number(x.at), track: JSON.parse(String(x.track)) as SocialTrack }))
       : []
     const mutual = view.relation === 'me' ? 0 : this.friendIds(u.id).filter((f) => this.areFriends(f, r.id)).length
-    return json({ person: view, recent: (r.privacy === 'off' && view.relation !== 'me') ? [] : recent, mutual })
+    // Playlists they made public show to everyone, whatever their activity privacy.
+    const blocked = this.link(u.id, r.id)?.state === 'blocked'
+    return json({ person: view, recent: (r.privacy === 'off' && view.relation !== 'me') ? [] : recent, mutual, playlists: blocked ? [] : this.pubsOf(r.id) })
   }
 
   private target(body: Record<string, unknown>): UserRow | null {
@@ -469,6 +484,7 @@ export class SocialHub extends DurableObject<Env> {
     for (const t of ['DELETE FROM users WHERE id = ?', 'DELETE FROM keys WHERE id = ?', 'DELETE FROM plays WHERE user = ?', 'DELETE FROM now WHERE user = ?']) this.sql.exec(t, u.id)
     this.sql.exec('DELETE FROM links WHERE a = ? OR b = ?', u.id, u.id)
     this.sql.exec('DELETE FROM inbox WHERE to_id = ? OR from_id = ?', u.id, u.id)
+    this.sql.exec('DELETE FROM pubs WHERE owner = ?', u.id)
     for (const f of friends) this.push(f, { t: 'refresh' })
     for (const ws of this.ctx.getWebSockets(u.id)) { try { ws.close(1000, 'deleted') } catch { /* closed */ } }
     return json({ ok: true })
@@ -504,6 +520,55 @@ export class SocialHub extends DurableObject<Env> {
     const top = [...m.values()].sort((a, b) => b.who.size - a.who.size || b.plays - a.plays).slice(0, 30)
       .map((e) => ({ track: e.track, plays: e.plays, listeners: [...e.who].map((id) => byId.get(id)).filter(Boolean) }))
     return json({ items: top, people: people.length })
+  }
+
+  // ── Public playlists ──────────────────────────────────────────────────────
+  private pubsOf(owner: string) {
+    return this.sql.exec('SELECT id, src, title, count, art, updated, saves FROM pubs WHERE owner = ? ORDER BY updated DESC LIMIT 60', owner).toArray()
+      .map((r) => ({ id: String(r.id), src: String(r.src), title: String(r.title), count: Number(r.count), art: (r.art as string) ?? null, updated: Number(r.updated), saves: Number(r.saves) }))
+  }
+
+  /** Publishes (or updates) a snapshot of one of your playlists. `src` is the playlist's id in your library. */
+  private publish(u: UserRow, body: Record<string, unknown>): Response {
+    const src = clip(body.src, 80)
+    const title = clip(body.title, 100)
+    if (!src || !title) return json({ error: 'bad_request' }, 400)
+    if (this.limited(u.id, 'publish', 120, 3600_000)) return json({ error: 'slow_down', message: 'That’s a lot of updates — try again in a bit.' }, 429)
+    const tracks = (Array.isArray(body.tracks) ? body.tracks : []).slice(0, 500).map(track).filter((t): t is SocialTrack => !!t)
+    if (!tracks.length) return json({ error: 'empty', message: 'Add a few songs before making it public.' }, 400)
+    const description = clip(body.description, 300) || null
+    const art = typeof body.art === 'string' && ART.test(body.art) ? body.art.slice(0, 300) : tracks[0].artworkUrl
+    const now = Date.now()
+    const existing = this.sql.exec('SELECT id FROM pubs WHERE owner = ? AND src = ?', u.id, src).toArray()[0]
+    if (existing) {
+      this.sql.exec('UPDATE pubs SET title = ?, description = ?, tracks = ?, count = ?, art = ?, updated = ? WHERE id = ?', title, description, JSON.stringify(tracks), tracks.length, art, now, String(existing.id))
+      return json({ id: String(existing.id), updated: now })
+    }
+    const mine = Number(this.sql.exec('SELECT COUNT(*) AS c FROM pubs WHERE owner = ?', u.id).one().c)
+    if (mine >= 50) return json({ error: 'too_many', message: 'You can have up to 50 public playlists.' }, 400)
+    let id = rand(10)
+    while (this.sql.exec('SELECT 1 FROM pubs WHERE id = ?', id).toArray().length) id = rand(10)
+    this.sql.exec('INSERT INTO pubs (id, owner, src, title, description, tracks, count, art, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', id, u.id, src, title, description, JSON.stringify(tracks), tracks.length, art, now, now)
+    return json({ id, updated: now })
+  }
+
+  private unpublish(u: UserRow, body: Record<string, unknown>): Response {
+    const id = clip(body.id, 16)
+    const src = clip(body.src, 80)
+    if (id) this.sql.exec('DELETE FROM pubs WHERE id = ? AND owner = ?', id, u.id)
+    else if (src) this.sql.exec('DELETE FROM pubs WHERE src = ? AND owner = ?', src, u.id)
+    return json({ ok: true, items: this.pubsOf(u.id) })
+  }
+
+  private publicPlaylist(id: string): Response {
+    if (!/^[A-Z2-9]{10}$/.test(id)) return json({ error: 'not_found' }, 404)
+    const r = this.sql.exec('SELECT * FROM pubs WHERE id = ?', id).toArray()[0]
+    const owner = r ? this.user(String(r.owner)) : null
+    if (!r || !owner) return json({ error: 'not_found', message: 'This playlist isn’t public any more.' }, 404)
+    return json({
+      playlist: { id, title: String(r.title), description: (r.description as string) ?? null, tracks: JSON.parse(String(r.tracks)) as SocialTrack[], count: Number(r.count), art: (r.art as string) ?? null, created: Number(r.created), updated: Number(r.updated), saves: Number(r.saves) },
+      owner: this.publicView(owner),
+    })
   }
 
   // ── Presence (WebSocket) ──────────────────────────────────────────────────

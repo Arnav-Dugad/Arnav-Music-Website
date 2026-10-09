@@ -22,6 +22,7 @@ import Home from './pages/Home'
 
 const Explore = lazy(() => import('./pages/Explore'))
 const ReplayPage = lazy(() => import('./pages/Replay'))
+const PublicPlaylistPage = lazy(() => import('./pages/PublicPlaylist'))
 const Library = lazy(() => import('./pages/Library'))
 const PlaylistPage = lazy(() => import('./pages/Playlist'))
 const ArtistPage = lazy(() => import('./pages/Artist'))
@@ -76,7 +77,7 @@ export default function App() {
 
   useEffect(() => {
     // Shared links (a song, a listening room) open straight away, even on a first visit.
-    if (!onboardingDone && !/^\/(welcome|track\/|together|add\/|u\/|friends)/.test(loc.pathname)) nav('/welcome', { replace: true })
+    if (!onboardingDone && !/^\/(welcome|track\/|together|add\/|u\/|friends|p\/)/.test(loc.pathname)) nav('/welcome', { replace: true })
   }, [onboardingDone, loc.pathname, nav])
   useEffect(() => { scroller.current?.scrollTo({ top: 0 }) }, [loc.pathname])
   useEffect(() => { if (expanded) usePlayer.getState().setExpanded(false) }, [loc.pathname]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -98,6 +99,7 @@ export default function App() {
                 <Route path="/library" element={<Page><Library /></Page>} />
                 <Route path="/library/:tab" element={<Page><Library /></Page>} />
                 <Route path="/playlist/:id" element={<Page><PlaylistPage /></Page>} />
+                <Route path="/p/:id" element={<Page><PublicPlaylistPage /></Page>} />
                 <Route path="/artist/:name" element={<Page><ArtistPage /></Page>} />
                 <Route path="/album/:name" element={<Page><AlbumPage /></Page>} />
                 <Route path="/credits/:id" element={<Page><CreditsPage /></Page>} />

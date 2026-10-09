@@ -9,6 +9,9 @@ import { idbGet, idbSet } from './idb'
 import { regionCode } from '../state/settings'
 import type { CreditEntry } from './credits'
 import type { Track } from './types'
+import { artistOverlap, VARIANT, words } from './match'
+
+export { artistOverlap, VARIANT }
 
 // ── iTunes ──────────────────────────────────────────────────────────────────
 export interface ItunesItem {
@@ -95,11 +98,6 @@ export async function itunesAlbum(collectionId: number): Promise<{ album: Itunes
   return { album: items.find((i) => i.type === 'album') ?? null, tracks: items.filter((i) => i.type === 'song').sort((a, b) => (a.discNumber ?? 1) - (b.discNumber ?? 1) || (a.trackNumber ?? 0) - (b.trackNumber ?? 0)) }
 }
 
-const words = (s: string) => s.toLowerCase().normalize('NFKD').replace(/\p{M}+/gu, '').replace(/\(.*?\)|\[.*?\]/g, ' ').replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
-const artistsOf = (s: string) => s.split(/\s*(?:,|&|\bx\b|\bfeat\.?|\bft\.?|\band\b)\s*/i).map(words).filter(Boolean)
-
-/** Remixes, reprises, covers… — another recording than the original song. */
-export const VARIANT = /\b(remix|reprise|live|acoustic|instrumental|karaoke|lo-?fi|slowed|reverb|sped|version|unplugged|cover|mashup|female|male|duet|sad|8d|recreated|revisited|extended|edit|mix)\b/i
 /** Same song title both ways ("Bekhayali" ≠ "Bekhayali Reprise"). */
 function sameTitle(a: string, b: string): boolean {
   // "Despacito ft. Daddy Yankee" = "Despacito (feat. Daddy Yankee)".
@@ -110,15 +108,6 @@ function sameTitle(a: string, b: string): boolean {
   let common = 0
   for (const w of x) if (y.has(w)) common++
   return common / Math.max(x.size, y.size) >= 0.75
-}
-
-/** Do two artist credits share a name? ("Tanishk Bagchi, Asees Kaur" ~ "Asees Kaur & Tanishk Bagchi") */
-export function artistOverlap(a: string, b: string): boolean {
-  const x = artistsOf(a)
-  const y = artistsOf(b)
-  // Same name, one inside the other, or the same distinctive first name ("Sachet Tandon" / "Sachet-Parampara").
-  const first = (s: string) => s.split(' ')[0]
-  return x.some((n) => y.some((m) => n === m || (n.length >= 5 && (m.includes(n) || n.includes(m))) || (first(n).length >= 5 && first(n) === first(m))))
 }
 
 /** The audio release of a YouTube song (exact title, length, album) — null when unsure. */

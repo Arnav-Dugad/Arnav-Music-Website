@@ -11,9 +11,11 @@
  *   GET  /api/credits?v=<id>         → song credits from every free source, cached for everyone
  *   GET|POST /api/community          → lyrics version + timing fixes listeners agreed on
  *   GET  /api/known                  → artist + film names learned from YouTube Topic data
+ *   GET  /api/mv?ids=…               → songs' official music videos, found once for everyone (mv.ts)
  */
 import { cached, edgeCache, fetchWithTimeout, json, overLimit, USER_AGENT, type ApiEnv, type WaitUntil } from './util'
 import { creditsApi, communityApi, knownApi, metaApi } from './meta'
+import { musicVideosApi } from './mv'
 import { flushKnown, knownSets, learnFromYouTube, nameKey } from './known'
 import { parseYouTubeTitle, PARSE_V } from '../src/lib/format'
 
@@ -79,6 +81,8 @@ export async function handleApi(request: Request, env: ApiEnv, waitUntil?: WaitU
           if (overLimit(`cm:${ip}`, 30, 600_000)) return json({ error: 'slow_down' }, 429, { 'retry-after': '60' })
         }
         return await communityApi(request, url, env)
+      case '/api/mv':
+        return await musicVideosApi(request, url, env, waitUntil)
       case '/api/known':
         return await viaEdge(request, waitUntil, () => knownApi(env))
       default:

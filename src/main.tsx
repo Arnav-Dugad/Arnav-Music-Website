@@ -9,6 +9,7 @@ import { reloadForNewVersion } from './components/ErrorBoundary'
 import { useLibrary } from './state/library'
 import { startSync } from './services/sync'
 import { startReplaySnapshots } from './services/replay'
+import { startMusicVideos } from './services/musicVideos'
 import { startDj } from './services/dj'
 import { useSettings } from './state/settings'
 import { addKnownArtist, mergeSharedNames } from './lib/knownArtists'
@@ -55,6 +56,7 @@ async function boot() {
   void fetchKnownNames().then((r) => { if (r) mergeSharedNames(r) })
   startSync()
   startReplaySnapshots()
+  startMusicVideos()
   for (const a of useSettings.getState().seedArtists) addKnownArtist(a)
   startDj()
   createRoot(document.getElementById('root')!).render(

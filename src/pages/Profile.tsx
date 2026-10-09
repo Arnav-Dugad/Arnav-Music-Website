@@ -10,7 +10,7 @@ import { player } from '../state/player'
 import { relative } from '../lib/format'
 import {
   addFriend, asTrack, blend, block, hasProfile, myTaste, profileLink, profileOf, respond, sharedArtists, SocialError, tasteMatch, unfriend, updateProfile, useSocial,
-  type PersonView, type SocialTrack,
+  type PersonView, type PublicSummary, type SocialTrack,
 } from '../services/social'
 
 const COLORS = ['#ff5f6d', '#ffa62b', '#ffd23f', '#3ddc97', '#2ec4b6', '#4cc9f0', '#4361ee', '#7b2ff7', '#f72585', '#b5179e']
@@ -20,7 +20,7 @@ export default function ProfilePage() {
   const nav = useNavigate()
   const meId = useSocial((s) => s.me?.id)
   const friendsVersion = useSocial((s) => s.friends)
-  const [data, setData] = useState<{ person: PersonView; recent: { at: number; track: SocialTrack }[]; mutual: number } | null | 'missing'>(null)
+  const [data, setData] = useState<{ person: PersonView; recent: { at: number; track: SocialTrack }[]; mutual: number; playlists?: PublicSummary[] } | null | 'missing'>(null)
   const [menu, setMenu] = useState(false)
   const [editing, setEditing] = useState(false)
   const load = () => profileOf(handle).then(setData).catch((e) => setData(e instanceof SocialError && e.status === 404 ? 'missing' : null))
@@ -152,6 +152,20 @@ export default function ProfilePage() {
         </section>
       )}
 
+      {(data.playlists?.length ?? 0) > 0 && (
+        <section className="section">
+          <div className="section-head"><h2>{isMe ? 'Your public playlists' : 'Public playlists'}</h2></div>
+          <div className="pf-pubs">
+            {data.playlists!.map((pl) => (
+              <button key={pl.id} className="pf-pub" onClick={() => nav(`/p/${pl.id}`)}>
+                <Artwork src={pl.art} seed={pl.title} className="pf-pub-art" />
+                <b className="ellipsis">{pl.title}</b>
+                <span className="t-caption">{pl.count} songs · {relative(pl.updated)}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
       {data.recent.length > 0 && (
         <section className="section">
           <div className="section-head"><h2>Recently played</h2><button className="btn btn-ghost btn-sm" onClick={() => player().play(data.recent.map((r) => asTrack(r.track)), 0, { context: `${p.name}’s recent plays` })}><Icon name="play" size={13} /> Play all</button></div>
