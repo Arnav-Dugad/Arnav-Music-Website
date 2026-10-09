@@ -544,3 +544,4 @@ button.heat-cell:hover { outline: 2px solid var(--text); outline-offset: 1px; }
 .together-join-music b { display: block; font-size: 16px; }
 .together-join-music .t-caption { color: inherit; opacity: .85; }
 .together-join-icon { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: rgba(255,255,255,.22); flex: none; }
+.pl-more { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 18px 0 6px; }

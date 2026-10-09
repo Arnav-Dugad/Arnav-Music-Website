@@ -87,7 +87,7 @@ export async function handleApi(request: Request, env: ApiEnv, waitUntil?: WaitU
   }
 }
 
-interface YtItem { id?: string | { videoId?: string }; snippet?: { title?: string; channelTitle?: string }; arnav?: unknown }
+interface YtItem { id?: string | { videoId?: string }; snippet?: { title?: string; channelTitle?: string; description?: string; localized?: unknown; tags?: string[] }; contentDetails?: { regionRestriction?: unknown }; arnav?: unknown }
 
 /** Adds the shared parse of every title, so all visitors see the same clean metadata. */
 async function withParse(body: string, env: ApiEnv): Promise<string> {
@@ -97,6 +97,11 @@ async function withParse(body: string, env: ApiEnv): Promise<string> {
   const known = await knownSets(env)
   const ctx = { isKnownArtist: (n: string) => known.artists.has(nameKey(n)), isKnownFilm: (n: string) => known.films.has(nameKey(n)) }
   for (const it of data.items) {
+    // Clients read only the start of a description (genre hints); full ones made a page of 50 videos ~150 KB.
+    // Same for fields no client reads (a localized copy of the title and description, per-country lists).
+    if (it.snippet?.description && it.snippet.description.length > 300) it.snippet.description = it.snippet.description.slice(0, 300)
+    if (it.snippet) { delete it.snippet.localized; if (it.snippet.tags && it.snippet.tags.length > 24) it.snippet.tags = it.snippet.tags.slice(0, 24) }
+    if (it.contentDetails) delete it.contentDetails.regionRestriction
     const t = it.snippet?.title
     if (!t) continue
     const raw = decode(t)
@@ -119,6 +124,14 @@ async function youtube(url: URL, request: Request, env: ApiEnv, waitUntil?: Wait
   for (const [k, v] of sorted) upstream.searchParams.set(k, v.slice(0, 300))
   const cacheKey = `yt:v1:${ep.path}?${upstream.searchParams.toString()}`
   upstream.searchParams.set('key', key)
+  // Edge cache first (Cloudflare's per-colo cache, ~20 ms): public data, already parsed. KV + parse
+  // behind it took ~0.6 s a call, and opening a playlist makes several.
+  const edge = (globalThis as { caches?: { default?: Cache } }).caches?.default
+  const edgeKey = new Request(`https://yt-edge.arnav/e3-${PARSE_V}/${cacheKey}`)
+  if (edge) {
+    const hit = await edge.match(edgeKey).catch(() => undefined)
+    if (hit) { const h = new Headers(hit.headers); h.set('x-arnav-cache', 'edge'); return new Response(hit.body, { status: 200, headers: h }) }
+  }
 
   const headers: Record<string, string> = { accept: 'application/json' }
   if (env.YOUTUBE_ANDROID_PACKAGE && env.YOUTUBE_ANDROID_CERT) {
@@ -134,7 +147,7 @@ async function youtube(url: URL, request: Request, env: ApiEnv, waitUntil?: Wait
     if (!result.hit) learnFromYouTube(body)
     if (ep.path === 'videos' || ep.path === 'search' || ep.path === 'playlistItems') body = await withParse(body, env)
   }
-  return new Response(body, {
+  const res = new Response(body, {
     status: result.status,
     headers: {
       'content-type': 'application/json; charset=utf-8',
@@ -144,6 +157,12 @@ async function youtube(url: URL, request: Request, env: ApiEnv, waitUntil?: Wait
       'x-arnav-cache': result.hit ? 'hit' : 'miss',
     },
   })
+  if (edge && result.status === 200) {
+    const copy = new Response(body, { headers: { 'content-type': 'application/json; charset=utf-8', 'access-control-allow-origin': '*', 'cache-control': `public, max-age=300, s-maxage=${Math.min(ep.ttl, 3600)}` } })
+    const put = edge.put(edgeKey, copy).catch(() => undefined)
+    if (waitUntil) waitUntil(put)
+  }
+  return res
 }
 
 async function image(url: URL): Promise<Response> {

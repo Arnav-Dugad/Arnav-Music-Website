@@ -12,6 +12,7 @@ import { artworkFor } from '../lib/classify'
 import { toast } from '../state/ui'
 import { tuner } from '../lib/tuner'
 import { setDeckView } from './VideoHost'
+import { glassCrossfade } from '../lib/liquidGlass'
 import { recordHeard, recordPlay, recordRewind, recordSkip } from '../lib/replayMap'
 import { maybePickNext } from '../services/moodAutomix'
 
@@ -184,6 +185,7 @@ function beginMix(instant = false) {
     incoming.unMute()
     incoming.playVideo()
   } catch { cancelMix(); return }
+  glassCrossfade(fadeMs)
   // Hand the queue over now (Apple-style: the new song is "now playing" as it fades in).
   activeDeck = m.deck
   yt = incoming

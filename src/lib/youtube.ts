@@ -152,17 +152,17 @@ async function scoreTrust(tracks: Track[], query = ''): Promise<Track[]> {
 /** videos.list for up to 50 ids — 1 unit. Filters to embeddable, non-live uploads. */
 export async function videoDetails(ids: string[], query = ''): Promise<Track[]> {
   if (ids.length === 0) return []
-  let out: Track[] = []
-  for (let i = 0; i < ids.length; i += 50) {
-    const chunk = ids.slice(i, i + 50)
+  // Batches of 50 in parallel (each is its own round trip).
+  const chunks: string[][] = []
+  for (let i = 0; i < ids.length; i += 50) chunks.push(ids.slice(i, i + 50))
+  const pages = await Promise.all(chunks.map(async (chunk) => {
     const r = await withRetry(() => api<VideosResponse>('videos', { part: 'snippet,contentDetails,status,statistics', id: chunk.join(',') }))
     charge(COSTS.VIDEOS_LIST)
-    out.push(
-      ...(r.items ?? [])
-        .filter((v) => v.status?.embeddable !== false && v.snippet?.liveBroadcastContent !== 'live')
-        .map((v) => videoToTrack(v, query)),
-    )
-  }
+    return (r.items ?? [])
+      .filter((v) => v.status?.embeddable !== false && v.snippet?.liveBroadcastContent !== 'live')
+      .map((v) => videoToTrack(v, query))
+  }))
+  let out: Track[] = pages.flat()
   const order = new Map(ids.map((id, i) => [id, i]))
   out.sort((a, b) => (order.get(a.playbackRef) ?? 0) - (order.get(b.playbackRef) ?? 0))
   out = await scoreTrust(out, query)
@@ -282,20 +282,63 @@ export function trending(region = regionCode()): Promise<Track[]> {
 interface PlaylistItemsResponse { items?: { snippet?: YtSnippet; contentDetails?: { videoId?: string } }[]; nextPageToken?: string }
 interface PlaylistsResponse { items?: { id: string; snippet?: YtSnippet; contentDetails?: { itemCount?: number } }[] }
 
-/** A public YouTube playlist's songs (up to 200), cached for the day. */
-export function playlistTracks(playlistId: string): Promise<Track[]> {
-  return cachedList(`pl|${LIST_VERSION}${playlistId}`, async () => {
-    const ids: string[] = []
+const plInflight = new Map<string, Promise<Track[]>>()
+
+/**
+ * A public YouTube playlist's songs (up to 200), cached for the day.
+ *
+ * Fast to open: a saved copy shows at once (refreshed in the background when it's old), and a new
+ * playlist shows its first 50 songs after two round trips — `onPart` gets each longer prefix while
+ * the rest of the pages load, with every page's song details fetched in parallel.
+ */
+export async function playlistTracks(playlistId: string, onPart?: (tracks: Track[]) => void): Promise<Track[]> {
+  const key = `pl|${LIST_VERSION}${playlistId}`
+  const hit = await idbGet<{ tracks: Track[]; fetchedAt: number }>(key, 'cache')
+  const state = ytQuotaState()
+  if (hit) {
+    remember(hit.tracks)
+    useUsage.getState().bump({ cacheHits: 1 })
+    if (!cachePolicy.isFresh(hit.fetchedAt, state) && state !== 'EXHAUSTED' && !plInflight.has(playlistId)) void loadPlaylist(playlistId, key).catch(() => {})
+    return hit.tracks
+  }
+  if (state === 'EXHAUSTED') throw new MusicError('quota', QUOTA_MSG)
+  return loadPlaylist(playlistId, key, onPart)
+}
+
+function loadPlaylist(playlistId: string, key: string, onPart?: (tracks: Track[]) => void): Promise<Track[]> {
+  const running = plInflight.get(playlistId)
+  if (running) return running
+  const job = (async () => {
+    const seen = new Set<string>()
+    const parts: Promise<Track[]>[] = []
+    const done: (Track[] | null)[] = []
+    let shown = 0
+    // Emit the longest run of finished pages, in order.
+    const emit = () => {
+      let n = 0
+      while (n < done.length && done[n]) n++
+      if (n > shown && onPart) { shown = n; onPart(done.slice(0, n).flat() as Track[]) }
+    }
     let token: string | undefined
     for (let page = 0; page < 4; page++) {
-      const r = await withRetry(() => api<PlaylistItemsResponse>('playlistItems', { part: 'snippet,contentDetails', playlistId, maxResults: 50, pageToken: token }))
+      // Only the video ids: the snippet (with full descriptions) made each page ~100 KB, for nothing.
+      const r = await withRetry(() => api<PlaylistItemsResponse>('playlistItems', { part: 'contentDetails', playlistId, maxResults: 50, pageToken: token }))
       charge(COSTS.PLAYLIST_ITEMS)
-      ids.push(...(r.items ?? []).map((i) => i.contentDetails?.videoId).filter((v): v is string => !!v))
+      const ids = (r.items ?? []).map((i) => i.contentDetails?.videoId).filter((v): v is string => !!v && !seen.has(v))
+      ids.forEach((v) => seen.add(v))
+      const i = parts.length
+      done.push(null)
+      parts.push(videoDetails(ids).then((t) => { done[i] = t; emit(); return t }))
       token = r.nextPageToken
       if (!token) break
     }
-    return videoDetails([...new Set(ids)])
-  })
+    const tracks = (await Promise.all(parts)).flat()
+    void idbSet(key, { tracks, fetchedAt: Date.now() }, 'cache')
+    return tracks
+  })()
+  plInflight.set(playlistId, job)
+  void job.finally(() => plInflight.delete(playlistId)).catch(() => {})
+  return job
 }
 
 export async function playlistInfo(playlistId: string): Promise<RemotePlaylist | null> {

@@ -5,7 +5,8 @@
  *   w_automix   per-playlist automix            w_lyrics   your lyric fixes (version, timing)
  *   w_settings  web-only settings               w_library  not-interested, blocked artists,
  *   w_tuner     recommendation tuner weights               saved YouTube playlists, recent searches
- *   w_glass     Liquid Glass style / strength per device
+ *   w_glass     Liquid Glass style / strength per device (with undo history)
+ *   w_devices   your browsers and their kind      w_replay   saved monthly / yearly Replays
  *
  * Each family is last-write-wins by edit time, except lyric fixes, which merge per song.
  */
@@ -45,6 +46,18 @@ const FAMILIES: Family[] = [
     read: () => usePrefs.getState().glass,
     apply: (d, at) => usePrefs.getState().merge('glass', d, at),
     subscribe: (cb) => usePrefs.subscribe((s, p) => { if (s.glass !== p.glass) cb() }),
+  },
+  {
+    id: 'w_devices',
+    read: () => usePrefs.getState().devices,
+    apply: (d, at) => usePrefs.getState().merge('devices', d, at),
+    subscribe: (cb) => usePrefs.subscribe((s, p) => { if (s.devices !== p.devices) cb() }),
+  },
+  {
+    id: 'w_replay',
+    read: () => usePrefs.getState().replay,
+    apply: (d, at) => usePrefs.getState().merge('replay', d, at),
+    subscribe: (cb) => usePrefs.subscribe((s, p) => { if (s.replay !== p.replay) cb() }),
   },
   {
     id: 'w_lyrics',
@@ -94,6 +107,7 @@ const FAMILIES: Family[] = [
   },
 ]
 const byId = new Map(FAMILIES.map((f) => [f.id, f]))
+const MERGED = new Set(['w_lyrics', 'w_glass', 'w_devices', 'w_replay'])
 
 /** Starts watching local edits; [onEdit] asks for a sync. */
 export function watchWebEdits(onEdit: () => void): () => void {
@@ -114,8 +128,9 @@ export function applyWebRecord(recordId: string, value: string, fromThisDevice: 
   const at = Number(parsed.at)
   if (!Number.isFinite(at)) return false
   const mine = stamps()[f.id] ?? 0
-  // Lyric fixes merge per song; everything else takes the newer side.
-  if (f.id !== 'w_lyrics' && at <= mine) return false
+  // Lyric fixes, glass, devices and Replays merge per entry (each side keeps what only it has);
+  // everything else takes the newer side.
+  if (!MERGED.has(f.id) && at <= mine) return false
   applying = true
   try { f.apply(parsed.data, at) } finally { applying = false }
   setStamp(f.id, Math.max(mine, at))
@@ -133,6 +148,11 @@ export async function pushWeb(db: Firestore, uid: string, deviceId: string, jour
     const at = st[f.id] ?? 0
     if (!at || (pushed[f.id] ?? 0) >= at) continue
     let value = JSON.stringify({ at, data: f.read() })
+    if (value.length > 190_000 && f.id === 'w_replay') {
+      // Oldest periods go first until it fits.
+      const keep = Object.entries(usePrefs.getState().replay).sort((a, b) => b[0].localeCompare(a[0]))
+      while (keep.length > 1 && value.length > 190_000) { keep.pop(); value = JSON.stringify({ at, data: Object.fromEntries(keep) }) }
+    }
     if (value.length > 190_000) {
       if (f.id !== 'w_lyrics') continue
       // Keep the most recent fixes within the record limit.

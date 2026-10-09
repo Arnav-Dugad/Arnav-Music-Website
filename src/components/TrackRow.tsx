@@ -1,4 +1,4 @@
-import { memo, useState, type MouseEvent, type ReactNode } from 'react'
+import { memo, useEffect, useState, type MouseEvent, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useNavigate } from 'react-router-dom'
 import { Artwork, Eq } from './ui'
@@ -164,10 +164,25 @@ export const TrackRow = memo(function TrackRow({ track, index, list, context, nu
   )
 })
 
+const FIRST_ROWS = 40
+
 export function TrackList({ tracks, context, number = true, showAlbum = true, captions, playlistId }: { tracks: Track[]; context?: string; number?: boolean; showAlbum?: boolean; captions?: Record<string, ReactNode>; playlistId?: string }) {
+  // Long lists paint the first rows straight away and add the rest in idle time, so a 200-song
+  // playlist opens instantly instead of building every row up front.
+  const [limit, setLimit] = useState(FIRST_ROWS)
+  useEffect(() => {
+    if (limit >= tracks.length) return
+    const run = () => setLimit((n) => n + 80)
+    if (typeof window.requestIdleCallback === 'function') {
+      const h = window.requestIdleCallback(run, { timeout: 300 })
+      return () => window.cancelIdleCallback(h)
+    }
+    const h = window.setTimeout(run, 60)
+    return () => clearTimeout(h)
+  }, [limit, tracks.length])
   return (
     <div className="track-list">
-      {tracks.map((t, i) => (
+      {tracks.slice(0, limit).map((t, i) => (
         <TrackRow key={`${t.id}-${i}`} track={t} index={i} list={tracks} context={context} number={number} showAlbum={showAlbum} caption={captions?.[t.id]} playlistId={playlistId} />
       ))}
     </div>

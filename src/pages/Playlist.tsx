@@ -52,7 +52,10 @@ export default function PlaylistPage() {
   const heroOpacity = useTransform(scrollY, [0, 240], [1, 0.35])
 
   const remoteId = id.startsWith('ytpl:') ? id.slice(5) : null
-  const remote = useAsync(() => (remoteId ? Promise.all([playlistInfo(remoteId), playlistTracks(remoteId)]) : Promise.resolve(null)), [remoteId])
+  // The header and the songs load separately, and songs arrive a page at a time.
+  const [part, setPart] = useState<{ id: string; tracks: Track[] } | null>(null)
+  const remote = useAsync(() => (remoteId ? playlistTracks(remoteId, (tracks) => setPart({ id: remoteId, tracks })) : Promise.resolve(null)), [remoteId])
+  const remoteInfo = useAsync(() => (remoteId ? playlistInfo(remoteId).catch(() => null) : Promise.resolve(null)), [remoteId])
 
   const view = useMemo<View | null>(() => {
     if (id === 'liked') {
@@ -71,7 +74,8 @@ export default function PlaylistPage() {
       return { kind: 'daily', title: d.title, description: d.artists.join(', '), tracks: d.tracks, art: <MixArt title={d.title} eyebrow="Daily" hue={d.hue} tracks={d.tracks} />, meta: 'Made for you today' }
     }
     if (remoteId) {
-      const [info, tracks] = remote.data ?? [null, null]
+      const info = remoteInfo.data ?? null
+      const tracks = remote.data ?? (part?.id === remoteId ? part.tracks : null)
       return { kind: 'remote', title: info?.name ?? 'YouTube playlist', description: info?.owner, tracks: tracks ?? [], artUrl: info?.artworkUrl ?? (tracks?.[0] ? artworkFor(tracks[0]) : null), meta: 'YouTube playlist' }
     }
     const p = playlists[id]
@@ -83,7 +87,7 @@ export default function PlaylistPage() {
       meta: `${p.remoteRef ? 'Imported from YouTube · ' : ''}Updated ${relative(p.updatedAt)}`, editable: true,
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, playlists, likes, events, v, remote.data, remoteId])
+  }, [id, playlists, likes, events, v, remote.data, remoteInfo.data, part, remoteId])
 
   const coverUrl = view?.artUrl ?? (view?.tracks[0] ? artworkFor(view.tracks[0]) : null)
   const palette = usePaletteFor(coverUrl)
@@ -144,7 +148,7 @@ export default function PlaylistPage() {
       </motion.header>
 
       <section className="section" style={{ marginTop: 28 }}>
-        {view.kind === 'remote' && remote.error ? (
+        {view.kind === 'remote' && remote.error && !view.tracks.length ? (
           <Notice tone="warn">{remote.error instanceof MusicError ? remote.error.message : 'This playlist couldn’t load.'}</Notice>
         ) : view.kind === 'remote' && remote.loading && !view.tracks.length ? <SkeletonRows n={12} /> : view.tracks.length === 0 ? (
           <Empty icon="note" title={view.kind === 'liked' ? 'No liked songs yet' : view.kind === 'smart' ? 'Not enough listening yet' : 'This playlist is empty'}
@@ -163,7 +167,10 @@ export default function PlaylistPage() {
             })}
           </Reorder.Group>
         ) : (
-          <TrackList tracks={view.tracks} context={view.title} playlistId={view.kind === 'local' ? id : undefined} />
+          <>
+            <TrackList tracks={view.tracks} context={view.title} playlistId={view.kind === 'local' ? id : undefined} />
+            {view.kind === 'remote' && remote.loading && <div className="pl-more t-caption"><Spinner size={14} /> Loading the rest of the playlist…</div>}
+          </>
         )}
       </section>
 

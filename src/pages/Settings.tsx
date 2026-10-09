@@ -407,8 +407,9 @@ function GlassControls() {
   const on = useSettings((x) => x.glass)
   const all = usePrefs((x) => x.glass)
   const g = glassFor(all, deviceId)
-  const set = (p: Partial<GlassPref>) => usePrefs.getState().setGlass(deviceId, p)
+  const set = (p: Partial<Omit<GlassPref, 'at' | 'history'>>) => usePrefs.getState().setGlass(deviceId, p)
   const others = Object.keys(all).filter((k) => k !== deviceId).length
+  const history = all[deviceId]?.history ?? []
   if (!on) return null
   return (
     <>
@@ -426,6 +427,22 @@ function GlassControls() {
       <Row title="Adapt to the artwork" sub="Busier artwork behind the glass gets more frost, calm artwork stays clear — so text is always easy to read.">
         <Toggle on={g.adaptive} onChange={(v) => set({ adaptive: v })} label="Adapt glass to the artwork" />
       </Row>
+      {history.length > 0 && (
+        <div className="set-row set-row-stack">
+          <div className="row" style={{ justifyContent: 'space-between', gap: 12 }}>
+            <div className="set-title">Glass history</div>
+            <button className="btn btn-secondary btn-sm" onClick={() => usePrefs.getState().undoGlass(deviceId)}><Icon name="history" size={14} /> Undo</button>
+          </div>
+          <div className="glass-history">
+            {history.slice(0, 6).map((h, i) => (
+              <button key={h.at} className="chip" title="Go back to this" onClick={() => usePrefs.getState().undoGlass(deviceId, i)}>
+                {h.style === 'clear' ? 'Clear' : 'Tinted'} · {h.strength}%{h.adaptive ? '' : ' · fixed'} <span className="t-caption">{relative(h.at)}</span>
+              </button>
+            ))}
+          </div>
+          <div className="t-caption set-sub">This device’s last changes — kept with your account, so you can undo them from here after a sync too.</div>
+        </div>
+      )}
     </>
   )
 }

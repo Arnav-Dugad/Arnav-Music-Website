@@ -8,6 +8,7 @@ import { usePlayer } from './state/player'
 import { reloadForNewVersion } from './components/ErrorBoundary'
 import { useLibrary } from './state/library'
 import { startSync } from './services/sync'
+import { startReplaySnapshots } from './services/replay'
 import { startDj } from './services/dj'
 import { useSettings } from './state/settings'
 import { addKnownArtist, mergeSharedNames } from './lib/knownArtists'
@@ -24,6 +25,7 @@ import './styles/home.css'
 // Last: phone and detail polish that must win over the page styles.
 import './styles/polish.css'
 import './styles/liquid-glass.css'
+import './styles/ai.css'
 
 // A newer deploy replaced the code chunks this tab was using: reload once to pick them up.
 window.addEventListener('vite:preloadError', (e) => {
@@ -52,6 +54,7 @@ async function boot() {
   // Names every visitor's YouTube Topic results taught the server (artists, films).
   void fetchKnownNames().then((r) => { if (r) mergeSharedNames(r) })
   startSync()
+  startReplaySnapshots()
   for (const a of useSettings.getState().seedArtists) addKnownArtist(a)
   startDj()
   createRoot(document.getElementById('root')!).render(

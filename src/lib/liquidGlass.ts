@@ -176,14 +176,47 @@ export interface GlassInput { theme: 'dark' | 'light'; style: 'tinted' | 'clear'
 
 const mix = (a: [number, number, number], b: [number, number, number], t: number) => a.map((v, i) => Math.round(v * (1 - t) + b[i] * t)) as [number, number, number]
 
-/** Writes the material variables (src/styles/liquid-glass.css reads them). */
+// The album colour the glass shows right now, and a blend toward the next one.
+let shownAlbum: [number, number, number] | null = null
+let blendUntil = 0
+let blendFrame = 0
+
+/**
+ * Called when automix starts blending two songs: the glass tint moves from the old album's colour
+ * to the new one over the same time the music crossfades, instead of jumping.
+ */
+export function glassCrossfade(ms: number) { blendUntil = performance.now() + Math.max(0, ms) }
+
+/** Writes the material variables (src/styles/liquid-glass.css reads them), easing the album tint. */
 export function applyGlass(o: GlassInput) {
+  const target = o.album ? parseHex(o.album) : null
+  cancelAnimationFrame(blendFrame)
+  const from = shownAlbum
+  const reduce = document.documentElement.dataset.motion === 'off'
+  if (!from || !target || reduce || from.every((v, i) => v === target[i])) {
+    shownAlbum = target
+    writeGlass(o, target)
+    return
+  }
+  // A crossfade in progress sets the length; any other change of song eases over 0.9 s.
+  const ms = Math.max(900, blendUntil - performance.now())
+  const t0 = performance.now()
+  const ease = (t: number) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2)
+  const step = () => {
+    const t = Math.min(1, (performance.now() - t0) / ms)
+    shownAlbum = mix(from, target, ease(t))
+    writeGlass(o, shownAlbum)
+    if (t < 1) blendFrame = requestAnimationFrame(step)
+  }
+  step()
+}
+
+function writeGlass(o: GlassInput, album: [number, number, number] | null) {
   const k = Math.max(0, Math.min(1, o.strength / 100))
   // Busy artwork behind → more frost and tint so text stays readable; calm artwork → clearer glass.
   const e = o.adaptive ? Math.max(0, Math.min(1, k + (o.busy - 0.45) * 0.45)) : k
   const dark = o.theme === 'dark'
   const base: [number, number, number] = dark ? [28, 28, 36] : [255, 255, 255]
-  const album = o.album ? parseHex(o.album) : null
   const tint = o.style === 'tinted' && album ? mix(base, album, dark ? 0.22 : 0.1) : base
   const clear = o.style === 'clear'
   const a = clear ? (dark ? 0.04 + 0.14 * e : 0.08 + 0.18 * e) : dark ? 0.14 + 0.4 * e : 0.28 + 0.42 * e
