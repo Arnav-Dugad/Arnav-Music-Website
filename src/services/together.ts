@@ -103,19 +103,37 @@ function connect() {
   sock.onopen = () => {
     retry = 0
     bestRtt = Infinity
+    lastHeard = Date.now()
     ping()
     if (pingTimer) clearInterval(pingTimer)
-    pingTimer = setInterval(ping, 10_000)
+    pingTimer = setInterval(() => {
+      ping()
+      // Nothing for 25 s (pings go every 10 s): the connection died quietly, so replace it.
+      if (Date.now() - lastHeard > 25_000) { try { sock.close() } catch { /* closed */ } }
+    }, 10_000)
   }
-  sock.onmessage = (e) => { try { onMessage(JSON.parse(e.data as string)) } catch { /* ignore */ } }
+  sock.onmessage = (e) => { lastHeard = Date.now(); try { onMessage(JSON.parse(e.data as string)) } catch { /* ignore */ } }
   sock.onclose = (e) => {
     if (ws !== sock) return
     ws = null
+    if (pingTimer) { clearInterval(pingTimer); pingTimer = null }
     if (!wantCode) return
-    if (e.code === 1008 || retry > 6) { useTogether.setState({ status: 'error', error: 'Lost the room. Try joining again.' }); return }
+    if (e.code === 1008) { useTogether.setState({ status: 'error', error: 'Lost the room. Try joining again.' }); return }
     useTogether.setState({ status: 'reconnecting' })
-    setTimeout(connect, Math.min(8000, 600 * 2 ** retry++))
+    // Offline: wait for the network instead of burning retries.
+    if (!navigator.onLine) return
+    if (retry > 10) { useTogether.setState({ status: 'error', error: 'Lost the room. Try joining again.' }); return }
+    setTimeout(connect, Math.min(8000, 600 * 2 ** retry++) * (0.75 + Math.random() * 0.5))
   }
+}
+
+let lastHeard = 0
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => { if (wantCode && !ws) { retry = 0; connect() } })
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible' || !wantCode) return
+    if (!ws) { retry = 0; connect() } else if (Date.now() - lastHeard > 15_000) ping()
+  })
 }
 
 function ping() { send({ t: 'ping', c: Date.now() }) }

@@ -96,6 +96,13 @@ Hardened rules for both clients live in `firebase/firestore.rules`. `firebase/te
 ### Edge API additions
 `/api/meta` (iTunes, MusicBrainz, Wikidata, Deezer, NetEase; allow-listed and cached in KV), `/api/credits` (one cached credits record per video for everyone), `/api/community` (lyrics version and timing listeners agreed on: median of up to 25 fixes), `/api/known` (artist and film names learned only from YouTube Topic data and Wikidata). `/api/social/*` (Friends; Durable Object `SocialHub`, migration `v2`) and `/api/room/<CODE>` (Listen together) answer `501` on hosts without Durable Objects. `videos`, `search` and `playlistItems` responses carry `arnav`: the shared parse of each title with those names, so every visitor sees the same clean metadata.
 
+### Reliability
+- **Caching in layers**: Cloudflare's per-location cache answers repeat public requests (YouTube, artwork, lyrics, metadata, credits, names) in tens of milliseconds; KV behind it is shared by every visitor. KV entries stay *fresh* for their TTL but are kept about four times longer, so when an upstream fails (YouTube quota used up, an outage, a timeout) the last good copy is served (`x-arnav-cache: stale`) instead of an error.
+- **No duplicate upstream calls**: identical requests in flight share one fetch. YouTube calls time out after 10 s with one retry on a 5xx; LRCLIB gets one retry on overload. A per-visitor fair-use limit (40 searches / 150 other uncached calls a minute) protects the shared quota, and the client retries a "slow down" or dropped connection once, quietly.
+- **Friends hub**: WebSocket tickets are stored (they survive the hub sleeping), keep-alive pings are answered without waking it, every request is error-handled, device keys are capped at 10 per profile, and a daily alarm prunes old plays, presence and tickets. Durable Object failures come back as a clear `503` JSON the app retries.
+- **Clients reconnect smoothly**: friends and listening-room sockets detect silently dead connections, reconnect with jittered backoff, and reconnect immediately when the network returns or the app comes back to the foreground; a room waits for the network instead of giving up offline. Account sync retries failed syncs by itself (30 s → 10 min) and reopens Firestore's live listener if it drops.
+- **Static files**: hashed build assets are served `immutable` for a year (`public/_headers`), so repeat visits load without revalidation round trips; `index.html` is always revalidated. `/api/health` reports configuration plus a live KV check.
+
 ## Configuration
 | Secret / setting | Where | Notes |
 |---|---|---|

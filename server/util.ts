@@ -17,19 +17,53 @@ export const USER_AGENT = 'ArnavMusicWeb/1.0 (+https://github.com/Arnav-Dugad/Ar
 export const json = (body: unknown, status = 200, extra: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { 'content-type': 'application/json; charset=utf-8', 'access-control-allow-origin': '*', ...extra },
+    headers: { 'content-type': 'application/json; charset=utf-8', 'access-control-allow-origin': '*', 'x-content-type-options': 'nosniff', ...extra },
   })
 
-/** KV-backed shared cache. Only 200s are stored. */
-export async function cached(env: ApiEnv, key: string, ttl: number, load: () => Promise<{ status: number; body: string }>, waitUntil?: WaitUntil) {
+export interface CacheResult { status: number; body: string; hit: boolean; stale?: boolean }
+
+/** Identical requests already in flight in this isolate share one upstream call. */
+const inflight = new Map<string, Promise<{ status: number; body: string }>>()
+
+/**
+ * KV-backed shared cache. Only 200s are stored.
+ *
+ * An entry is fresh for `ttl`, but kept for several times longer: once stale it's refreshed on the
+ * next request, and if the upstream fails then (quota used up, an outage, a timeout) the stale copy
+ * is served instead of an error — so listeners keep working through upstream trouble.
+ */
+export async function cached(env: ApiEnv, key: string, ttl: number, load: () => Promise<{ status: number; body: string }>, waitUntil?: WaitUntil): Promise<CacheResult> {
   const kv = env.YT_CACHE
+  let stale: string | null = null
   if (kv) {
-    const hit = await kv.get(key).catch(() => null)
-    if (hit !== null) return { status: 200, body: hit, hit: true }
+    const hit = await kv.getWithMetadata<{ at?: number }>(key).catch(() => null)
+    if (hit && hit.value !== null) {
+      const at = hit.metadata?.at
+      // Entries written before metadata existed expire on their own; treat them as fresh.
+      if (!at || Date.now() - at < ttl * 1000) return { status: 200, body: hit.value, hit: true }
+      stale = hit.value
+    }
   }
-  const fresh = await load()
-  if (kv && fresh.status === 200 && fresh.body.length < 2_000_000) {
-    const put = kv.put(key, fresh.body, { expirationTtl: Math.max(60, ttl) }).catch(() => undefined)
+  let fresh: { status: number; body: string }
+  try {
+    let job = inflight.get(key)
+    if (!job) {
+      job = load()
+      inflight.set(key, job)
+      void job.finally(() => inflight.delete(key)).catch(() => undefined)
+    }
+    fresh = await job
+  } catch (e) {
+    if (stale !== null) return { status: 200, body: stale, hit: true, stale: true }
+    throw e
+  }
+  if (fresh.status !== 200) {
+    if (stale !== null) return { status: 200, body: stale, hit: true, stale: true }
+    return { ...fresh, hit: false }
+  }
+  if (kv && fresh.body.length < 2_000_000) {
+    const keep = Math.max(ttl * 4, 3 * 86_400)
+    const put = kv.put(key, fresh.body, { expirationTtl: Math.max(60, keep), metadata: { at: Date.now() } }).catch(() => undefined)
     if (waitUntil) waitUntil(put)
     else await put
   }
@@ -61,5 +95,23 @@ export async function cachedJson<T>(env: ApiEnv, key: string, ttl: number, url: 
     return null
   }
 }
+
+/**
+ * A small per-isolate rate limit (sliding window). Not global — it only stops one visitor from
+ * hammering a single edge location, which is what burns the shared YouTube quota.
+ */
+const windows = new Map<string, number[]>()
+export function overLimit(key: string, max: number, windowMs: number): boolean {
+  const now = Date.now()
+  const hits = (windows.get(key) ?? []).filter((t) => now - t < windowMs)
+  if (hits.length >= max) { windows.set(key, hits); return true }
+  hits.push(now)
+  windows.set(key, hits)
+  if (windows.size > 5000) for (const [k, v] of windows) if (!v.length || now - v[v.length - 1] > windowMs) windows.delete(k)
+  return false
+}
+
+/** Cloudflare's per-location HTTP cache, when running on Workers (undefined elsewhere). */
+export const edgeCache = (): Cache | undefined => (globalThis as { caches?: { default?: Cache } }).caches?.default
 
 export const VIDEO_ID = /^[A-Za-z0-9_-]{11}$/

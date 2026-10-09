@@ -211,31 +211,72 @@ const serverNow = () => Date.now() + offset
 
 function send(m: unknown) { if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m)) }
 
+/** Last time anything arrived on the socket (a silent, half-dead connection is closed and replaced). */
+let lastHeard = 0
+let connecting = false
+let retryTimer: ReturnType<typeof setTimeout> | null = null
+/** The profile was rejected (deleted elsewhere): stop retrying until it changes. */
+let rejected = false
+
 async function connect() {
-  if (ws || !identity() || st().status === 'unavailable') return
+  if (ws || connecting || !identity() || rejected || st().status === 'unavailable') return
+  if (retryTimer) { clearTimeout(retryTimer); retryTimer = null }
+  connecting = true
   let ticket: string
-  try { ticket = (await api<{ ticket: string }>('ticket', { method: 'POST' })).ticket } catch { schedule(); return }
+  try {
+    ticket = (await api<{ ticket: string }>('ticket', { method: 'POST' })).ticket
+  } catch (e) {
+    connecting = false
+    if (e instanceof SocialError && e.status === 401) { rejected = true; return }
+    schedule()
+    return
+  }
+  connecting = false
   const proto = location.protocol === 'https:' ? 'wss' : 'ws'
   const sock = new WebSocket(`${proto}://${location.host}/api/social/ws?ticket=${ticket}`)
   ws = sock
   sock.onopen = () => {
     retry = 0
+    lastHeard = Date.now()
     useSocial.setState({ connected: true })
     publish()
     if (pingTimer) clearInterval(pingTimer)
-    pingTimer = setInterval(() => send({ t: 'ping', c: Date.now() }), 25_000)
+    let beats = 0
+    pingTimer = setInterval(() => {
+      // A plain keep-alive (the hub answers it without waking up); every 10th also re-syncs the clock.
+      if (++beats % 10 === 0) send({ t: 'ping', c: Date.now() })
+      else if (ws?.readyState === WebSocket.OPEN) ws.send('{"t":"ping"}')
+      if (Date.now() - lastHeard > 70_000) { try { sock.close() } catch { /* closed */ } }
+    }, 25_000)
     if (st().following) send({ t: 'follow', id: st().following })
   }
-  sock.onmessage = (e) => { try { onMessage(JSON.parse(e.data as string)) } catch { /* ignore */ } }
+  sock.onmessage = (e) => { lastHeard = Date.now(); try { onMessage(JSON.parse(e.data as string)) } catch { /* ignore */ } }
   sock.onclose = () => {
     if (ws !== sock) return
     ws = null
+    if (pingTimer) { clearInterval(pingTimer); pingTimer = null }
     useSocial.setState({ connected: false })
     schedule()
   }
 }
-function schedule() { if (!identity()) return; setTimeout(() => void connect(), Math.min(30_000, 1000 * 2 ** retry++)) }
-function reconnect() { const s = ws; ws = null; try { s?.close() } catch { /* closed */ } void connect() }
+/** Backs off 1 s → 30 s with jitter (so a server restart isn't met by every app at the same instant). */
+function schedule() {
+  if (!identity() || rejected || retryTimer) return
+  const wait = Math.min(30_000, 1000 * 2 ** retry++) * (0.75 + Math.random() * 0.5)
+  retryTimer = setTimeout(() => { retryTimer = null; void connect() }, wait)
+}
+function reconnect() { rejected = false; const s = ws; ws = null; try { s?.close() } catch { /* closed */ } retry = 0; void connect() }
+
+// Back online, or back in the app after the phone slept: reconnect straight away instead of waiting
+// out the backoff, and check a socket that may have died while we were away.
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => { retry = 0; if (!ws) void connect() })
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return
+    if (!ws) { retry = 0; void connect(); return }
+    if (Date.now() - lastHeard > 40_000) send({ t: 'ping', c: Date.now() })
+  })
+}
 
 function nameOf(id: string) { return st().friends.find((f) => f.id === id)?.name ?? 'A friend' }
 

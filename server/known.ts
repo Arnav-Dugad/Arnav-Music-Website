@@ -18,11 +18,17 @@ let memory: Sets | null = null
 const pending = { artists: new Set<string>(), films: new Set<string>() }
 let lastFlush = 0
 
+/** A stored name list; a damaged entry reads as empty instead of failing every request. */
+function list(raw: string | null): string[] {
+  if (!raw) return []
+  try { const v = JSON.parse(raw); return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [] } catch { return [] }
+}
+
 export async function knownSets(env: ApiEnv): Promise<Sets> {
   if (memory && Date.now() - memory.at < 5 * 60_000) return memory
   const kv = env.YT_CACHE
   const [a, f] = kv ? await Promise.all([kv.get(ARTISTS).catch(() => null), kv.get(FILMS).catch(() => null)]) : [null, null]
-  memory = { artists: new Set(a ? (JSON.parse(a) as string[]) : []), films: new Set(f ? (JSON.parse(f) as string[]) : []), at: Date.now() }
+  memory = { artists: new Set(list(a)), films: new Set(list(f)), at: Date.now() }
   for (const x of pending.artists) memory.artists.add(x)
   for (const x of pending.films) memory.films.add(x)
   return memory
@@ -76,12 +82,11 @@ export function flushKnown(env: ApiEnv, waitUntil?: WaitUntil) {
       const add = take[kind]
       if (!add.length) continue
       const cur = await kv.get(key).catch(() => null)
-      const set = new Set<string>(cur ? (JSON.parse(cur) as string[]) : [])
+      const set = new Set<string>(list(cur))
       const before = set.size
       for (const x of add) set.add(x)
       if (set.size === before) continue
-      const list = [...set].slice(-max)
-      await kv.put(key, JSON.stringify(list)).catch(() => undefined)
+      await kv.put(key, JSON.stringify([...set].slice(-max))).catch(() => undefined)
     }
   })()
   if (waitUntil) waitUntil(job)

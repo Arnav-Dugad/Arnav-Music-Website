@@ -53,8 +53,8 @@ export class SocialHub extends DurableObject<Env> {
   private sql: SqlStorage
   /** Per-user action stamps for rate limits (reset when the hub sleeps — fine for abuse limits). */
   private limits = new Map<string, number[]>()
-  /** One-time WebSocket tickets (id, expiry): the device key never travels in a URL. */
-  private tickets = new Map<string, { id: string; until: number }>()
+  /** Set once the daily clean-up alarm is known to be scheduled (per wake). */
+  private alarmChecked = false
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env)
@@ -68,6 +68,26 @@ export class SocialHub extends DurableObject<Env> {
     this.sql.exec(`CREATE TABLE IF NOT EXISTS plays (user TEXT NOT NULL, at INTEGER NOT NULL, track TEXT NOT NULL)`)
     this.sql.exec(`CREATE INDEX IF NOT EXISTS plays_user ON plays (user, at)`)
     this.sql.exec(`CREATE TABLE IF NOT EXISTS now (user TEXT PRIMARY KEY, body TEXT NOT NULL, at INTEGER NOT NULL)`)
+    // One-time WebSocket tickets: the device key never travels in a URL. Stored (not in memory) so a
+    // ticket still works if the hub sleeps between handing it out and the socket connecting.
+    this.sql.exec(`CREATE TABLE IF NOT EXISTS tickets (t TEXT PRIMARY KEY, id TEXT NOT NULL, until INTEGER NOT NULL)`)
+    // Keep-alive pings are answered without waking the hub (no duration billed, no cold start).
+    this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('{"t":"ping"}', '{"t":"pong"}'))
+  }
+
+  /** Daily clean-up: old plays, stale presence, used tickets, and device keys beyond the newest 10. */
+  async alarm() {
+    const now = Date.now()
+    this.sql.exec('DELETE FROM plays WHERE at < ?', now - 30 * DAY)
+    this.sql.exec('DELETE FROM now WHERE at < ?', now - 2 * DAY)
+    this.sql.exec('DELETE FROM tickets WHERE until < ?', now)
+    this.sql.exec('DELETE FROM keys WHERE rowid IN (SELECT rowid FROM (SELECT rowid, ROW_NUMBER() OVER (PARTITION BY id ORDER BY at DESC) AS r FROM keys) WHERE r > 10)')
+    await this.ctx.storage.setAlarm(now + DAY)
+  }
+  private async ensureAlarm() {
+    if (this.alarmChecked) return
+    this.alarmChecked = true
+    if ((await this.ctx.storage.getAlarm()) == null) await this.ctx.storage.setAlarm(Date.now() + DAY)
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
@@ -146,6 +166,8 @@ export class SocialHub extends DurableObject<Env> {
   private async newKey(id: string): Promise<string> {
     const key = rand(32)
     this.sql.exec('INSERT INTO keys (hash, id, at) VALUES (?, ?, ?)', await sha256(key), id, Date.now())
+    // Each device sign-in adds a key: keep the newest 10 per profile.
+    this.sql.exec('DELETE FROM keys WHERE id = ? AND hash NOT IN (SELECT hash FROM keys WHERE id = ? ORDER BY at DESC LIMIT 10)', id, id)
     return key
   }
   private me(u: UserRow) {
@@ -164,12 +186,23 @@ export class SocialHub extends DurableObject<Env> {
 
   // ── HTTP ──────────────────────────────────────────────────────────────────
   async fetch(request: Request): Promise<Response> {
+    try {
+      void this.ensureAlarm().catch(() => undefined)
+      return await this.route(request)
+    } catch (e) {
+      console.error('[social]', e instanceof Error ? e.stack ?? e.message : e)
+      return json({ error: 'failed', message: 'Something went wrong on our side. Try again in a moment.' }, 500)
+    }
+  }
+
+  private async route(request: Request): Promise<Response> {
     const url = new URL(request.url)
     const path = url.pathname.replace(/^\/api\/social\/?/, '')
     if (path === 'ws') {
       if (request.headers.get('Upgrade') !== 'websocket') return new Response('Expected a WebSocket', { status: 426 })
-      const ticket = this.tickets.get(url.searchParams.get('ticket') ?? '')
-      this.tickets.delete(url.searchParams.get('ticket') ?? '')
+      const t = url.searchParams.get('ticket') ?? ''
+      const ticket = this.sql.exec('SELECT id, until FROM tickets WHERE t = ?', t).toArray()[0] as { id: string; until: number } | undefined
+      this.sql.exec('DELETE FROM tickets WHERE t = ?', t)
       if (!ticket || ticket.until < Date.now() || !this.user(ticket.id)) return new Response('Unauthorized', { status: 401 })
       const id = ticket.id
       const pair = new WebSocketPair()
@@ -199,9 +232,10 @@ export class SocialHub extends DurableObject<Env> {
       switch (`${request.method} ${seg[0]}`) {
         case 'GET me': return json(this.me(me))
         case 'POST ticket': {
+          if (this.limited(me.id, 'ticket', 30, 600_000)) return json({ error: 'slow_down' }, 429)
           const ticket = rand(24)
-          for (const [k, v] of this.tickets) if (v.until < Date.now()) this.tickets.delete(k)
-          this.tickets.set(ticket, { id: me.id, until: Date.now() + 60_000 })
+          this.sql.exec('DELETE FROM tickets WHERE until < ?', Date.now())
+          this.sql.exec('INSERT INTO tickets (t, id, until) VALUES (?, ?, ?)', ticket, me.id, Date.now() + 60_000)
           return json({ ticket })
         }
         case 'PATCH me': return this.update(me, body)

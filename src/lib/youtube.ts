@@ -69,12 +69,18 @@ async function api<T>(ep: string, params: Record<string, string | number | undef
   const headers: Record<string, string> = {}
   const key = settings().youtubeKey.trim()
   if (key) headers['x-yt-key'] = key
-  let r: Response
-  try {
-    r = await fetch(`/api/yt?${qs.toString()}`, { headers })
-  } catch {
-    throw new MusicError('offline', 'You appear to be offline.')
+  let r: Response | null = null
+  // A dropped connection or a brief "slow down" gets one quiet retry before the listener sees an error.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    r = await fetch(`/api/yt?${qs.toString()}`, { headers }).catch(() => null)
+    if (r && r.status !== 429) break
+    if (r && r.status === 429) {
+      const body = await r.clone().json().catch(() => null) as YtErrorBody | null
+      if (body?.error?.errors?.[0]?.reason !== 'slowDown') break
+    }
+    if (attempt === 0 && navigator.onLine !== false) await new Promise((res) => setTimeout(res, r ? 1500 : 700))
   }
+  if (!r) throw new MusicError('offline', 'You appear to be offline.')
   const text = await r.text()
   let body: unknown = null
   try { body = JSON.parse(text) } catch { /* non-JSON */ }
@@ -89,6 +95,8 @@ async function api<T>(ep: string, params: Record<string, string | number | undef
       throw new MusicError('missingKey', 'YouTube isn’t connected yet. Add a YouTube Data API key in Settings → Sources.')
     }
     if (reason === 'accessNotConfigured' || reason === 'youtubeSignupRequired') throw new MusicError('notConfigured', 'YouTube Data API v3 isn’t enabled for this key.')
+    if (reason === 'slowDown') throw new MusicError('http', 'Lots of requests right now — try again in a moment.', 429)
+    if (reason === 'timeout') throw new MusicError('http', 'YouTube is slow to answer right now — try again.', 504)
     if (r.status === 403) throw new MusicError('http', err?.message ?? 'YouTube refused the request.', 403)
     if (r.status === 404 && !body) throw new MusicError('notConfigured', 'The music API isn’t reachable on this host.', 404)
     throw new MusicError('http', err?.message ?? `YouTube error ${r.status}`, r.status)

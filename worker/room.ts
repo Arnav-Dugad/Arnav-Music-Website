@@ -33,13 +33,14 @@ function track(x: unknown): RoomTrack | null {
 export class ListeningRoom extends DurableObject {
   private state: PlayState = { track: null, positionMs: 0, playing: false, rate: 1, at: 0, upNext: [] }
   private hostId: string | null = null
-  private loaded = false
+  private loading: Promise<void> | null = null
 
-  private async load() {
-    if (this.loaded) return
-    this.loaded = true
-    const saved = await this.ctx.storage.get<{ state: PlayState; hostId: string | null }>('room')
-    if (saved) { this.state = saved.state; this.hostId = saved.hostId }
+  /** Restores the room after it wakes (once, even when several messages arrive together). */
+  private load() {
+    this.loading ??= this.ctx.storage.get<{ state: PlayState; hostId: string | null }>('room').then((saved) => {
+      if (saved) { this.state = saved.state; this.hostId = saved.hostId }
+    }, () => { this.loading = null })
+    return this.loading
   }
   private save() { void this.ctx.storage.put('room', { state: this.state, hostId: this.hostId }) }
 

@@ -384,6 +384,7 @@ async function syncOnce() {
     await idbSet(`journal_${uid}`, journal)
     if (useAuth.getState().user?.uid !== uid) return
     observeLive(uid)
+    failures = 0
     const prev = useSync.getState().pulled
     useSync.setState({ status: 'UP_TO_DATE', lastSyncedAt: Date.now(), pulled: { likes: prev.likes + likes, playlists: prev.playlists + playlists, history: prev.history + history } })
   } catch (e) {
@@ -393,8 +394,12 @@ async function syncOnce() {
       status: offline ? 'OFFLINE' : 'ERROR',
       error: /permission/i.test(msg) ? 'Firestore refused the write (permission denied). The account’s security rules may need deploying.' : msg.slice(0, 200),
     })
+    // Try again by itself: 30 s, 1, 2, 4… up to 10 minutes (offline waits for the "online" event).
+    // A permission problem won't fix itself, so it isn't retried in a loop.
+    if (!offline && !/permission/i.test(msg)) requestSync(Math.min(600_000, 30_000 * 2 ** failures++))
   }
 }
+let failures = 0
 
 function observeLive(uid: string) {
   if (liveUid === uid) return
@@ -405,7 +410,12 @@ function observeLive(uid: string) {
     if (snap.metadata.fromCache || snap.metadata.hasPendingWrites) return
     reads(snap.size)
     requestSync(2000)
-  }, () => undefined)
+  }, (e) => {
+    // The listener died (network change, token refresh): drop it so the next sync opens a new one.
+    console.warn('[Arnav Music] live sync listener', e.message)
+    if (liveUid === uid) stopLive()
+    requestSync(15_000)
+  })
 }
 function stopLive() {
   unsubLive?.()

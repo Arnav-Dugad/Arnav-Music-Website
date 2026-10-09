@@ -12,7 +12,7 @@
  *   GET|POST /api/community          → lyrics version + timing fixes listeners agreed on
  *   GET  /api/known                  → artist + film names learned from YouTube Topic data
  */
-import { cached, fetchWithTimeout, json, USER_AGENT, type ApiEnv, type WaitUntil } from './util'
+import { cached, edgeCache, fetchWithTimeout, json, overLimit, USER_AGENT, type ApiEnv, type WaitUntil } from './util'
 import { creditsApi, communityApi, knownApi, metaApi } from './meta'
 import { flushKnown, knownSets, learnFromYouTube, nameKey } from './known'
 import { parseYouTubeTitle, PARSE_V } from '../src/lib/format'
@@ -62,29 +62,61 @@ export async function handleApi(request: Request, env: ApiEnv, waitUntil?: WaitU
   try {
     switch (route) {
       case '/api/health':
-        return json({ ok: true, youtube: Boolean(env.YOUTUBE_API_KEY), androidRestricted: Boolean(env.YOUTUBE_ANDROID_PACKAGE && env.YOUTUBE_ANDROID_CERT), parseV: PARSE_V, time: Date.now() }, 200, { 'cache-control': 'no-store' })
+        return await health(env)
       case '/api/yt':
         return await youtube(url, request, env, waitUntil)
       case '/api/img':
-        return await image(url)
+        return await viaEdge(request, waitUntil, () => image(url))
       case '/api/lyrics':
-        return await lyrics(url, env, waitUntil)
+        return await viaEdge(request, waitUntil, () => lyrics(url, env, waitUntil))
       case '/api/meta':
-        return await metaApi(url, env, waitUntil)
+        return await viaEdge(request, waitUntil, () => metaApi(url, env, waitUntil))
       case '/api/credits':
-        return await creditsApi(url, env, waitUntil)
+        return await viaEdge(request, waitUntil, () => creditsApi(url, env, waitUntil))
       case '/api/community':
+        if (request.method === 'POST') {
+          const ip = request.headers.get('cf-connecting-ip') ?? 'x'
+          if (overLimit(`cm:${ip}`, 30, 600_000)) return json({ error: 'slow_down' }, 429, { 'retry-after': '60' })
+        }
         return await communityApi(request, url, env)
       case '/api/known':
-        return await knownApi(env)
+        return await viaEdge(request, waitUntil, () => knownApi(env))
       default:
         return json({ error: 'not_found' }, 404)
     }
   } catch (e) {
-    return json({ error: 'upstream_failed', message: e instanceof Error ? e.message.slice(0, 200) : 'unknown' }, 502)
+    console.error('[api]', route, e instanceof Error ? e.stack ?? e.message : e)
+    return json({ error: 'upstream_failed', message: e instanceof Error ? e.message.slice(0, 200) : 'unknown' }, 502, { 'cache-control': 'no-store' })
   } finally {
     flushKnown(env, waitUntil)
   }
+}
+
+/** Health for monitors and the app's status check: configuration plus a live KV round trip. */
+async function health(env: ApiEnv): Promise<Response> {
+  let kv: boolean | null = null
+  if (env.YT_CACHE) { kv = await env.YT_CACHE.get('health:probe').then(() => true, () => false) }
+  return json({ ok: kv !== false, youtube: Boolean(env.YOUTUBE_API_KEY), androidRestricted: Boolean(env.YOUTUBE_ANDROID_PACKAGE && env.YOUTUBE_ANDROID_CERT), kv, edge: Boolean(edgeCache()), parseV: PARSE_V, time: Date.now() }, 200, { 'cache-control': 'no-store' })
+}
+
+/**
+ * Public GET answers (artwork, lyrics, metadata, credits, names) are served from Cloudflare's cache
+ * at the visitor's edge location when we have them: no KV read, no upstream, about 20 ms. Only
+ * successful, publicly cacheable answers are stored, for as long as their own Cache-Control says.
+ */
+async function viaEdge(request: Request, waitUntil: WaitUntil | undefined, run: () => Promise<Response>): Promise<Response> {
+  const edge = edgeCache()
+  if (!edge || request.method !== 'GET') return run()
+  const u = new URL(request.url)
+  const key = new Request(`https://api-edge.arnav/${PARSE_V}${u.pathname}${u.search}`)
+  const hit = await edge.match(key).catch(() => undefined)
+  if (hit) { const h = new Headers(hit.headers); h.set('x-arnav-cache', 'edge'); return new Response(hit.body, { status: hit.status, headers: h }) }
+  const res = await run()
+  const cc = res.headers.get('cache-control') ?? ''
+  if (res.status === 200 && /public/.test(cc) && !/no-store/.test(cc) && waitUntil) {
+    waitUntil(edge.put(key, res.clone()).catch(() => undefined))
+  }
+  return res
 }
 
 interface YtItem { id?: string | { videoId?: string }; snippet?: { title?: string; channelTitle?: string; description?: string; localized?: unknown; tags?: string[] }; contentDetails?: { regionRestriction?: unknown }; arnav?: unknown }
@@ -126,7 +158,7 @@ async function youtube(url: URL, request: Request, env: ApiEnv, waitUntil?: Wait
   upstream.searchParams.set('key', key)
   // Edge cache first (Cloudflare's per-colo cache, ~20 ms): public data, already parsed. KV + parse
   // behind it took ~0.6 s a call, and opening a playlist makes several.
-  const edge = (globalThis as { caches?: { default?: Cache } }).caches?.default
+  const edge = edgeCache()
   const edgeKey = new Request(`https://yt-edge.arnav/e3-${PARSE_V}/${cacheKey}`)
   if (edge) {
     const hit = await edge.match(edgeKey).catch(() => undefined)
@@ -138,10 +170,21 @@ async function youtube(url: URL, request: Request, env: ApiEnv, waitUntil?: Wait
     headers['X-Android-Package'] = env.YOUTUBE_ANDROID_PACKAGE
     headers['X-Android-Cert'] = env.YOUTUBE_ANDROID_CERT
   }
+  const ip = request.headers.get('cf-connecting-ip') ?? 'x'
   const result = await cached(env, cacheKey, ep.ttl, async () => {
-    const r = await fetch(upstream.toString(), { headers })
-    return { status: r.status, body: await r.text() }
+    // Only calls that reach Google count: a fair-use limit per visitor (search costs 100 units each).
+    if (overLimit(`yt:${ip}`, ep.path === 'search' ? 40 : 150, 60_000)) {
+      return { status: 429, body: JSON.stringify({ error: { code: 429, errors: [{ reason: 'slowDown' }], message: 'Too many requests, try again in a moment.' } }) }
+    }
+    // Google has brief 5xx blips and slow moments: a 10 s timeout and one quick retry.
+    for (let attempt = 0; ; attempt++) {
+      const r = await fetchWithTimeout(upstream.toString(), { headers }, 10_000).catch(() => null)
+      if (r && r.status < 500) return { status: r.status, body: await r.text() }
+      if (attempt >= 1) return { status: r?.status ?? 504, body: r ? await r.text() : JSON.stringify({ error: { code: 504, errors: [{ reason: 'timeout' }], message: 'YouTube did not answer in time.' } }) }
+      await new Promise((res) => setTimeout(res, 400))
+    }
   }, waitUntil)
+  if (result.status !== 200) console.warn('[yt]', ep.path, result.status, result.body.slice(0, 160))
   let body = result.body
   if (result.status === 200) {
     if (!result.hit) learnFromYouTube(body)
@@ -153,11 +196,13 @@ async function youtube(url: URL, request: Request, env: ApiEnv, waitUntil?: Wait
       'content-type': 'application/json; charset=utf-8',
       'access-control-allow-origin': '*',
       // Shared CDN caching for public data (Vercel honours s-maxage); never cache errors.
-      'cache-control': result.status === 200 ? `public, max-age=300, s-maxage=${Math.min(ep.ttl, 3600)}` : 'no-store',
-      'x-arnav-cache': result.hit ? 'hit' : 'miss',
+      // A stale copy (served because YouTube failed) is only cached briefly, so fresh data returns soon.
+      'cache-control': result.status !== 200 ? 'no-store' : result.stale ? 'public, max-age=60' : `public, max-age=300, s-maxage=${Math.min(ep.ttl, 3600)}`,
+      'x-arnav-cache': result.stale ? 'stale' : result.hit ? 'hit' : 'miss',
+      'x-content-type-options': 'nosniff',
     },
   })
-  if (edge && result.status === 200) {
+  if (edge && result.status === 200 && !result.stale) {
     const copy = new Response(body, { headers: { 'content-type': 'application/json; charset=utf-8', 'access-control-allow-origin': '*', 'cache-control': `public, max-age=300, s-maxage=${Math.min(ep.ttl, 3600)}` } })
     const put = edge.put(edgeKey, copy).catch(() => undefined)
     if (waitUntil) waitUntil(put)
@@ -170,7 +215,8 @@ async function image(url: URL): Promise<Response> {
   let target: URL
   try { target = new URL(raw) } catch { return json({ error: 'bad_url' }, 400) }
   if (target.protocol !== 'https:' || !IMG_HOSTS.has(target.hostname)) return json({ error: 'host_not_allowed' }, 400)
-  const r = await fetch(target.toString(), { headers: { accept: 'image/*' } })
+  const r = await fetchWithTimeout(target.toString(), { headers: { accept: 'image/*' } }, 8000).catch(() => null)
+  if (!r) return json({ error: 'image_timeout' }, 504, { 'cache-control': 'no-store' })
   const type = r.headers.get('content-type') ?? ''
   if (!r.ok || !type.startsWith('image/')) return json({ error: 'image_failed', status: r.status }, r.ok ? 415 : r.status)
   return new Response(r.body, {

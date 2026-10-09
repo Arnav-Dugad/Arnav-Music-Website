@@ -5,6 +5,8 @@
 const JWKS_URL = 'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com'
 
 let keys: { byKid: Map<string, CryptoKey>; until: number } | null = null
+/** When the key list was last fetched: an unknown key id refetches at most once a minute. */
+let fetchedAt = 0
 
 const b64url = (s: string) => {
   const b = atob(s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (s.length % 4)) % 4))
@@ -13,9 +15,14 @@ const b64url = (s: string) => {
 const json = (s: string) => JSON.parse(new TextDecoder().decode(b64url(s))) as Record<string, unknown>
 
 async function keyFor(kid: string): Promise<CryptoKey | null> {
-  if (!keys || Date.now() > keys.until || !keys.byKid.has(kid)) {
-    const r = await fetch(JWKS_URL)
-    if (!r.ok) return null
+  const expired = !keys || Date.now() > keys.until
+  if (expired || (!keys!.byKid.has(kid) && Date.now() - fetchedAt > 60_000)) {
+    const ctl = new AbortController()
+    const timer = setTimeout(() => ctl.abort(), 6000)
+    const r = await fetch(JWKS_URL, { signal: ctl.signal }).catch(() => null).finally(() => clearTimeout(timer))
+    fetchedAt = Date.now()
+    // Keep using the keys we have if Google is briefly unreachable.
+    if (!r || !r.ok) return keys?.byKid.get(kid) ?? null
     const body = (await r.json()) as { keys?: (JsonWebKey & { kid?: string })[] }
     const byKid = new Map<string, CryptoKey>()
     for (const k of body.keys ?? []) {
@@ -25,7 +32,7 @@ async function keyFor(kid: string): Promise<CryptoKey | null> {
     const maxAge = Number(/max-age=(\d+)/.exec(r.headers.get('cache-control') ?? '')?.[1] ?? 3600)
     keys = { byKid, until: Date.now() + Math.min(maxAge, 6 * 3600) * 1000 }
   }
-  return keys.byKid.get(kid) ?? null
+  return keys?.byKid.get(kid) ?? null
 }
 
 export interface FirebaseIdentity { uid: string; name: string | null; picture: string | null }

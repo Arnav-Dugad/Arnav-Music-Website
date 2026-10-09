@@ -1,0 +1,14 @@
+# Cloudflare static assets: hashed build files never change, so browsers keep them for a year
+# (no revalidation round trip on every visit). index.html stays revalidated so updates show at once.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/icons/*
+  Cache-Control: public, max-age=604800
+
+/manifest.webmanifest
+  Cache-Control: public, max-age=3600
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
