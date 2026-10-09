@@ -1,0 +1,138 @@
+/*
+ * Liquid Glass — Apple's iOS / iPadOS 26 material, on the web.
+ *
+ * Every glass surface gets: a heavy frost that also lifts the colour and light of what's behind it
+ * (blur + saturate + brightness), a faint sheen across the top, a specular rim that catches light on
+ * the top-left and bottom-right edges (a gradient border), an inner highlight line and a soft
+ * shadow so it floats. Floating controls (tab bar, mini player, player bar) also refract at their
+ * edges in Chromium (src/lib/liquidGlass.ts). Glass is for navigation and controls, not content.
+ */
+:root {
+  --lg-blur: 26px;
+  --lg-sat: 1.9;
+  --lg-bright: 1.06;
+  --lg-tint: rgba(30, 30, 38, 0.36);
+  --lg-tint-thick: rgba(24, 24, 31, 0.58);
+  --lg-tint-thin: rgba(40, 40, 50, 0.24);
+  --lg-sheen: linear-gradient(180deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.025) 38%, rgba(255,255,255,0) 62%, rgba(255,255,255,0.035) 100%);
+  --lg-rim: linear-gradient(140deg, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0.10) 22%, rgba(255,255,255,0.03) 50%, rgba(255,255,255,0.08) 78%, rgba(255,255,255,0.26) 100%);
+  --lg-inner: inset 0 1px 0.5px rgba(255,255,255,0.22), inset 0 -0.5px 0.5px rgba(255,255,255,0.08);
+  --lg-shadow: 0 12px 40px rgba(0,0,0,0.32), 0 2px 8px rgba(0,0,0,0.22);
+  --lg-active: rgba(255, 255, 255, 0.14);
+}
+:root[data-theme='light'] {
+  --lg-sat: 1.7;
+  --lg-bright: 1.04;
+  --lg-tint: rgba(255, 255, 255, 0.46);
+  --lg-tint-thick: rgba(252, 252, 254, 0.7);
+  --lg-tint-thin: rgba(255, 255, 255, 0.32);
+  --lg-sheen: linear-gradient(180deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.12) 40%, rgba(255,255,255,0) 62%, rgba(255,255,255,0.2) 100%);
+  --lg-rim: linear-gradient(140deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.4) 24%, rgba(0,0,0,0.05) 52%, rgba(255,255,255,0.35) 80%, rgba(255,255,255,0.85) 100%);
+  --lg-inner: inset 0 1px 0.5px rgba(255,255,255,0.8), inset 0 -0.5px 0.5px rgba(0,0,0,0.05);
+  --lg-shadow: 0 12px 36px rgba(20,20,40,0.16), 0 2px 8px rgba(20,20,40,0.08);
+  --lg-active: rgba(0, 0, 0, 0.07);
+}
+@media (prefers-color-scheme: light) { :root[data-theme='system'] { --lg-tint: rgba(255,255,255,0.46); --lg-tint-thick: rgba(252,252,254,0.7); --lg-tint-thin: rgba(255,255,255,0.32); } }
+
+/* ── The material ──────────────────────────────────────────────────────── */
+.glass, .glass-thick, .glass-thin, .lg {
+  border: 1px solid transparent;
+  background: var(--lg-sheen) padding-box, linear-gradient(var(--lg-tint), var(--lg-tint)) padding-box, var(--lg-rim) border-box;
+  -webkit-backdrop-filter: blur(var(--lg-blur)) saturate(var(--lg-sat)) brightness(var(--lg-bright));
+  backdrop-filter: blur(var(--lg-blur)) saturate(var(--lg-sat)) brightness(var(--lg-bright));
+  box-shadow: var(--lg-inner), var(--lg-shadow);
+}
+.glass-thick { background: var(--lg-sheen) padding-box, linear-gradient(var(--lg-tint-thick), var(--lg-tint-thick)) padding-box, var(--lg-rim) border-box; --lg-blur: 34px; }
+.glass-thin { background: var(--lg-sheen) padding-box, linear-gradient(var(--lg-tint-thin), var(--lg-tint-thin)) padding-box, var(--lg-rim) border-box; --lg-blur: 20px; box-shadow: var(--lg-inner); }
+
+/* Glass off (Settings → Appearance) and reduced transparency: solid surfaces, no frost. */
+:root[data-glass='off'] .glass, :root[data-glass='off'] .glass-thick, :root[data-glass='off'] .glass-thin, :root[data-glass='off'] .lg {
+  background: var(--surface-solid); -webkit-backdrop-filter: none; backdrop-filter: none; border-color: var(--hairline);
+}
+@media (prefers-reduced-transparency: reduce) {
+  .glass, .glass-thick, .glass-thin, .lg { background: var(--surface-solid); -webkit-backdrop-filter: none; backdrop-filter: none; border-color: var(--hairline); }
+}
+
+/* ── Refraction on floating controls (Chromium) ─────────────────────────── */
+.lg-refract .tabbar, .lg-refract .mini, .lg-refract .pbar, .lg-refract .h-top-pill, .lg-refract .m-account {
+  -webkit-backdrop-filter: url(#lg-refract) blur(var(--lg-blur)) saturate(var(--lg-sat)) brightness(var(--lg-bright));
+  backdrop-filter: url(#lg-refract) blur(var(--lg-blur)) saturate(var(--lg-sat)) brightness(var(--lg-bright));
+}
+:root[data-glass='off'].lg-refract .tabbar, :root[data-glass='off'].lg-refract .mini, :root[data-glass='off'].lg-refract .pbar { backdrop-filter: none; }
+
+/* ── Controls in glass ─────────────────────────────────────────────────── */
+/* Segmented controls: a glass track with a raised glass pill. */
+.segmented { background: var(--lg-sheen), linear-gradient(var(--lg-tint-thin), var(--lg-tint-thin)); -webkit-backdrop-filter: blur(18px) saturate(1.7); backdrop-filter: blur(18px) saturate(1.7); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.07), inset 0 1px 0 rgba(255,255,255,0.08); }
+.seg-pill { background: var(--lg-sheen), linear-gradient(var(--lg-active), var(--lg-active)) !important; box-shadow: inset 0 1px 0.5px rgba(255,255,255,0.3), inset 0 0 0 0.5px rgba(255,255,255,0.18), 0 2px 10px rgba(0,0,0,0.25) !important; }
+/* Chips, secondary buttons and the search field: thin glass. */
+.chip, .btn-secondary, .sb-search, .h-chip {
+  background: var(--lg-sheen), linear-gradient(var(--lg-tint-thin), var(--lg-tint-thin)) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(1.7); backdrop-filter: blur(16px) saturate(1.7);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08), inset 0 1px 0 rgba(255,255,255,0.12);
+}
+:root[data-theme='light'] .chip, :root[data-theme='light'] .btn-secondary, :root[data-theme='light'] .sb-search, :root[data-theme='light'] .h-chip { box-shadow: inset 0 0 0 1px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9); }
+.chip.on { background: var(--text) !important; color: var(--bg); box-shadow: none; }
+.chip:hover, .btn-secondary:hover:not(:disabled) { background: var(--lg-sheen), linear-gradient(var(--lg-active), var(--lg-active)) !important; }
+/* Round controls floating over artwork (Now Playing, heroes): glass circles. */
+.np-top .icon-btn, .pl-hero .icon-btn, .art-hero .icon-btn, .cine-top .icon-btn, .wrapped-top .icon-btn, .wall .icon-btn, .wrapped-empty-top .icon-btn {
+  background: var(--lg-sheen), linear-gradient(rgba(255,255,255,0.10), rgba(255,255,255,0.10));
+  -webkit-backdrop-filter: blur(16px) saturate(1.8); backdrop-filter: blur(16px) saturate(1.8);
+  box-shadow: inset 0 1px 0.5px rgba(255,255,255,0.28), inset 0 0 0 0.5px rgba(255,255,255,0.14), 0 4px 14px rgba(0,0,0,0.25);
+}
+.np .segmented { background: var(--lg-sheen), linear-gradient(rgba(255,255,255,0.10), rgba(255,255,255,0.10)); }
+/* Menus, sheets and toasts float above everything. */
+.menu, .sheet, .toast { --lg-blur: 40px; }
+.toast { border: 1px solid transparent; background: var(--lg-sheen) padding-box, linear-gradient(var(--lg-tint-thick), var(--lg-tint-thick)) padding-box, var(--lg-rim) border-box !important; -webkit-backdrop-filter: blur(36px) saturate(1.9); backdrop-filter: blur(36px) saturate(1.9); box-shadow: var(--lg-inner), var(--lg-shadow); }
+.sheet-root { background: rgba(0, 0, 0, 0.32); }
+
+/* ── Desktop: a floating glass sidebar and player bar ─────────────────── */
+@media (min-width: 1024px) {
+  .app.desktop .sidebar { top: 10px; left: 10px; bottom: 10px; width: calc(var(--sidebar) - 14px); border-radius: 26px; border-width: 1px; padding-bottom: calc(var(--player-h) + 22px); }
+  .app.desktop .pbar { border-radius: 28px; bottom: 12px; }
+  .app.desktop .sb-link.active, .app.desktop .sb-pill { border-radius: 14px; }
+  .sb-pill { background: var(--lg-sheen), linear-gradient(var(--lg-active), var(--lg-active)) !important; box-shadow: inset 0 1px 0.5px rgba(255,255,255,0.22), inset 0 0 0 0.5px rgba(255,255,255,0.12); }
+}
+
+/* ── Phones: the iOS 26 floating tab bar + mini player ──────────────────── */
+@media (max-width: 1023px) {
+  .app.mobile { --tabbar-h: 74px; --player-h: 58px; }
+  .app.mobile .tabbar {
+    left: 12px; right: 12px; bottom: calc(10px + env(safe-area-inset-bottom)); height: 62px; padding: 0 4px;
+    border-radius: 31px; border-width: 1px; overflow: hidden;
+    transition: right .5s cubic-bezier(0.32, 0.72, 0, 1), width .5s cubic-bezier(0.32, 0.72, 0, 1), height .45s cubic-bezier(0.32, 0.72, 0, 1), border-radius .45s;
+  }
+  .app.mobile .tab { position: relative; min-width: 0; transition: opacity .3s, transform .45s cubic-bezier(0.32, 0.72, 0, 1); }
+  .app.mobile .tab-pill { top: 5px; bottom: 5px; left: 4px; right: 4px; width: auto; height: auto; margin: 0; border-radius: 26px;
+    background: var(--lg-sheen), linear-gradient(var(--lg-active), var(--lg-active)); box-shadow: inset 0 1px 0.5px rgba(255,255,255,0.25), inset 0 0 0 0.5px rgba(255,255,255,0.12); }
+  .app.mobile .mini {
+    left: 12px; right: 12px; bottom: calc(10px + 62px + 8px + env(safe-area-inset-bottom)); height: 56px; border-radius: 28px; padding: 0 8px 0 6px; border-width: 1px;
+    transition: left .5s cubic-bezier(0.32, 0.72, 0, 1), bottom .5s cubic-bezier(0.32, 0.72, 0, 1), height .45s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  .app.mobile .mini-art { width: 42px; height: 42px; }
+  .app.mobile .mini-art .pb-art-inner, .app.mobile .mini-art .art { border-radius: 50%; }
+  .app.mobile .mini-prog .prog-line { left: 22px; right: 22px; bottom: 3px; border-radius: 2px; }
+
+  /* Scrolling down: the tab bar shrinks to the current tab and the mini player moves up beside it. */
+  .app.mobile.bars-min .tabbar { right: calc(100% - 12px - 62px); grid-template-columns: 1fr; }
+  .app.mobile.bars-min .tab:not(.active) { display: none; }
+  .app.mobile.bars-min .tab.active .tab-label { display: none; }
+  .app.mobile.bars-min .tab-pill { left: 5px; right: 5px; }
+  .app.mobile.bars-min .mini { left: calc(12px + 62px + 8px); bottom: calc(10px + env(safe-area-inset-bottom)); height: 62px; border-radius: 31px; }
+  /* Pages leave room for the floating bars; the soft fade under them keeps text readable. */
+  .app.mobile .page { padding-bottom: calc(62px + 56px + 60px + env(safe-area-inset-bottom)); }
+  .app.mobile.has-track::after { height: calc(62px + 56px + 40px + env(safe-area-inset-bottom)); background: linear-gradient(to top, color-mix(in srgb, var(--bg) 82%, transparent) 0%, color-mix(in srgb, var(--bg) 55%, transparent) 55%, transparent); }
+  .app.mobile:not(.has-track)::after { content: ''; position: fixed; left: 0; right: 0; bottom: 0; z-index: 29; pointer-events: none; height: calc(62px + 30px + env(safe-area-inset-bottom)); background: linear-gradient(to top, color-mix(in srgb, var(--bg) 75%, transparent), transparent); }
+  .app.mobile .toasts { bottom: calc(62px + 56px + 34px + env(safe-area-inset-bottom)); }
+  .app.mobile.bars-min .toasts { bottom: calc(62px + 30px + env(safe-area-inset-bottom)); }
+  .app.mobile .together-pill { bottom: calc(62px + 56px + 30px + env(safe-area-inset-bottom)); }
+  /* The Home top bar and the floating profile button: glass too. */
+  .h-top { background: var(--lg-sheen), linear-gradient(color-mix(in srgb, var(--bg) 48%, transparent), color-mix(in srgb, var(--bg) 48%, transparent)); -webkit-backdrop-filter: blur(24px) saturate(1.9); backdrop-filter: blur(24px) saturate(1.9); box-shadow: inset 0 -0.5px 0 rgba(255,255,255,0.06); }
+  .m-account { background: var(--lg-sheen), linear-gradient(var(--lg-tint), var(--lg-tint)); box-shadow: inset 0 1px 0.5px rgba(255,255,255,0.28), inset 0 0 0 0.5px rgba(255,255,255,0.14), var(--lg-shadow); }
+}
+:root[data-motion='off'] .tabbar, :root[data-motion='off'] .mini { transition: none !important; }
+
+/* Controls that always sit over content dim a little in dark mode, so bright artwork behind them
+   never washes out their text (Apple's glass adapts the same way). */
+:root:not([data-theme='light']) .pbar, :root:not([data-theme='light']) .mini, :root:not([data-theme='light']) .tabbar, :root:not([data-theme='light']) .menu, :root:not([data-theme='light']) .sheet { --lg-bright: 0.86; --lg-tint-thick: rgba(22, 22, 29, 0.64); }
+/* Mini player artwork: a small rounded square, like Apple Music. */
+@media (max-width: 1023px) { .app.mobile .mini-art .pb-art-inner, .app.mobile .mini-art .art { border-radius: 10px; } }

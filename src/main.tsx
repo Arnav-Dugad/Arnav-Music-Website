@@ -1,5 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { installLiquidGlass } from './lib/liquidGlass'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import { loadTracks, pruneRegistry } from './state/tracks'
@@ -22,6 +23,7 @@ import './styles/social.css'
 import './styles/home.css'
 // Last: phone and detail polish that must win over the page styles.
 import './styles/polish.css'
+import './styles/liquid-glass.css'
 
 // A newer deploy replaced the code chunks this tab was using: reload once to pick them up.
 window.addEventListener('vite:preloadError', (e) => {
@@ -40,6 +42,8 @@ async function boot() {
   ])
   pruneRegistry(referenced)
   void pruneStaleCache()
+  // Liquid Glass: edge refraction on floating controls (Chromium) and the shrinking tab bar.
+  installLiquidGlass()
   // Back in your listening room after a reload.
   void import('./services/together').then((m) => m.rejoinAfterReload())
   void import('./services/social').then((m) => m.startSocial())
