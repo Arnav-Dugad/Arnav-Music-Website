@@ -155,6 +155,7 @@ export function TabBar() {
         return (
           <NavLink key={n.to} to={n.to} end={n.end} className={`tab ${active ? 'active' : ''}`}
             onClick={() => { if (active) document.querySelector('.main-scroll')?.scrollTo({ top: 0, behavior: 'smooth' }) }}>
+            {active && <motion.span layoutId="tab-active" className="tab-pill" transition={{ type: 'spring', stiffness: 520, damping: 38 }} aria-hidden />}
             <motion.span animate={{ scale: active ? 1 : 0.94, y: active ? -1 : 0 }} transition={spring} className="tab-icon">
               <Icon name={n.icon} size={22} strokeWidth={active ? 2.1 : 1.8} />
               {n.to === '/friends' && <TabDot />}

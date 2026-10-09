@@ -36,7 +36,7 @@
   .t-large { font-size: clamp(30px, 8.6vw, 38px); }
 
   /* Credits & identity on phones. */
-  .cr-list { grid-template-columns: 1fr; }
+  .cr-list { grid-template-columns: minmax(0, 1fr); }
   .ident-row { padding: 10px 6px; }
   .replay-bars { height: 72px; }
   .film-card .row .btn { flex: 1 1 auto; }
@@ -157,3 +157,84 @@ button:disabled, .btn:disabled, .chip:disabled { cursor: not-allowed; }
   .np-grabber { top: calc(env(safe-area-inset-top) + 4px); }
   .np-top .np-mode { margin-top: 4px; }
 }
+
+/* Phones (and big text settings): a button never runs off the screen — a long label wraps. */
+@media (max-width: 700px) {
+  .btn { max-width: 100%; white-space: normal; height: auto; min-height: 40px; padding-top: 6px; padding-bottom: 6px; line-height: 1.2; text-align: center; }
+  .btn-sm { min-height: 32px; padding-top: 5px; padding-bottom: 5px; }
+  .btn-lg { min-height: 50px; }
+  .btn > svg { flex: none; }
+  .chip { max-width: 100%; }
+}
+
+/* Phones: the lyrics actions sit on one row that scrolls sideways, clear of the gesture bar. */
+@media (max-width: 700px) {
+  .np .lyr-bar { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: calc(6px + env(safe-area-inset-bottom)); -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent); }
+  .np .lyr-bar::-webkit-scrollbar { display: none; }
+  .np .lyr-bar > * { flex: none; }
+  .np .lyr-bar > .grow { flex: 1 0 8px; }
+  .np .lyr-src { max-width: none; }
+}
+
+/* ── Phones: profile button + More menu ─────────────────────────────────── */
+.m-account { position: fixed; z-index: 28; top: calc(14px + env(safe-area-inset-top)); right: 16px; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: var(--text); font-weight: 760; font-size: 16px;
+  background: color-mix(in oklab, var(--surface-raised) 72%, transparent); -webkit-backdrop-filter: blur(16px) saturate(1.4); backdrop-filter: blur(16px) saturate(1.4); box-shadow: inset 0 0 0 1px var(--glass-edge); transition: box-shadow .3s, transform .3s var(--ease); }
+.m-account img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.m-account.scrolled { box-shadow: inset 0 0 0 1px var(--glass-edge), var(--shadow-2); }
+.m-account-dot { position: absolute; top: 1px; right: 1px; width: 10px; height: 10px; border-radius: 50%; background: var(--danger); box-shadow: 0 0 0 2px var(--bg); }
+.app.desktop .m-account { display: none; }
+/* Page titles leave room for it. */
+.app.mobile .page-header > .grow, .app.mobile .fr-head, .app.mobile .hero-copy > .t-eyebrow { padding-right: 52px; }
+
+.m-more .sheet-head { margin-bottom: 10px; }
+.m-me { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px; border-radius: var(--r-lg); background: var(--surface); margin-bottom: 14px; text-align: left; transition: background .2s; }
+.m-me:active { background: var(--surface-2); }
+.m-me-avatar { width: 44px; height: 44px; border-radius: 50%; flex: none; display: grid; place-items: center; background: var(--surface-2); overflow: hidden; }
+.m-me-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.m-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+.m-tile { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 14px; border-radius: var(--r-lg); text-align: left; min-width: 0; overflow: hidden; isolation: isolate;
+  background: linear-gradient(150deg, color-mix(in oklab, var(--t) 22%, transparent), color-mix(in oklab, var(--t) 6%, transparent)); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--t) 22%, transparent); transition: transform .2s var(--ease-out); }
+.m-tile:active { transform: scale(.97); }
+.m-tile b { font-size: 15px; font-weight: 700; margin-top: 8px; }
+.m-tile .t-caption { font-size: 12px; line-height: 1.3; }
+.m-tile-icon { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: color-mix(in oklab, var(--t) 30%, transparent); color: #fff; }
+.m-tile-badge { position: absolute; top: 12px; right: 12px; }
+.m-list { display: flex; flex-direction: column; border-radius: var(--r-lg); background: var(--surface); overflow: hidden; }
+.m-list button { display: flex; align-items: center; gap: 14px; height: 52px; padding: 0 16px; font-size: 15px; font-weight: 560; text-align: left; transition: background .2s; }
+.m-list button + button { box-shadow: inset 0 1px 0 var(--hairline); }
+.m-list button:active { background: var(--surface-2); }
+
+/* Phones: Now Playing's header and cover area own vertical swipes (pull down to close) — the
+   browser would otherwise take them as a scroll and cancel the gesture. Lyrics / queue still scroll. */
+@media (max-width: 1023px) {
+  .np-top, .np:not(.mobile-panel) .np-stage { touch-action: none; }
+}
+.wrapped-empty-top { display: flex; justify-content: flex-end; padding-top: calc(14px + env(safe-area-inset-top)); }
+.sheet { position: relative; }
+.sheet-x { position: absolute; top: 12px; right: 12px; z-index: 2; background: var(--surface-2); }
+/* Phones: a grab handle tells you the sheet can be dismissed. */
+@media (max-width: 700px) { .sheet::before { content: ''; position: absolute; top: 7px; left: 50%; width: 36px; height: 4px; margin-left: -18px; border-radius: 2px; background: var(--hairline-strong); } }
+
+/* Cinematic lyrics on phones: the song's name has room, actions sit in one scrolling row. */
+@media (max-width: 700px) {
+  .cine-top { gap: 10px; padding: calc(14px + env(safe-area-inset-top)) 16px 10px; }
+  .cine-top .cine-skip { display: none; }
+  .cine-art { width: 46px; height: 46px; }
+  .cine-body { padding: 0 20px 16px; }
+  .cine .lyr-bar { padding: 0 16px calc(14px + env(safe-area-inset-bottom)); flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent); }
+  .cine .lyr-bar::-webkit-scrollbar { display: none; }
+  .cine .lyr-bar > * { flex: none; }
+}
+
+/* ── Touch feel ─────────────────────────────────────────────────────────── */
+/* The active tab gets a soft pill that glides between tabs. */
+.tabbar .tab { position: relative; isolation: isolate; }
+.tab-pill { position: absolute; z-index: -1; top: 6px; left: 50%; width: 58px; height: 32px; margin-left: -29px; border-radius: 16px; background: var(--accent-soft); }
+/* Things you tap give way under your finger (no hover on phones). */
+@media (hover: none) {
+  .card, .genre-tile, .quick-tile, .m-tile, .fr-card, .track-row, .sc-now, .pf-artist, .fr-chart-row, .fr-feed-song { -webkit-tap-highlight-color: transparent; transition: transform .22s var(--ease-out), background-color .2s; }
+  .card:active, .genre-tile:active, .quick-tile:active, .fr-card:active, .pf-artist:active { transform: scale(.97); }
+  .track-row:active, .fr-chart-row:active, .fr-feed-song:active { background: var(--surface); }
+  button, a { -webkit-tap-highlight-color: transparent; }
+}
+:root[data-motion='off'] .tab-pill { transition: none; }

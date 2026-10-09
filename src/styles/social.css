@@ -175,12 +175,12 @@ button.fr-row:active { transform: scale(0.99); }
   .fr-privacy-menu { right: auto; left: 0; }
   .fr-qr-inner { flex-direction: column; align-items: flex-start; }
   .sc-now { width: min(82vw, 300px); }
-  .fr-inbox { grid-template-columns: 1fr; }
-  .pf-hero { grid-template-columns: 1fr; justify-items: start; gap: 18px; padding: 22px 18px; }
+  .fr-inbox { grid-template-columns: minmax(0, 1fr); }
+  .pf-hero { grid-template-columns: minmax(0, 1fr); justify-items: start; gap: 18px; padding: 22px 18px; }
   .pf-match { position: absolute; top: 18px; right: 16px; width: 92px; height: 92px; }
   .pf-match-n b { font-size: 21px; }
   .pf-match-n .t-caption { font-size: 10px; }
-  .pf-blend { grid-template-columns: 1fr; }
+  .pf-blend { grid-template-columns: minmax(0, 1fr); }
   .fr-tabs .segmented { width: 100%; }
 }
 :root[data-motion='off'] .pf-hero-glow, :root[data-motion='reduced'] .pf-hero-glow { animation: none; }
@@ -215,7 +215,7 @@ button.fr-row:active { transform: scale(0.99); }
 .fr-live i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .fr-live.on { color: var(--success); background: color-mix(in oklab, var(--success) 14%, transparent); }
 .fr-live.on i { animation: breathe 2s ease-in-out infinite; }
-.fr-stats { display: grid; grid-template-columns: 1fr 1fr; border-radius: var(--r-md); background: var(--surface); overflow: hidden; }
+.fr-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-radius: var(--r-md); background: var(--surface); overflow: hidden; }
 .fr-stats > div { display: flex; flex-direction: column; gap: 1px; padding: 10px 14px; }
 .fr-stats > div + div { box-shadow: inset 1px 0 0 var(--hairline); }
 .fr-stats b { font-size: 20px; font-weight: 780; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
@@ -275,7 +275,7 @@ button.fr-row:active { transform: scale(0.99); }
 
 @media (max-width: 700px) {
   .fr-me { border-radius: var(--r-lg); padding: 14px; }
-  .fr-grid { grid-template-columns: 1fr; gap: 8px; }
+  .fr-grid { grid-template-columns: minmax(0, 1fr); gap: 8px; }
   .fr-main .fr-tabs { margin-left: calc(var(--gutter) * -1); margin-right: calc(var(--gutter) * -1); padding-left: var(--gutter); padding-right: var(--gutter); }
   .fr-tabs .segmented { width: 100%; }
   .fr-tabs .segmented button { flex: 1; padding: 0 6px; }

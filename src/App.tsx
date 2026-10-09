@@ -17,6 +17,7 @@ import { PageBoundary } from './components/ErrorBoundary'
 import { isMorphing } from './lib/reveal'
 import { TogetherLayer } from './components/TogetherLayer'
 import { SendSheet } from './components/Social'
+import { MobileAccountButton, MoreSheet } from './components/MobileMenu'
 import Home from './pages/Home'
 
 const Explore = lazy(() => import('./pages/Explore'))
@@ -121,7 +122,7 @@ export default function App() {
           </Suspense>
           </PageBoundary>
         </main>
-        {!onboarding && (desktop ? <PlayerBar /> : <><MiniPlayer /><TabBar /></>)}
+        {!onboarding && (desktop ? <PlayerBar /> : <><MiniPlayer /><TabBar /><MobileAccountButton /><MoreSheet /></>)}
         <DockPanel />
         <NowPlaying />
         <CinematicLyrics />

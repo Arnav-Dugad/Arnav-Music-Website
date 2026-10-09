@@ -70,6 +70,7 @@ function useTiles(): Tile[] {
 /** A 3D wall of covers you fly through; switch to constellations to see them gather by colour. */
 export default function WallPage() {
   const nav = useNavigate()
+  const leave = () => (window.history.state?.idx > 0 ? nav(-1) : nav('/'))
   const tiles = useTiles()
   const [mode, setMode] = useState<'wall' | 'stars'>('wall')
   const [colors, setColors] = useState<Map<string, { hex: string; h: number; s: number }>>(new Map())
@@ -235,7 +236,7 @@ export default function WallPage() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'ArrowUp' || e.key === 'ArrowRight' || e.key === ' ') c.target = clamp(c.target + DEPTH)
       if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') c.target = clamp(c.target - DEPTH)
-      if (e.key === 'Escape') nav(-1)
+      if (e.key === 'Escape') leave()
     }
     const onMove = (e: PointerEvent) => { c.ty = ((e.clientX / innerWidth) - 0.5) * 14; c.tx = -((e.clientY / innerHeight) - 0.5) * 10 }
     let dragY: number | null = null
@@ -259,13 +260,13 @@ export default function WallPage() {
   }, [maxZ, nav])
 
   if (tiles.length < 6) {
-    return <div className="page"><Empty icon="wall" title="Your wall fills as you listen" body="Play albums and make playlists — their covers appear here as a wall you can fly through." action={<button className="btn btn-primary" onClick={() => nav('/explore')}>Explore music</button>} /></div>
+    return <div className="page"><div className="wrapped-empty-top"><button className="icon-btn" aria-label="Close" onClick={leave}><Icon name="close" size={20} /></button></div><Empty icon="wall" title="Your wall fills as you listen" body="Play albums and make playlists — their covers appear here as a wall you can fly through." action={<button className="btn btn-primary" onClick={() => nav('/explore')}>Explore music</button>} /></div>
   }
   const coloured = tiles.filter((t) => colors.has(t.key)).length
   return (
     <div className={`wall ${mode}`} aria-label="Album wall">
       <div className="wall-hud">
-        <button className="icon-btn" aria-label="Close" onClick={() => nav(-1)}><Icon name="close" size={20} /></button>
+        <button className="icon-btn" aria-label="Close" onClick={leave}><Icon name="close" size={20} /></button>
         <div className="grow"><div className="t-title">Album wall</div><div className="t-caption">{mode === 'stars' && coloured < tiles.length ? `Gathering by colour… ${coloured}/${tiles.length}` : `${tiles.length} covers · scroll or drag to fly · tap to open`}</div></div>
         <Segmented id="wall-mode" size="sm" value={mode} onChange={(m) => { setMode(m); cam.current.target = 0 }} options={[{ value: 'wall', label: 'Wall' }, { value: 'stars', label: 'Constellations' }]} />
       </div>

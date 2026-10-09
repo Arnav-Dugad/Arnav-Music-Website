@@ -54,7 +54,8 @@ export function SyncedLyrics({ lines, translation, romanized, size, dual = false
   const layout = (active: number) => {
     const el = box.current
     if (!el) return
-    const anchor = el.clientHeight * (sizeRef.current === 'lg' ? 0.32 : 0.36)
+    // The line being sung sits in the upper part of the view (higher on a phone, where the panel is tall and narrow).
+    const anchor = el.clientHeight * (sizeRef.current === 'lg' ? 0.32 : el.clientHeight > el.clientWidth * 1.4 ? 0.24 : 0.36)
     const target = lineRefs.current[Math.max(0, active)]
     const top = target ? target.offsetTop + target.offsetHeight / 2 : 0
     const shift = anchor - top + state.current.manual

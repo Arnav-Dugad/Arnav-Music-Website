@@ -14,6 +14,8 @@ import { hashHue } from '../lib/color'
 export default function WrappedPage() {
   const { month } = useParams()
   const nav = useNavigate()
+  // Back where you came from — or Home when opened straight from a link.
+  const leave = () => (window.history.state?.idx > 0 ? nav(-1) : nav('/'))
   const events = useLibrary((s) => s.events)
   const live = useMemo(() => liveEvents(events), [events])
   const months = useMemo(() => wrappedMonths(live), [live])
@@ -90,13 +92,16 @@ export default function WrappedPage() {
 
   if (!w) {
     return (
-      <div className="page"><Empty icon="story" title="No month to wrap yet" body="Listen for at least half an hour in a month and its story appears here." action={<button className="btn btn-primary" onClick={() => nav('/explore')}>Find music</button>} /></div>
+      <div className="page">
+        <div className="wrapped-empty-top"><button className="icon-btn" aria-label="Close" onClick={leave}><Icon name="close" size={20} /></button></div>
+        <Empty icon="story" title="No month to wrap yet" body="Listen for at least half an hour in a month and its story appears here." action={<button className="btn btn-primary" onClick={() => nav('/explore')}>Find music</button>} />
+      </div>
     )
   }
   return (
     <div className="wrapped">
       <div className="wrapped-top">
-        <button className="icon-btn" aria-label="Close" onClick={() => nav(-1)}><Icon name="close" size={20} /></button>
+        <button className="icon-btn" aria-label="Close" onClick={leave}><Icon name="close" size={20} /></button>
         <select className="lyr-select" value={key} onChange={(e) => nav(`/wrapped/${e.target.value}`)} aria-label="Month">
           {years.length > 0 && <optgroup label="Years">{years.map((y) => <option key={y} value={y}>{y} — the whole year</option>)}</optgroup>}
           <optgroup label="Months">{(months.length ? months : [key]).filter((m) => m.length === 7).map((m) => <option key={m} value={m}>{new Date(Number(m.slice(0, 4)), Number(m.slice(5)) - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</option>)}</optgroup>

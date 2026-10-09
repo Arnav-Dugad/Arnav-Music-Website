@@ -42,9 +42,9 @@ export function CinematicLyrics() {
               <div className="ellipsis" style={{ fontWeight: 700, fontSize: 16 }}>{track.title}</div>
               <div className="ellipsis" style={{ opacity: 0.7, fontSize: 14 }}>{track.artist}</div>
             </div>
-            <button className="icon-btn" aria-label="Previous" onClick={() => player().prev(useProgress.getState().position)}><Icon name="prevFill" size={20} /></button>
+            <button className="icon-btn cine-skip" aria-label="Previous" onClick={() => player().prev(useProgress.getState().position)}><Icon name="prevFill" size={20} /></button>
             <button className="icon-btn lg" aria-label={playing ? 'Pause' : 'Play'} onClick={() => player().toggle()}><PlayPauseIcon playing={playing} size={26} /></button>
-            <button className="icon-btn" aria-label="Next" onClick={() => player().next()}><Icon name="nextFill" size={20} /></button>
+            <button className="icon-btn cine-skip" aria-label="Next" onClick={() => player().next()}><Icon name="nextFill" size={20} /></button>
             <button className="icon-btn" aria-label="Leave cinematic lyrics" onClick={() => useLyrics.getState().set({ cinematic: false })}><Icon name="minimize" size={20} /></button>
           </div>
           <div className="cine-body"><LyricsPanel size="xl" /></div>

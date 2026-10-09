@@ -37,7 +37,7 @@
 .shelf-scroll.fade-l.fade-r { -webkit-mask-image: linear-gradient(to right, transparent, #000 60px, #000 calc(100% - 60px), transparent); mask-image: linear-gradient(to right, transparent, #000 60px, #000 calc(100% - 60px), transparent); }
 .grid-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 26px 20px; }
 .grid-cards .card { width: auto; }
-@media (max-width: 640px) { .grid-cards { grid-template-columns: repeat(2, 1fr); gap: 20px 14px; } }
+@media (max-width: 640px) { .grid-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 14px; } }
 
 /* ── Track rows ────────────────────────────────────────────────────────── */
 .track-list { display: flex; flex-direction: column; }

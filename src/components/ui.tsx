@@ -196,11 +196,14 @@ export function Sheet({ open, onClose, children, title, width = 520, className =
             transition={spring}
             onClick={(e) => e.stopPropagation()}
           >
-            {title && (
+            {title ? (
               <div className="sheet-head">
                 <div className="t-title">{title}</div>
                 <button className="icon-btn sm" aria-label="Close" onClick={onClose}><Icon name="close" size={18} /></button>
               </div>
+            ) : (
+              // No title: a corner close button, so every sheet can be dismissed by tapping something.
+              <button className="icon-btn sm sheet-x" aria-label="Close" onClick={onClose}><Icon name="close" size={16} /></button>
             )}
             {children}
           </motion.div>

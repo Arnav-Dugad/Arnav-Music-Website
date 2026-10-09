@@ -276,7 +276,8 @@ function NowPlayingView({ track }: { track: Track }) {
       </div>
       <div className="np-edge" aria-hidden />
 
-      <header className="np-top" onPointerDown={(e) => { if (!desktop && !(e.target as HTMLElement).closest('button')) dragControls.start(e) }}>
+      {/* Phones: pull down from the header (even over its buttons — a tap is still a tap) to close. */}
+      <header className="np-top" onPointerDown={(e) => { if (!desktop) dragControls.start(e) }}>
         {!desktop && <span className="np-grabber" aria-hidden />}
         <button className="icon-btn" aria-label="Close Now Playing" onClick={close}><Icon name="chevronDown" size={24} /></button>
         <div className="np-context">
@@ -293,7 +294,12 @@ function NowPlayingView({ track }: { track: Track }) {
         </div>
       </header>
 
-      <div className="np-body">
+      <div className="np-body" onPointerDown={(e) => {
+        // …or from anywhere around the cover that isn't a control, the cover itself (swipe to skip) or the lyrics.
+        if (desktop || panel) return
+        if ((e.target as HTMLElement).closest('button, a, input, [role="slider"], .np-cover-drag, .np-video, .prog, .vol, .sec-strip, .np-panel')) return
+        dragControls.start(e)
+      }}>
         <section className="np-stage">
           <div className="np-cover-wrap">
             <Cover track={track} playing={playing} showVideo={showVideo} compact={split} />
