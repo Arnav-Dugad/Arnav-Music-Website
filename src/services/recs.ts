@@ -3,11 +3,13 @@ import { isSingle, titleSimilarity } from '../lib/classify'
 import { buildProfile, diversify, rank, type Reason, type TasteProfile } from '../lib/taste'
 import { artistKey, type MediaVariant, type PlayEvent, type Track, type TrackId } from '../lib/types'
 import { allows, lib, likedIds, liveEvents } from '../state/library'
-import { trackRegistry } from '../state/tracks'
+import { remember, trackRegistry } from '../state/tracks'
 import { verified } from './catalog'
 import { cleanTitle } from '../lib/lyrics'
 import { artistOverlap, VARIANT } from '../lib/meta'
 import { tuner } from '../lib/tuner'
+import { buildModel, recommend, topArtistsNow, type RecModel } from '../lib/recommender'
+import { settings } from '../state/settings'
 
 let profileCache: { at: number; rev: number; profile: TasteProfile } | null = null
 
@@ -19,6 +21,20 @@ export function profile(): TasteProfile {
   profileCache = { at: Date.now(), rev: s.revision, profile: p }
   return p
 }
+
+let modelCache: { at: number; rev: number; seeds: string; model: RecModel } | null = null
+
+/** The v2 recommender model (src/lib/recommender.ts), rebuilt when the library changes. */
+export function model(): RecModel {
+  const s = lib()
+  const seeds = settings().seedArtists.join('|')
+  if (modelCache && modelCache.rev === s.revision && modelCache.seeds === seeds && Date.now() - modelCache.at < 5 * 60_000) return modelCache.model
+  const m = buildModel(liveEvents(s.events), (id) => trackRegistry.get(id), likedIds(s.likes), { seedArtists: settings().seedArtists })
+  modelCache = { at: Date.now(), rev: s.revision, seeds, model: m }
+  return m
+}
+const titleOf = (id: TrackId) => trackRegistry.get(id)?.title
+const playablePool = () => verified(trackRegistry.all()).filter((t) => isSingle(t) && allows(t))
 
 /** Splits history into listening sessions (gap > 30 min starts a new one). */
 function sessions(events: PlayEvent[]): PlayEvent[][] {
@@ -81,21 +97,6 @@ async function gather(queries: string[], remoteBudget: number): Promise<Track[]>
 
 export interface Rec { track: Track; reason: Reason; caption: string }
 
-function caption(t: Track, reason: Reason, seed?: Track): string {
-  const f = seed ? followers(seed.id) : []
-  if (seed && f.includes(t.id)) return `Often follows ${seed.title} in your sessions`
-  if (seed && artistKey(seed.artist) === artistKey(t.artist)) return `More from ${t.artist}`
-  switch (reason) {
-    case 'ARTIST_RETURNING': return `You keep coming back to ${t.artist}`
-    case 'FORGOTTEN_FAVORITE': return 'A favourite, quiet lately'
-    case 'NEW_DISCOVERY': return 'New to you'
-    case 'GENRE_MATCH': return t.genres[0] ? `Close to the ${t.genres[0]} you play` : 'Close to your genres'
-    case 'HEAVY_ROTATION': return 'In heavy rotation'
-    case 'SIMILAR_ENERGY': return 'Same energy'
-    case 'LIKED': return 'You liked this'
-    default: return 'Fits right now'
-  }
-}
 
 /** Start radio / More like this / endless radio. */
 export async function radioFor(seed: Track, opts: { exclude?: Set<TrackId>; limit?: number; remoteBudget?: number } = {}): Promise<Rec[]> {
@@ -118,37 +119,82 @@ export async function radioFor(seed: Track, opts: { exclude?: Set<TrackId>; limi
   recent.forEach((id) => exclude.add(id))
   const candidates = [...trackRegistry.many([...followIds]), ...remote, ...localPool]
     .filter((t) => isSingle(t) && allows(t) && titleSimilarity(t.title, seed.title) < 0.8)
-  const ranked = rank(candidates, p, { tune: tuner.multipliers(), liked: likedIds(), targetEnergy: seed.energy ?? p.energyPreference, discovery: 0.45, exclude })
-    .map((s) => ({ ...s, score: s.score + (followIds.has(s.track.id) ? 0.6 : 0) }))
-    .sort((a, b) => b.score - a.score)
-  const picked = diversify(ranked, 2).slice(0, opts.limit ?? 25)
-  tuner.offer(picked)
-  return picked.map((s) => ({ track: s.track, reason: s.reason, caption: caption(s.track, s.reason, seed) }))
+  void p
+  const picks = recommend(candidates, model(), { mode: 'radio', limit: opts.limit ?? 25, seed, exclude, names: titleOf })
+  return picks.map((x) => ({ track: x.track, reason: (x.kind === 'new' ? 'NEW_DISCOVERY' : x.kind === 'context' ? 'ARTIST_RETURNING' : 'GENRE_MATCH') as Reason, caption: followIds.has(x.track.id) ? `Often follows ${seed.title} in your sessions` : x.why }))
 }
 
 /** Home "For you right now": time-of-day aware ranking over everything known. */
 export function forYouNow(limit = 16): Rec[] {
-  const p = profile()
-  if (p.isCold) return []
-  const hour = new Date().getHours()
-  const hourWeight = (p.hourHistogram[hour] ?? 0) / Math.max(1, Math.max(...p.hourHistogram))
-  const pool = verified(trackRegistry.all()).filter((t) => isSingle(t) && allows(t))
-  const ranked = rank(pool, p, { tune: tuner.multipliers(), liked: likedIds(), discovery: 0.25 + 0.2 * (1 - hourWeight) })
-  const picked = diversify(ranked, 2).slice(0, limit)
-  tuner.offer(picked)
-  return picked.map((s) => ({ track: s.track, reason: s.reason, caption: caption(s.track, s.reason) }))
+  const m = model()
+  if (m.cold && !m.seeds.size) return []
+  return recommend(playablePool(), m, { mode: 'quick', limit, names: titleOf }).map((x) => ({ track: x.track, reason: 'TIME_OF_DAY' as Reason, caption: x.why }))
 }
 
 /** Fresh finds: close to taste, never played. */
 export function freshFinds(limit = 16): Rec[] {
-  const p = profile()
-  if (p.isCold) return []
-  const played = new Set(liveEvents().map((e) => e.trackId))
-  const pool = verified(trackRegistry.all()).filter((t) => !played.has(t.id) && isSingle(t) && allows(t))
-  const ranked = rank(pool, p, { tune: tuner.multipliers(), liked: likedIds(), discovery: 0.8 }).filter((s) => (p.artistAffinity.get(artistKey(s.track.artist)) ?? 0) > 0.05 || s.track.genres.some((g) => (p.genreAffinity.get(g) ?? 0) > 0.2))
-  const picked = diversify(ranked, 2).slice(0, limit)
-  tuner.offer(picked)
-  return picked.map((s) => ({ track: s.track, reason: 'NEW_DISCOVERY' as Reason, caption: (p.artistAffinity.get(artistKey(s.track.artist)) ?? 0) > 0.05 ? `New from ${s.track.artist}` : 'New to you, close to your taste' }))
+  const m = model()
+  if (m.cold) return []
+  return recommend(playablePool(), m, { mode: 'discover', limit, onlyNew: true, names: titleOf }).filter((x) => x.score > 0.2).map((x) => ({ track: x.track, reason: 'NEW_DISCOVERY' as Reason, caption: x.why }))
+}
+
+/** A chart (e.g. YouTube's trending music) ordered for you: popular, close to your scenes. */
+export function trendingForYou(chart: Track[], limit = 20): Rec[] {
+  const m = model()
+  const pool = verified(chart).filter((t) => isSingle(t) && allows(t))
+  if (m.cold && !m.seeds.size) return pool.slice(0, limit).map((t) => ({ track: t, reason: 'NEW_DISCOVERY' as Reason, caption: 'Trending now' }))
+  return recommend(pool, m, { mode: 'trending', limit, names: titleOf }).map((x) => ({ track: x.track, reason: 'NEW_DISCOVERY' as Reason, caption: x.why }))
+}
+
+/**
+ * A new listener's picked artists: fetch some of their songs so Home has them from the first visit
+ * (the shared edge cache usually answers, so it rarely costs quota).
+ */
+let warming: Promise<number> | null = null
+export function warmSeeds(): Promise<number> {
+  if (warming) return warming
+  warming = (async () => {
+    const seeds = settings().seedArtists.slice(0, 5)
+    if (!seeds.length) return 0
+    const all = verified(trackRegistry.all())
+    const missing = seeds.filter((a) => all.filter((t) => artistKey(t.artist).includes(artistKey(a))).length < 4)
+    if (!missing.length) return 0
+    const state = ytQuotaState()
+    const tracks = await gather(missing.map((a) => `${a} songs`), state === 'NORMAL' ? 4 : state === 'CONSERVE' ? 2 : 0)
+    remember(tracks)
+    modelCache = null
+    return tracks.length
+  })()
+  return warming
+}
+
+/** Your top artists right now, with a track of theirs for artwork. */
+export function topArtists(limit = 8): { key: string; name: string; track: Track }[] {
+  const keys = topArtistsNow(model(), limit * 2)
+  const out: { key: string; name: string; track: Track }[] = []
+  const all = verified(trackRegistry.all())
+  for (const k of keys) {
+    const t = all.filter((x) => artistKey(x.artist) === k).sort((a, b) => (b.trust ?? 0) - (a.trust ?? 0))[0]
+    if (t) out.push({ key: k, name: t.artist.split(',')[0].trim(), track: t })
+    if (out.length >= limit) break
+  }
+  return out
+}
+
+/** Albums and soundtracks in your world, ranked by how much you like their artists (none played to death). */
+export function albumsForYou(limit = 12): { name: string; artist: string; tracks: Track[]; art: string | null }[] {
+  const m = model()
+  const groups = new Map<string, Track[]>()
+  for (const t of verified(trackRegistry.all())) {
+    if (!t.album || !allows(t) || t.album.toLowerCase() === t.title.toLowerCase() || /single$/i.test(t.album)) continue
+    const k = t.album.toLowerCase().replace(/\s*[([].*?[)\]]/g, '').trim()
+    groups.set(k, [...(groups.get(k) ?? []), t])
+  }
+  const scored = [...groups.values()].filter((g) => g.length >= 2).map((g) => {
+    const aff = Math.max(...g.map((t) => (m.artistLong.get(artistKey(t.artist)) ?? 0) + 0.5 * (m.artistShort.get(artistKey(t.artist)) ?? 0)))
+    return { g, score: aff + 0.05 * g.length }
+  }).sort((a, b) => b.score - a.score)
+  return scored.slice(0, limit).map(({ g }) => ({ name: g[0].album!, artist: g[0].artist.split(',')[0], tracks: g, art: g[0].artworkUrl ?? null }))
 }
 
 /** Rediscover: loved before, quiet lately. */

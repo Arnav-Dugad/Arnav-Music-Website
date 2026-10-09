@@ -19,6 +19,7 @@ import './styles/shell.css'
 import './styles/player.css'
 import './styles/pages.css'
 import './styles/social.css'
+import './styles/home.css'
 // Last: phone and detail polish that must win over the page styles.
 import './styles/polish.css'
 

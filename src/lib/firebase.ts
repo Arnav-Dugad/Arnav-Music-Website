@@ -2,7 +2,7 @@ import { initializeApp, type FirebaseApp } from 'firebase/app'
 import {
   GoogleAuthProvider, browserLocalPersistence, createUserWithEmailAndPassword, getAuth, linkWithPopup, onAuthStateChanged, reauthenticateWithPopup, unlink,
   sendPasswordResetEmail, setPersistence, signInWithEmailAndPassword, signInWithPopup, signOut, updateProfile,
-  type Auth, type User,
+  getAdditionalUserInfo, type Auth, type User,
 } from 'firebase/auth'
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, getFirestore, type Firestore } from 'firebase/firestore'
 
@@ -58,8 +58,18 @@ export async function signInWithGoogle(): Promise<User> {
   const provider = new GoogleAuthProvider()
   provider.setCustomParameters({ prompt: 'select_account' })
   const r = await signInWithPopup(firebaseAuth(), provider)
+  markNewAccount(getAdditionalUserInfo(r)?.isNewUser === true)
   return r.user
 }
+
+/**
+ * Whether the account that just signed in was created a moment ago (it then gets the short
+ * "what do you like" setup) — an existing account goes straight to its library.
+ */
+function markNewAccount(isNew: boolean) {
+  try { if (isNew) sessionStorage.setItem('arnav.newAccount', '1'); else sessionStorage.removeItem('arnav.newAccount') } catch { /* storage blocked */ }
+}
+export const isNewAccount = () => { try { return sessionStorage.getItem('arnav.newAccount') === '1' } catch { return false } }
 
 /** True when the signed-in account has Google attached (needed for YouTube import). */
 export const hasGoogle = () => !!firebaseAuth().currentUser?.providerData.some((p) => p.providerId === 'google.com')
@@ -101,11 +111,13 @@ export async function unlinkGoogle() {
 }
 
 export async function signInEmail(email: string, password: string) {
+  markNewAccount(false)
   return (await signInWithEmailAndPassword(firebaseAuth(), email.trim(), password)).user
 }
 
 export async function signUpEmail(name: string, email: string, password: string) {
   const u = (await createUserWithEmailAndPassword(firebaseAuth(), email.trim(), password)).user
+  markNewAccount(true)
   if (name.trim()) await updateProfile(u, { displayName: name.trim().slice(0, 80) })
   return u
 }

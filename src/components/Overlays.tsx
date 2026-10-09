@@ -391,8 +391,8 @@ export function AuthSheet() {
       ) : (<>
       <div className="col" style={{ alignItems: 'center', textAlign: 'center', gap: 10, padding: '6px 4px 2px' }}>
         <Logo size={56} glow />
-        <div className="t-title" style={{ marginTop: 6 }}>{mode === 'in' ? 'Sign in to Arnav Music' : 'Create your account'}</div>
-        <div className="t-sub" style={{ maxWidth: 330 }}>Same account as the Android app — your likes, playlists and listening history follow you.</div>
+        <div className="t-title" style={{ marginTop: 6 }}>{mode === 'in' ? 'Welcome back' : 'Create your account'}</div>
+        <div className="t-sub" style={{ maxWidth: 330 }}>{mode === 'in' ? 'Sign in with the account you use in the Arnav Music app — your library, likes and history come straight back. No setup.' : 'One account for the app and the web — likes, playlists and listening history follow you.'}</div>
       </div>
       <div className="col" style={{ gap: 10, marginTop: 18 }}>
         <button className="btn btn-secondary btn-lg" disabled={!!busy} onClick={() => void run('g', signInWithGoogle, 'Signed in')}>

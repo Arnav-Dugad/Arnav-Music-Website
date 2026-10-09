@@ -40,7 +40,8 @@ export function MobileAccountButton() {
     return () => el.removeEventListener('scroll', on)
   }, [loc.pathname])
   // Only on the five main tabs, where there's no back button in the corner.
-  if (!/^\/(explore|search|friends|ai|library)?$/.test(loc.pathname)) return null
+  // Home has its own top bar with the profile button.
+  if (!/^\/(explore|search|friends|ai|library)$/.test(loc.pathname)) return null
   const initial = (user?.displayName || user?.email || '').trim()[0]?.toUpperCase()
   return (
     <motion.button className={`m-account ${scrolled ? 'scrolled' : ''}`} aria-label="Settings and more" onClick={() => useMoreMenu.getState().set(true)}
