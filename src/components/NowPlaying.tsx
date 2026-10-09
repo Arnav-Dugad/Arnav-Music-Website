@@ -190,6 +190,19 @@ function IssueCard() {
   )
 }
 
+/**
+ * Phones: Now Playing grows out of the floating mini player (and shrinks back into it), like iOS 26 —
+ * a clip from the mini player's capsule to the full screen. offset* ignore the mini player's own
+ * slide-away transform, so this is where it sits at rest.
+ */
+function fromMini(): string {
+  const el = document.querySelector<HTMLElement>('.mini')
+  const W = window.innerWidth, H = window.innerHeight
+  if (!el || !el.offsetWidth) return `inset(${Math.round(H * 0.7)}px 12px 76px 12px round 28px)`
+  const t = el.offsetTop, l = el.offsetLeft
+  return `inset(${t}px ${Math.max(0, W - l - el.offsetWidth)}px ${Math.max(0, H - t - el.offsetHeight)}px ${l}px round 28px)`
+}
+
 export function NowPlaying() {
   const expanded = usePlayer((s) => s.expanded)
   const track = usePlayer((s) => s.queue[s.index]?.track ?? null)
@@ -252,9 +265,9 @@ function NowPlayingView({ track }: { track: Track }) {
   return (
     <motion.div
       className={`np ${idle ? 'idle' : ''} ${split ? 'split' : ''} ${panel && !desktop ? 'mobile-panel' : ''}`}
-      initial={{ opacity: 0, y: desktop ? 0 : '8%' }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: desktop ? 0 : '10%', transition: { duration: 0.28 } }}
+      initial={desktop ? { opacity: 0 } : { opacity: 1, clipPath: fromMini() }}
+      animate={desktop ? { opacity: 1 } : { opacity: 1, clipPath: 'inset(0px 0px 0px 0px round 0px)', transition: { clipPath: { duration: 0.52, ease: [0.32, 0.72, 0, 1] } } }}
+      exit={desktop ? { opacity: 0, transition: { duration: 0.28 } } : { opacity: 0, clipPath: fromMini(), transition: { clipPath: { duration: 0.4, ease: [0.32, 0.72, 0, 1] }, opacity: { duration: 0.16, delay: 0.26 } } }}
       transition={{ type: 'spring', stiffness: 300, damping: 34 }}
       drag={desktop ? false : 'y'}
       dragControls={dragControls}

@@ -87,7 +87,7 @@ export default function Insights() {
 
   return (
     <div className="page insights">
-      <PageHeader eyebrow="Taste DNA" title={persona.title} subtitle={persona.line} actions={<div className="row" style={{ gap: 8 }}><button className="btn btn-primary btn-sm" onClick={() => nav('/wrapped')}><Icon name="story" size={15} /> Your month, wrapped</button><button className="btn btn-secondary btn-sm" onClick={() => nav('/wall')}><Icon name="wall" size={15} /> Album wall</button><button className="btn btn-secondary btn-sm" onClick={exportCsv}><Icon name="download" size={15} /> Export CSV</button></div>} />
+      <PageHeader eyebrow="Taste DNA" title={persona.title} subtitle={persona.line} actions={<div className="row" style={{ gap: 8 }}><button className="btn btn-primary btn-sm" onClick={() => nav('/wrapped')}><Icon name="story" size={15} /> Your month, wrapped</button><button className="btn btn-secondary btn-sm" onClick={() => nav('/replay')}><Icon name="chart" size={15} /> Replay</button><button className="btn btn-secondary btn-sm" onClick={() => nav('/wall')}><Icon name="wall" size={15} /> Album wall</button><button className="btn btn-secondary btn-sm" onClick={exportCsv}><Icon name="download" size={15} /> Export CSV</button></div>} />
 
       <div className="row" style={{ marginTop: 22 }}>
         <Segmented id="period" value={period} onChange={setPeriod} options={[{ value: 'week', label: 'Week' }, { value: 'month', label: 'Month' }, { value: 'year', label: 'Year' }, { value: 'all', label: 'All time' }]} />

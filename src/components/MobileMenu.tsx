@@ -3,16 +3,17 @@
  * together, Wrapped, the album wall…) behind one profile button, top-right on the main tabs.
  */
 import { useEffect, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'motion/react'
 import { create } from 'zustand'
-import { Icon, type IconName } from './Icon'
+import { Icon, Logo, type IconName } from './Icon'
 import { Sheet } from './ui'
 import { useAuth } from '../state/auth'
 import { ui } from '../state/ui'
 import { useSync } from '../services/sync'
 import { useSocial } from '../services/social'
-import { syncLabel } from './Shell'
+import { syncLabel, TABS, TabDot } from './Shell'
+import { expandBars } from '../lib/liquidGlass'
 
 export const useMoreMenu = create<{ open: boolean; set: (open: boolean) => void }>()((set) => ({ open: false, set: (open) => set({ open }) }))
 
@@ -21,7 +22,8 @@ const PLACES: { to: string; label: string; sub: string; icon: IconName; tint: st
   { to: '/moments', label: 'Moments', sub: 'Immersive scenes + music', icon: 'moments', tint: '#ffa62b' },
   { to: '/together', label: 'Listen together', sub: 'Same song, same second', icon: 'radio', tint: '#3ddc97' },
   { to: '/friends', label: 'Friends', sub: 'Listening now, inbox', icon: 'users', tint: '#f72585' },
-  { to: '/wrapped', label: 'Your Wrapped', sub: 'This month as a story', icon: 'story', tint: '#7b2ff7' },
+  { to: '/replay', label: 'Replay', sub: 'Your top artists & songs', icon: 'story', tint: '#7b2ff7' },
+  { to: '/wrapped', label: 'Your Wrapped', sub: 'This month as a story', icon: 'sparkles', tint: '#c77dff' },
   { to: '/wall', label: 'Album wall', sub: 'Fly through your covers', icon: 'wall', tint: '#ffd23f' },
 ]
 
@@ -49,6 +51,45 @@ export function MobileAccountButton() {
       {user?.photoURL ? <img src={user.photoURL} alt="" referrerPolicy="no-referrer" /> : initial ? <span>{initial}</span> : <Icon name="user" size={18} />}
       {pending > 0 && <i className="m-account-dot" aria-label={`${pending} new`} />}
     </motion.button>
+  )
+}
+
+/**
+ * iPad and tablet widths: the tabs float in a glass pill at the top, like Apple Music on iPadOS 26
+ * (the bottom tab bar is for phones). Search sits at the end of the pill; your profile, top-right.
+ */
+export function TopTabs() {
+  const loc = useLocation()
+  const nav = useNavigate()
+  const user = useAuth((s) => s.user)
+  const pending = useSocial((s) => s.incoming.length + s.unread)
+  const initial = (user?.displayName || user?.email || '').trim()[0]?.toUpperCase()
+  const searching = /^\/search/.test(loc.pathname)
+  return (
+    <div className="tp" onPointerDown={expandBars}>
+      <button className="tp-brand" aria-label="Arnav Music — Home" onClick={() => nav('/')}><Logo size={30} /></button>
+      <nav className="tp-pill glass-thick" aria-label="Main">
+        {TABS.map((n) => {
+          const active = !searching && (n.end ? loc.pathname === n.to : n.to === '/friends' ? /^\/(friends|u\/|add\/)/.test(loc.pathname) : loc.pathname.startsWith(n.to))
+          return (
+            <NavLink key={n.to} to={n.to} end={n.end} className={`tp-tab ${active ? 'active' : ''}`}
+              onClick={() => { if (active) document.querySelector('.main-scroll')?.scrollTo({ top: 0, behavior: 'smooth' }) }}>
+              {active && <motion.span layoutId="tp-active" className="tp-on" transition={{ type: 'spring', stiffness: 480, damping: 36 }} aria-hidden />}
+              <span className="tp-label">{n.label === 'Arnav AI' ? 'AI' : n.label}</span>
+              {n.to === '/friends' && <TabDot />}
+            </NavLink>
+          )
+        })}
+        <NavLink to="/search" className={`tp-tab tp-search ${searching ? 'active' : ''}`} aria-label="Search">
+          {searching && <motion.span layoutId="tp-active" className="tp-on" transition={{ type: 'spring', stiffness: 480, damping: 36 }} aria-hidden />}
+          <Icon name="search" size={18} />
+        </NavLink>
+      </nav>
+      <button className="tp-me glass-thick" aria-label="Settings and more" onClick={() => useMoreMenu.getState().set(true)}>
+        {user?.photoURL ? <img src={user.photoURL} alt="" referrerPolicy="no-referrer" /> : initial ? <span>{initial}</span> : <Icon name="user" size={18} />}
+        {pending > 0 && <i className="m-account-dot" aria-label={`${pending} new`} />}
+      </button>
+    </div>
   )
 }
 

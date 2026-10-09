@@ -5,6 +5,7 @@
  *   w_automix   per-playlist automix            w_lyrics   your lyric fixes (version, timing)
  *   w_settings  web-only settings               w_library  not-interested, blocked artists,
  *   w_tuner     recommendation tuner weights               saved YouTube playlists, recent searches
+ *   w_glass     Liquid Glass style / strength per device
  *
  * Each family is last-write-wins by edit time, except lyric fixes, which merge per song.
  */
@@ -38,6 +39,12 @@ const FAMILIES: Family[] = [
     read: () => usePrefs.getState().playlistAutomix,
     apply: (d, at) => usePrefs.getState().merge('playlistAutomix', d, at),
     subscribe: (cb) => usePrefs.subscribe((s, p) => { if (s.playlistAutomix !== p.playlistAutomix) cb() }),
+  },
+  {
+    id: 'w_glass',
+    read: () => usePrefs.getState().glass,
+    apply: (d, at) => usePrefs.getState().merge('glass', d, at),
+    subscribe: (cb) => usePrefs.subscribe((s, p) => { if (s.glass !== p.glass) cb() }),
   },
   {
     id: 'w_lyrics',

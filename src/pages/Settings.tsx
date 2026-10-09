@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { deleteProfile, updateProfile, useSocial } from '../services/social'
+import { glassFor, usePrefs, type GlassPref } from '../state/prefs'
 import { importPhoneBackup, latestPhoneBackup, type ImportResult, type PhoneBackup } from '../services/phoneBackup'
 import { useNavigate, useParams } from 'react-router-dom'
 import { motion } from 'motion/react'
@@ -132,7 +133,8 @@ function Appearance() {
             {ACCENTS.map((a) => <button key={a} className={`accent-dot ${s.presetAccent === a ? 'on' : ''}`} style={{ background: a }} aria-label={`Accent ${a}`} onClick={() => s.update({ presetAccent: a })} />)}
           </div>
         )}
-        <Bool k="glass" title="Glass" sub="Translucent, blurred materials. Off uses solid surfaces." />
+        <Bool k="glass" title="Liquid Glass" sub="Translucent materials that blur and refract what’s behind them. Off uses solid surfaces." />
+        <GlassControls />
         <Bool k="highContrast" title="Increase contrast" />
       </Group>
       <Group title="Motion">
@@ -396,6 +398,34 @@ function Usage() {
         <Row title="Lyrics lookups" sub={`${u.lyricsLookups} LRCLIB lookups`} />
       </Group>
       <Notice tone="info">Search results are cached and reused for a day (a week when conserving). Edge caching on the server shares results between visitors, saving quota for everyone.</Notice>
+    </>
+  )
+}
+
+/** Liquid Glass style and strength — saved for this device, synced with your account. */
+function GlassControls() {
+  const on = useSettings((x) => x.glass)
+  const all = usePrefs((x) => x.glass)
+  const g = glassFor(all, deviceId)
+  const set = (p: Partial<GlassPref>) => usePrefs.getState().setGlass(deviceId, p)
+  const others = Object.keys(all).filter((k) => k !== deviceId).length
+  if (!on) return null
+  return (
+    <>
+      <Row title="Glass style" sub={g.style === 'clear' ? 'Clear — see-through, like iOS 26’s clear glass.' : 'Tinted — frosted, coloured by the album playing.'}>
+        <Segmented id="glass-style" size="sm" value={g.style} onChange={(v) => set({ style: v })} options={[{ value: 'tinted', label: 'Tinted' }, { value: 'clear', label: 'Clear' }]} />
+      </Row>
+      <div className="set-row set-row-stack">
+        <div className="row" style={{ justifyContent: 'space-between', gap: 12 }}>
+          <div className="set-title">Glass strength</div>
+          <b className="t-caption" style={{ fontVariantNumeric: 'tabular-nums' }}>{g.strength}%</b>
+        </div>
+        <input className="range glass-range" style={{ ["--fill" as string]: `${g.strength}%` }} type="range" min={0} max={100} step={5} value={g.strength} aria-label="Glass strength" onChange={(e) => set({ strength: Number(e.target.value) })} />
+        <div className="t-caption set-sub">Saved for this device and synced with your account{others ? ` — your ${others} other device${others > 1 ? 's keep' : ' keeps'} its own` : ''}.</div>
+      </div>
+      <Row title="Adapt to the artwork" sub="Busier artwork behind the glass gets more frost, calm artwork stays clear — so text is always easy to read.">
+        <Toggle on={g.adaptive} onChange={(v) => set({ adaptive: v })} label="Adapt glass to the artwork" />
+      </Row>
     </>
   )
 }

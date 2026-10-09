@@ -17,6 +17,8 @@ export interface Wrapped {
   songs: WrappedSong[]
   artists: WrappedArtist[]
   album: { name: string; artist: string; minutes: number; art: string | null } | null
+  /** Albums / films by minutes (top `top`). */
+  albums: { name: string; artist: string; minutes: number; art: string | null }[]
   newArtists: string[]
   peakHour: number | null
   peakHourLabel: string
@@ -72,7 +74,8 @@ function moodOf(energy: number): Mood {
   return best
 }
 
-export function buildWrapped(key: string, events: PlayEvent[], track: (id: TrackId) => Track | undefined): Wrapped | null {
+/** `top`: how many songs, artists and albums to rank (the story shows 5; Replay shows more). */
+export function buildWrapped(key: string, events: PlayEvent[], track: (id: TrackId) => Track | undefined, top = 5): Wrapped | null {
   const { start, end, label, kind } = rangeOf(key)
   const inMonth = events.filter((e) => e.startedAt >= start && e.startedAt < end && e.listenedMs >= 15_000)
   if (!inMonth.length) return null
@@ -81,7 +84,7 @@ export function buildWrapped(key: string, events: PlayEvent[], track: (id: Track
   const bySong = new Map<string, { plays: number; ms: number }>()
   for (const e of inMonth) { const s = bySong.get(e.trackId) ?? { plays: 0, ms: 0 }; s.plays++; s.ms += e.listenedMs; bySong.set(e.trackId, s) }
   const songs = [...bySong.entries()].map(([id, s]) => ({ t: track(id), ...s })).filter((x): x is { t: Track; plays: number; ms: number } => !!x.t)
-    .sort((a, b) => b.plays - a.plays || b.ms - a.ms).slice(0, 5).map((x) => ({ track: x.t, plays: x.plays, minutes: Math.round(x.ms / 60_000) }))
+    .sort((a, b) => b.plays - a.plays || b.ms - a.ms).slice(0, top).map((x) => ({ track: x.t, plays: x.plays, minutes: Math.round(x.ms / 60_000) }))
   // Artists
   const byArtist = new Map<string, { name: string; plays: number; ms: number; art: string | null }>()
   for (const e of inMonth) {
@@ -92,7 +95,7 @@ export function buildWrapped(key: string, events: PlayEvent[], track: (id: Track
     a.plays++; a.ms += e.listenedMs
     byArtist.set(k, a)
   }
-  const artists = [...byArtist.values()].sort((a, b) => b.ms - a.ms).slice(0, 5).map((a) => ({ name: a.name, plays: a.plays, minutes: Math.round(a.ms / 60_000), art: a.art }))
+  const artists = [...byArtist.values()].sort((a, b) => b.ms - a.ms).slice(0, top).map((a) => ({ name: a.name, plays: a.plays, minutes: Math.round(a.ms / 60_000), art: a.art }))
   // Album / film
   const byAlbum = new Map<string, { name: string; artist: string; ms: number; art: string | null }>()
   for (const e of inMonth) {
@@ -102,7 +105,8 @@ export function buildWrapped(key: string, events: PlayEvent[], track: (id: Track
     a.ms += e.listenedMs
     byAlbum.set(t.album.toLowerCase(), a)
   }
-  const topAlbum = [...byAlbum.values()].sort((a, b) => b.ms - a.ms)[0]
+  const rankedAlbums = [...byAlbum.values()].sort((a, b) => b.ms - a.ms)
+  const topAlbum = rankedAlbums[0]
   // New artists: first ever played this month.
   const before = new Set(events.filter((e) => e.startedAt < start).map((e) => e.artistKey))
   const newKeys = [...new Set(inMonth.map((e) => e.artistKey))].filter((k) => !before.has(k))
@@ -150,6 +154,7 @@ export function buildWrapped(key: string, events: PlayEvent[], track: (id: Track
     plays: inMonth.length,
     songs, artists,
     album: topAlbum ? { name: topAlbum.name, artist: topAlbum.artist, minutes: Math.round(topAlbum.ms / 60_000), art: topAlbum.art } : null,
+    albums: rankedAlbums.slice(0, top).map((a) => ({ name: a.name, artist: a.artist, minutes: Math.round(a.ms / 60_000), art: a.art })),
     newArtists,
     peakHour: hours[peak] > 0 ? peak : null,
     peakHourLabel: hours[peak] > 0 ? hourLabel(peak) : '',

@@ -6,6 +6,9 @@ import { useSettings } from './state/settings'
 import { DEFAULT_PALETTE, extractPalette, type Palette } from './lib/color'
 import { artworkFor } from './lib/classify'
 import type { Track } from './lib/types'
+import { usePrefs, glassFor } from './state/prefs'
+import { applyGlass, artworkBusyness } from './lib/liquidGlass'
+import { deviceId } from './services/sync'
 
 export function useMediaQuery(q: string): boolean {
   const subscribe = (cb: () => void) => {
@@ -124,6 +127,16 @@ export function useThemeEffects(palette: Palette) {
     root.setProperty('--accent', accent)
     root.setProperty('--on-accent', accentMode === 'artwork' ? palette.onAccent : '#0B0B0F')
   }, [palette, accentMode, presetAccent])
+  // Liquid Glass: this device's style and strength, tinted by the album, adapting to the artwork.
+  const glassPrefs = usePrefs((s) => s.glass)
+  const art = usePlayer((s) => { const t = s.queue[s.index]?.track; return t ? artworkFor(t, 'sm') : null })
+  const [busy, setBusy] = useState(0.5)
+  useEffect(() => { let live = true; void artworkBusyness(art).then((b) => { if (live) setBusy(b) }); return () => { live = false } }, [art])
+  const theme = themeMode === 'system' ? (prefersLight ? 'light' : 'dark') : themeMode
+  useEffect(() => {
+    const g = glassFor(glassPrefs, deviceId)
+    applyGlass({ theme, style: g.style, strength: g.strength, adaptive: g.adaptive, busy, album: palette.vivid })
+  }, [glassPrefs, busy, palette, theme])
 }
 
 export function useDebounced<T>(value: T, ms: number): T {

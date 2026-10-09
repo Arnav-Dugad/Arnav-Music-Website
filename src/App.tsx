@@ -17,10 +17,11 @@ import { PageBoundary } from './components/ErrorBoundary'
 import { isMorphing } from './lib/reveal'
 import { TogetherLayer } from './components/TogetherLayer'
 import { SendSheet } from './components/Social'
-import { MobileAccountButton, MoreSheet } from './components/MobileMenu'
+import { MobileAccountButton, TopTabs, MoreSheet } from './components/MobileMenu'
 import Home from './pages/Home'
 
 const Explore = lazy(() => import('./pages/Explore'))
+const ReplayPage = lazy(() => import('./pages/Replay'))
 const Library = lazy(() => import('./pages/Library'))
 const PlaylistPage = lazy(() => import('./pages/Playlist'))
 const ArtistPage = lazy(() => import('./pages/Artist'))
@@ -83,7 +84,7 @@ export default function App() {
   const onboarding = loc.pathname.startsWith('/welcome')
   return (
     <MotionConfig reducedMotion={motionLevel === 'full' ? 'user' : 'always'}>
-      <div className={`app ${desktop ? 'desktop' : 'mobile'} ${hasTrack ? 'has-track' : ''} ${onboarding ? 'onboarding' : ''} ${docked && !onboarding ? 'docked' : ''} ${/^\/(wrapped|wall)(\/|$)/.test(loc.pathname) ? 'immersive' : ''}`}>
+      <div className={`app ${desktop ? 'desktop' : 'mobile'} ${hasTrack ? 'has-track' : ''} ${onboarding ? 'onboarding' : ''} ${docked && !onboarding ? 'docked' : ''} ${expanded && !desktop ? 'np-open' : ''} ${/^\/(wrapped|wall)(\/|$)/.test(loc.pathname) ? 'immersive' : ''}`}>
         <div className="ambient" aria-hidden><div className="ambient-glow" /></div>
         {desktop && !onboarding && <Sidebar />}
         <main className="main-scroll" ref={scroller} id="main">
@@ -100,6 +101,8 @@ export default function App() {
                 <Route path="/artist/:name" element={<Page><ArtistPage /></Page>} />
                 <Route path="/album/:name" element={<Page><AlbumPage /></Page>} />
                 <Route path="/credits/:id" element={<Page><CreditsPage /></Page>} />
+                <Route path="/replay" element={<Page><ReplayPage /></Page>} />
+                <Route path="/replay/:period" element={<Page><ReplayPage /></Page>} />
                 <Route path="/wrapped" element={<WrappedPage />} />
                 <Route path="/wrapped/:month" element={<WrappedPage />} />
                 <Route path="/wall" element={<WallPage />} />
@@ -122,7 +125,7 @@ export default function App() {
           </Suspense>
           </PageBoundary>
         </main>
-        {!onboarding && (desktop ? <PlayerBar /> : <><MiniPlayer /><TabBar /><MobileAccountButton /><MoreSheet /></>)}
+        {!onboarding && (desktop ? <PlayerBar /> : <><TopTabs /><MiniPlayer /><TabBar /><MobileAccountButton /><MoreSheet /></>)}
         <DockPanel />
         <NowPlaying />
         <CinematicLyrics />

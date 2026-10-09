@@ -53,6 +53,11 @@ export function Sidebar() {
           <Icon name="chart" size={19} />
           <span>Taste DNA</span>
         </NavLink>
+        <NavLink to="/replay" className={`sb-link ${loc.pathname.startsWith('/replay') ? 'active' : ''}`}>
+          {loc.pathname.startsWith('/replay') && <motion.span layoutId="sb-active" className="sb-pill" transition={spring} />}
+          <Icon name="story" size={19} />
+          <span>Replay</span>
+        </NavLink>
         <NavLink to="/together" className={`sb-link ${loc.pathname.startsWith('/together') ? 'active' : ''}`}>
           {loc.pathname.startsWith('/together') && <motion.span layoutId="sb-active" className="sb-pill" transition={spring} />}
           <Icon name="radio" size={19} />
@@ -110,7 +115,7 @@ function FriendsBadge() {
 }
 
 /** Phones: Friends takes the Moments slot (Moments stays in Home and ⌘K). */
-const TABS: typeof NAV = [NAV[0], NAV[1], { to: '/friends', label: 'Friends', icon: 'users' }, NAV[2], NAV[4]]
+export const TABS: typeof NAV = [NAV[0], NAV[1], { to: '/friends', label: 'Friends', icon: 'users' }, NAV[2], NAV[4]]
 
 export function syncLabel(s: string) {
   switch (s) {
@@ -141,7 +146,7 @@ export function PlaylistThumb({ artwork, trackIds, name, size = 'sm' }: { artwor
   return <span className={`pl-thumb ${size}`}><Artwork src={arts[0]} seed={name} icon="note" /></span>
 }
 
-function TabDot() {
+export function TabDot() {
   const pending = useSocial((s) => s.incoming.length + s.unread)
   return pending ? <i className="tab-dot" aria-label={`${pending} new`} /> : null
 }
