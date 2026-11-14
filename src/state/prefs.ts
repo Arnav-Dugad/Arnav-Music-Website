@@ -78,6 +78,8 @@ interface Prefs {
   devices: Record<string, DeviceInfo>
   /** Saved Replays by period ("2026-10", "2026"). */
   replay: Record<string, ReplaySnapshot>
+  /** When listening history was last cleared: older Replay snapshots are dropped, here and from other devices. */
+  replayClearedAt?: number
   /** Per-family edit times, for last-write-wins merges with other browsers. */
   stamps: Record<string, number>
 }
@@ -90,10 +92,14 @@ interface PrefsStore extends Prefs {
   undoGlass: (deviceId: string, index?: number) => void
   setDevice: (deviceId: string, info: Omit<DeviceInfo, 'at'>) => void
   saveReplay: (snaps: ReplaySnapshot[]) => void
-  merge: (family: keyof Omit<Prefs, 'stamps'>, value: unknown, at: number) => void
+  /** Forgets every saved Replay (Clear history), on every device once synced. */
+  clearReplay: () => void
+  merge: (family: keyof Omit<Prefs, 'stamps' | 'replayClearedAt'>, value: unknown, at: number) => void
 }
 
 const MAX_FIXES = 1500
+/** Key inside the synced `w_replay` record that carries the "history cleared" time (older apps skip it: no `minutes`). */
+export const REPLAY_CLEARED = '_cleared'
 
 export const usePrefs = create<PrefsStore>()(
   persist(
@@ -113,12 +119,17 @@ export const usePrefs = create<PrefsStore>()(
       saveReplay(snaps) {
         const out = { ...get().replay }
         let changed = false
-        for (const sn of snaps) if (betterReplay(sn, out[sn.key])) { out[sn.key] = sn; changed = true }
+        const cleared = get().replayClearedAt ?? 0
+        for (const sn of snaps) if (sn.at > cleared && betterReplay(sn, out[sn.key])) { out[sn.key] = sn; changed = true }
         if (!changed) return
         // Keep the newest 40 periods (about three years of months plus the years).
         const keys = Object.keys(out).sort().reverse()
         for (const k of keys.slice(40)) delete out[k]
         set({ replay: out, stamps: { ...get().stamps, replay: Date.now() } })
+      },
+      clearReplay() {
+        const now = Date.now()
+        set({ replay: {}, replayClearedAt: now, stamps: { ...get().stamps, replay: now } })
       },
       setGlass(id, patch) {
         const cur = get().glass[id] ?? { ...glassFor(get().glass, id), history: [] }
@@ -164,9 +175,13 @@ export const usePrefs = create<PrefsStore>()(
           return
         }
         if (family === 'replay') {
-          const out = { ...get().replay }
-          for (const [k, v] of Object.entries(value as Record<string, ReplaySnapshot>)) if (v && typeof v.minutes === 'number' && betterReplay(v, out[k])) out[k] = v
-          set({ replay: out })
+          // Another device cleared its history: forget snapshots taken before that, here too.
+          const theirClear = Number((value as { [REPLAY_CLEARED]?: { at?: number } })[REPLAY_CLEARED]?.at) || 0
+          const cleared = Math.max(get().replayClearedAt ?? 0, theirClear)
+          const out: Record<string, ReplaySnapshot> = {}
+          for (const [k, v] of Object.entries(get().replay)) if (v.at > cleared) out[k] = v
+          for (const [k, v] of Object.entries(value as Record<string, ReplaySnapshot>)) if (k !== REPLAY_CLEARED && v && typeof v.minutes === 'number' && v.at > cleared && betterReplay(v, out[k])) out[k] = v
+          set({ replay: out, ...(cleared ? { replayClearedAt: cleared } : {}) })
           return
         }
         if (family === 'glass') {

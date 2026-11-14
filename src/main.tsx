@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { installLiquidGlass } from './lib/liquidGlass'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App'
-import { loadTracks, pruneRegistry } from './state/tracks'
+import { loadTracks, pruneRegistry, setRegistryKeeper } from './state/tracks'
 import { usePlayer } from './state/player'
 import { reloadForNewVersion } from './components/ErrorBoundary'
 import { useLibrary } from './state/library'
@@ -38,12 +38,15 @@ async function boot() {
   // Library and track metadata load from IndexedDB before first paint of personal shelves.
   await Promise.all([loadTracks(), useLibrary.getState().load()])
   // One-time tidy of the track cache (keeps everything your library references).
-  const s = useLibrary.getState()
-  const referenced = new Set<string>([
-    ...Object.keys(s.likes), ...Object.values(s.playlists).flatMap((p) => p.trackIds), ...s.events.map((e) => e.trackId),
-    ...usePlayer.getState().queue.map((q) => q.track.id),
-  ])
-  pruneRegistry(referenced)
+  const referencedTracks = () => {
+    const s = useLibrary.getState()
+    return new Set<string>([
+      ...Object.keys(s.likes), ...Object.values(s.playlists).flatMap((p) => p.trackIds), ...s.events.map((e) => e.trackId),
+      ...usePlayer.getState().queue.map((q) => q.track.id),
+    ])
+  }
+  pruneRegistry(referencedTracks())
+  setRegistryKeeper(referencedTracks)
   void pruneStaleCache()
   // Liquid Glass: edge refraction on floating controls (Chromium) and the shrinking tab bar.
   installLiquidGlass()

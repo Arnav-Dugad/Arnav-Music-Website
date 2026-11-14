@@ -360,7 +360,9 @@ export async function creditsApi(url: URL, env: ApiEnv, waitUntil?: WaitUntil): 
 }
 
 // ── Community lyrics (version + timing listeners agreed on) ──────────────────
-interface Community { choices: Record<string, number>; offsets: Record<string, number[]>; scales: Record<string, number[]>; maps?: Record<string, [number, number, number][]>; updatedAt: number }
+type EditMap = [number, number, number][]
+/** `maps` holds each version's recent piecewise maps (older records stored a single map). */
+interface Community { choices: Record<string, number>; offsets: Record<string, number[]>; scales: Record<string, number[]>; maps?: Record<string, EditMap[] | EditMap>; updatedAt: number }
 const CHOICE = /^(lrclib|netease):\d{1,14}$/
 const median = (xs: number[]) => { if (!xs.length) return null; const s = [...xs].sort((a, b) => a - b); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2 }
 
@@ -368,7 +370,44 @@ function summarize(c: Community | null) {
   if (!c) return { choice: null, offsetMs: null, scale: null, votes: 0, samples: 0 }
   const best = Object.entries(c.choices).sort((a, b) => b[1] - a[1])[0]
   const k = best?.[0] ?? null
-  return { choice: k, votes: best?.[1] ?? 0, offsetMs: k ? median(c.offsets[k] ?? []) : null, scale: k ? median(c.scales[k] ?? []) : null, samples: k ? (c.offsets[k] ?? []).length : 0, map: k ? c.maps?.[k] ?? null : null }
+  return { choice: k, votes: best?.[1] ?? 0, offsetMs: k ? median(c.offsets[k] ?? []) : null, scale: k ? median(c.scales[k] ?? []) : null, samples: k ? (c.offsets[k] ?? []).length : 0, map: k ? agreedMap(mapsOf(c, k)) : null }
+}
+
+/** A short one-way hash, so vote records never hold a visitor's IP. */
+async function sha1(text: string): Promise<string> {
+  const d = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(text))
+  return [...new Uint8Array(d)].slice(0, 12).map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+const isMapList = (x: EditMap[] | EditMap): x is EditMap[] => Array.isArray(x[0]?.[0])
+function mapsOf(c: Community, k: string): EditMap[] {
+  const m = c.maps?.[k]
+  if (!m || !m.length) return []
+  return isMapList(m) ? m : [m]
+}
+/** The offset a map applies at a moment of the lyrics, or null where it cuts that part. */
+function offsetAt(m: EditMap, t: number): number | null {
+  for (const [from, to, off] of m) if (t >= from && t <= to) return off
+  return null
+}
+/**
+ * The map that agrees best with the others (the medoid): one listener's bad or malicious map
+ * can't replace what everyone else submitted. Ties go to the newest.
+ */
+function agreedMap(maps: EditMap[]): EditMap | null {
+  if (maps.length <= 2) return maps[maps.length - 1] ?? null
+  const end = Math.max(...maps.map((m) => m[m.length - 1][1]))
+  const samples = Array.from({ length: 48 }, (_, i) => (end * (i + 0.5)) / 48)
+  const dist = (a: EditMap, b: EditMap) => samples.reduce((sum, t) => {
+    const x = offsetAt(a, t), y = offsetAt(b, t)
+    return sum + (x === null || y === null ? (x === y ? 0 : 5000) : Math.abs(x - y))
+  }, 0)
+  let best = maps.length - 1, bestScore = Infinity
+  maps.forEach((m, i) => {
+    const score = maps.reduce((sum, o, j) => (i === j ? sum : sum + dist(m, o)), 0)
+    if (score < bestScore || (score === bestScore && i > best)) { best = i; bestScore = score }
+  })
+  return maps[best]
 }
 
 /** [[lrcFrom, lrcTo, offsetMs], …] — ordered, within a song's length, at most 24 parts. */
@@ -402,6 +441,10 @@ export async function communityApi(request: Request, url: URL, env: ApiEnv): Pro
   const key = `cm:v1:${body.v}`
   const raw = await kv.get(key).catch(() => null)
   const c: Community = raw ? JSON.parse(raw) : { choices: {}, offsets: {}, scales: {}, updatedAt: 0 }
+  // One vote per visitor per song a day, so one person can't outvote everyone by repeating it.
+  const voter = await sha1(`${request.headers.get('cf-connecting-ip') ?? request.headers.get('x-forwarded-for') ?? 'x'}|${body.v}`)
+  const voteKey = `cmv:v1:${voter}`
+  if (await kv.get(voteKey).catch(() => null)) return json(summarize(c))
   c.choices[body.choice] = (c.choices[body.choice] ?? 0) + 1
   if (typeof body.offsetMs === 'number' && Number.isFinite(body.offsetMs) && Math.abs(body.offsetMs) <= 120_000) {
     c.offsets[body.choice] = [...(c.offsets[body.choice] ?? []), Math.round(body.offsetMs)].slice(-25)
@@ -409,8 +452,8 @@ export async function communityApi(request: Request, url: URL, env: ApiEnv): Pro
   if (typeof body.scale === 'number' && body.scale >= 0.85 && body.scale <= 1.15) {
     c.scales[body.choice] = [...(c.scales[body.choice] ?? []), Math.round(body.scale * 10000) / 10000].slice(-25)
   }
-  // A piecewise map (an edited video): the latest valid one wins.
-  if (validMap(body.map)) c.maps = { ...(c.maps ?? {}), [body.choice]: body.map }
+  // A piecewise map (an edited video): keep the last few; the one most agree with is served.
+  if (validMap(body.map)) c.maps = { ...(c.maps ?? {}), [body.choice]: [...mapsOf(c, body.choice), body.map].slice(-7) }
   // Keep the record small: at most 8 competing versions.
   const keep = Object.entries(c.choices).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k]) => k)
   c.choices = Object.fromEntries(keep.map((k) => [k, c.choices[k]]))
@@ -419,6 +462,7 @@ export async function communityApi(request: Request, url: URL, env: ApiEnv): Pro
   if (c.maps) c.maps = Object.fromEntries(keep.filter((k) => c.maps?.[k]).map((k) => [k, c.maps![k]]))
   c.updatedAt = Date.now()
   await kv.put(key, JSON.stringify(c), { expirationTtl: 400 * DAY }).catch(() => undefined)
+  await kv.put(voteKey, '1', { expirationTtl: DAY }).catch(() => undefined)
   return json(summarize(c))
 }
 

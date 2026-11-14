@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import {
-  Timestamp, collection, deleteDoc, doc, getDocs, getDocsFromServer, limit, onSnapshot, orderBy, query, runTransaction,
+  Timestamp, collection, deleteDoc, doc, getDoc, getDocs, getDocsFromServer, limit, onSnapshot, orderBy, query, runTransaction,
   serverTimestamp, setDoc, startAfter, where, writeBatch, type DocumentData, type QueryDocumentSnapshot,
 } from 'firebase/firestore'
 import { applyWebRecord, pushWeb, watchWebEdits } from './webSync'
@@ -151,6 +151,9 @@ async function syncLikes(uid: string) {
   return applied
 }
 
+/** The app and the Firestore rules allow this many songs in a synced playlist. */
+export const PLAYLIST_CLOUD_MAX = 500
+
 // ── Playlists ─────────────────────────────────────────────────────────────────
 async function syncPlaylists(uid: string) {
   const db = firestore()
@@ -179,8 +182,18 @@ async function syncPlaylists(uid: string) {
   if (applied) useLibrary.getState().applyRemote({ playlists })
   const dirty = Object.values(lib().playlists).filter((p) => p.dirty && p.kind === 'ARNAV')
   for (const p of dirty) {
-    const ids = p.trackIds.filter((id) => sourceOf(id) === 'YOUTUBE').slice(0, 500)
-    const tracks = trackRegistry.many(ids).map(trackToMap)
+    const ids = p.trackIds.filter((id) => sourceOf(id) === 'YOUTUBE').slice(0, PLAYLIST_CLOUD_MAX)
+    let tracks = trackRegistry.many(ids).map(trackToMap)
+    if (tracks.length < ids.length) {
+      // Some songs aren't in this browser's track cache. Keep them from the cloud copy rather than
+      // pushing a playlist that silently drops them.
+      const remote = await getDoc(doc(col, p.id)).catch(() => null)
+      reads(1)
+      const saved = new Map<string, Record<string, unknown>>()
+      for (const t of (Array.isArray(remote?.data()?.tracks) ? remote!.data()!.tracks : []) as Record<string, unknown>[]) if (typeof t?.id === 'string') saved.set(t.id, t)
+      const local = new Map(tracks.map((t) => [t.id, t]))
+      tracks = ids.map((id) => local.get(id) ?? saved.get(id)).filter((t): t is NonNullable<typeof t> => !!t) as typeof tracks
+    }
     await setDoc(doc(col, p.id), {
       name: p.name.slice(0, 100), description: p.description.slice(0, 500), kind: 'ARNAV', artworkUrl: p.artworkUrl ?? null,
       pinned: p.pinned, createdAt: p.createdAt, updatedAt: p.updatedAt, deleted: !!p.deleted, tracks,

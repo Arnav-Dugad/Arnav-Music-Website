@@ -9,6 +9,12 @@
 /manifest.webmanifest
   Cache-Control: public, max-age=3600
 
+# No other site may frame the app (stops clickjacking the invite / Accept buttons). Permissions
+# that nothing uses are off; geolocation (weather moods) and the microphone (voice) stay for this
+# site only. Autoplay and encrypted media are left alone: the YouTube player needs them.
 /*
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY
+  Content-Security-Policy: frame-ancestors 'none'
+  Permissions-Policy: camera=(), payment=(), usb=(), serial=(), hid=(), geolocation=(self), microphone=(self)

@@ -111,6 +111,8 @@ export class SocialHub extends DurableObject<Env> {
     if (hits.length >= max) return true
     hits.push(now)
     this.limits.set(k, hits)
+    // Keep the map bounded: drop keys whose newest hit is over a day old.
+    if (this.limits.size > 20_000) for (const [key, ts] of this.limits) if (now - (ts[ts.length - 1] ?? 0) > DAY) this.limits.delete(key)
     return false
   }
   private publicView(u: UserRow) { return { id: u.id, handle: u.handle, name: u.name, avatar: u.avatar, color: u.color, bio: u.bio } }
@@ -245,6 +247,7 @@ export class SocialHub extends DurableObject<Env> {
         }
         case 'PATCH me': return this.update(me, body)
         case 'POST link': return this.linkAccount(me, body)
+        case 'POST code': return this.resetCode(me)
         case 'GET find': return this.find(me, url)
         case 'GET u': return this.profile(me, decodeURIComponent(seg[1] ?? ''))
         case 'POST friend': return this.befriend(me, body)
@@ -268,7 +271,9 @@ export class SocialHub extends DurableObject<Env> {
         }
       }
     } catch (e) {
-      return json({ error: 'failed', message: e instanceof Error ? e.message.slice(0, 160) : 'unknown' }, 500)
+      // Details go to the log, not to the client.
+      console.error('[social]', path, e instanceof Error ? e.stack ?? e.message : e)
+      return json({ error: 'failed', message: 'Something went wrong — try again.' }, 500)
     }
     return json({ error: 'not_found' }, 404)
   }
@@ -339,10 +344,11 @@ export class SocialHub extends DurableObject<Env> {
   }
 
   private find(u: UserRow, url: URL): Response {
-    const code = clip(url.searchParams.get('code'), 12).toUpperCase()
-    if (code) {
-      const r = this.sql.exec('SELECT * FROM users WHERE code = ?', code).toArray()[0] as unknown as UserRow | undefined
-      return json({ people: r ? [this.viewFor(u.id, r)] : [] })
+    // Looking people up is cheap to script, so it's paced like everything else that reveals profiles.
+    if (this.limited(u.id, 'find', 60, 60_000)) return json({ error: 'slow_down', message: 'Searching a lot — try again in a moment.' }, 429)
+    if (url.searchParams.has('code')) {
+      const r = this.byCode(url.searchParams.get('code'))
+      return json({ people: r && this.link(u.id, r.id)?.state !== 'blocked' ? [this.viewFor(u.id, r)] : [] })
     }
     const q = clip(url.searchParams.get('q'), 30).toLowerCase().replace(/^@/, '')
     if (q.length < 2) return json({ people: [] })
@@ -354,8 +360,11 @@ export class SocialHub extends DurableObject<Env> {
   private profile(u: UserRow, key: string): Response {
     const r = (this.sql.exec('SELECT * FROM users WHERE id = ? OR handle = ?', key, key.toLowerCase().replace(/^@/, '')).toArray()[0] as unknown as UserRow) ?? null
     if (!r) return json({ error: 'not_found' }, 404)
+    if (r.id !== u.id && this.limited(u.id, 'profile', 120, 60_000)) return json({ error: 'slow_down' }, 429)
     const view = this.viewFor(u.id, r)
-    const recent = view.now !== null || view.relation === 'me' || r.privacy === 'everyone' || view.relation === 'friends'
+    // A block hides what they played, whatever their privacy setting.
+    const blockedPair = this.link(u.id, r.id)?.state === 'blocked'
+    const recent = !blockedPair && (view.now !== null || view.relation === 'me' || r.privacy === 'everyone' || view.relation === 'friends')
       ? this.sql.exec('SELECT at, track FROM plays WHERE user = ? ORDER BY at DESC LIMIT 30', r.id).toArray().map((x) => ({ at: Number(x.at), track: JSON.parse(String(x.track)) as SocialTrack }))
       : []
     const mutual = view.relation === 'me' ? 0 : this.friendIds(u.id).filter((f) => this.areFriends(f, r.id)).length
@@ -364,26 +373,42 @@ export class SocialHub extends DurableObject<Env> {
     return json({ person: view, recent: (r.privacy === 'off' && view.relation !== 'me') ? [] : recent, mutual, playlists: blocked ? [] : this.pubsOf(r.id) })
   }
 
+  /** Someone named by id or @handle (never by invite code: see `byCode`). */
   private target(body: Record<string, unknown>): UserRow | null {
     const id = clip(body.id, 40)
     if (id) return this.user(id)
     const handle = clip(body.handle, 21).toLowerCase().replace(/^@/, '')
     if (handle) return (this.sql.exec('SELECT * FROM users WHERE handle = ?', handle).toArray()[0] as unknown as UserRow) ?? null
-    const code = clip(body.code, 12).toUpperCase()
-    if (code) return (this.sql.exec('SELECT * FROM users WHERE code = ?', code).toArray()[0] as unknown as UserRow) ?? null
     return null
+  }
+  private byCode(raw: unknown): UserRow | null {
+    const code = clip(raw, 12).toUpperCase()
+    if (code.length < 6) return null
+    return (this.sql.exec('SELECT * FROM users WHERE code = ?', code).toArray()[0] as unknown as UserRow) ?? null
+  }
+  /** A new invite code: links and QR codes shared before stop working. */
+  private resetCode(u: UserRow): Response {
+    if (this.limited(u.id, 'code', 10, DAY)) return json({ error: 'slow_down', message: 'You’ve reset your link a lot today — try again tomorrow.' }, 429)
+    let code = rand(8)
+    while (this.sql.exec('SELECT 1 FROM users WHERE code = ?', code).toArray().length) code = rand(8)
+    this.sql.exec('UPDATE users SET code = ? WHERE id = ?', code, u.id)
+    return json(this.me(this.user(u.id) as UserRow))
   }
 
   private befriend(u: UserRow, body: Record<string, unknown>): Response {
-    const t = this.target(body)
-    if (!t) return json({ error: 'not_found', message: 'No one has that name here yet.' }, 404)
+    // An invite code is a secret: when one is sent, the person is found by that code and nothing
+    // else, so naming someone's id alongside a made-up code can't skip their consent.
+    const viaCode = body.code !== undefined
+    if (viaCode && this.limited(u.id, 'invite', 30, 3600_000)) return json({ error: 'slow_down', message: 'That’s a lot of invites — try again in a bit.' }, 429)
+    const t = viaCode ? this.byCode(body.code) : this.target(body)
+    if (!t) return json({ error: 'not_found', message: viaCode ? 'That invite link isn’t valid any more.' : 'No one has that name here yet.' }, 404)
     if (t.id === u.id) return json({ error: 'self', message: 'That’s you!' }, 400)
     const rel = this.link(u.id, t.id)
     if (rel?.state === 'blocked') return json({ error: 'blocked', message: 'You can’t add this person.' }, 403)
     if (rel?.state === 'friends') return json({ ok: true, state: 'friends' })
     const [a, b] = this.pair(u.id, t.id)
     // They asked you first, or you opened their invite link: you're friends now.
-    if ((rel?.state === 'pending' && rel.by === t.id) || body.code) {
+    if ((rel?.state === 'pending' && rel.by === t.id) || viaCode) {
       this.sql.exec(`INSERT INTO links (a, b, state, by, at) VALUES (?, ?, 'friends', ?, ?) ON CONFLICT (a, b) DO UPDATE SET state = 'friends', at = excluded.at`, a, b, u.id, Date.now())
       this.push(t.id, { t: 'friends', who: this.publicView(u) })
       this.push(t.id, { t: 'refresh' })

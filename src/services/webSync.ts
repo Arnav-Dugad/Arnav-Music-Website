@@ -13,7 +13,7 @@
 import { collection, doc, runTransaction, serverTimestamp, type Firestore } from 'firebase/firestore'
 import { ls } from '../lib/idb'
 import { tuner } from '../lib/tuner'
-import { usePrefs } from '../state/prefs'
+import { REPLAY_CLEARED, usePrefs } from '../state/prefs'
 import { useSettings, type Settings } from '../state/settings'
 import { useLibrary } from '../state/library'
 
@@ -55,7 +55,7 @@ const FAMILIES: Family[] = [
   },
   {
     id: 'w_replay',
-    read: () => usePrefs.getState().replay,
+    read: () => withClearMark(usePrefs.getState().replay),
     apply: (d, at) => usePrefs.getState().merge('replay', d, at),
     subscribe: (cb) => usePrefs.subscribe((s, p) => { if (s.replay !== p.replay) cb() }),
   },
@@ -107,6 +107,12 @@ const FAMILIES: Family[] = [
   },
 ]
 const byId = new Map(FAMILIES.map((f) => [f.id, f]))
+
+/** Saved Replays plus, once history was cleared, when — so other devices drop their older copies. */
+function withClearMark(replay: Record<string, unknown>): Record<string, unknown> {
+  const at = usePrefs.getState().replayClearedAt
+  return at ? { ...replay, [REPLAY_CLEARED]: { at } } : replay
+}
 const MERGED = new Set(['w_lyrics', 'w_glass', 'w_devices', 'w_replay'])
 
 /** Starts watching local edits; [onEdit] asks for a sync. */
@@ -151,7 +157,7 @@ export async function pushWeb(db: Firestore, uid: string, deviceId: string, jour
     if (value.length > 190_000 && f.id === 'w_replay') {
       // Oldest periods go first until it fits.
       const keep = Object.entries(usePrefs.getState().replay).sort((a, b) => b[0].localeCompare(a[0]))
-      while (keep.length > 1 && value.length > 190_000) { keep.pop(); value = JSON.stringify({ at, data: Object.fromEntries(keep) }) }
+      while (keep.length > 1 && value.length > 190_000) { keep.pop(); value = JSON.stringify({ at, data: withClearMark(Object.fromEntries(keep)) }) }
     }
     if (value.length > 190_000) {
       if (f.id !== 'w_lyrics') continue

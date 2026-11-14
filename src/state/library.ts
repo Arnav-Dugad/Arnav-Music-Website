@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { idbGet, idbSet } from '../lib/idb'
 import { artistKey, sourceOf, type Like, type PlayEvent, type Playlist, type Track, type TrackId } from '../lib/types'
 import { remember, trackRegistry } from './tracks'
+import { usePrefs } from './prefs'
 
 export interface LocalEvent extends PlayEvent {
   /** Local identity (web) used to derive the cloud record id. */
@@ -128,7 +129,11 @@ export const useLibrary = create<LibraryStore>()((set, get) => {
       const ev: LocalEvent = { ...e, localId: `w${uid().slice(0, 15)}`, dirty: true }
       commit({ events: [...get().events, ev] })
     },
-    clearHistory: () => commit({ events: get().events.map((e) => ({ ...e, deleted: true, dirty: !!e.cloudId || e.dirty })) }),
+    clearHistory: () => {
+      commit({ events: get().events.map((e) => ({ ...e, deleted: true, dirty: !!e.cloudId || e.dirty })) })
+      // Saved Replays are built from that history (top songs, artists): they go too, on every device.
+      usePrefs.getState().clearReplay()
+    },
     removeEvent: (localId) => commit({ events: get().events.map((e) => (e.localId === localId ? { ...e, deleted: true, dirty: true } : e)) }),
     addRecentSearch(q) {
       const v = q.trim()

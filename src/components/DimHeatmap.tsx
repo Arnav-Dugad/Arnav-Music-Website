@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Segmented, Spinner } from './ui'
 import { idbGet } from '../lib/idb'
-import { fetchCredits, type CreditsResult, type ItunesItem } from '../lib/meta'
+import { fetchCredits, type CreditsResult, type ItunesItem, itunesMatchKey } from '../lib/meta'
 import { monthKey } from '../lib/wrapped'
 import type { PlayEvent, Track } from '../lib/types'
 import { trackRegistry } from '../state/tracks'
@@ -21,7 +21,7 @@ async function readFacts(tracks: Track[]): Promise<Map<string, { year: number | 
   const out = new Map<string, { year: number | null; composers: string[] }>()
   await Promise.all(tracks.map(async (t) => {
     const [it, cr] = await Promise.all([
-      idbGet<{ item: ItunesItem | null }>(`itm|v3|${t.id}`, 'cache'),
+      idbGet<{ item: ItunesItem | null }>(itunesMatchKey(t.id), 'cache'),
       idbGet<{ r: CreditsResult }>(`cr|v11|${t.playbackRef}`, 'cache'),
     ])
     const year = it?.item?.releaseDate ? Number(it.item.releaseDate.slice(0, 4)) : cr?.r.film?.year ?? t.year ?? null

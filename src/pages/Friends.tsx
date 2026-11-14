@@ -10,7 +10,7 @@ import { player } from '../state/player'
 import { useAuth } from '../state/auth'
 import { relative } from '../lib/format'
 import {
-  addFriend, asTrack, createProfile, findByCode, findPeople, friendsCharts, friendsFeed, inviteLink, loadInbox, markRead, myTaste,
+  addFriend, asTrack, createProfile, findByCode, findPeople, friendsCharts, friendsFeed, inviteLink, resetInvite, loadInbox, markRead, myTaste,
   openRoom, reactToItem, respond, SocialError, tasteMatch, updateProfile, useSocial, type InboxItem, type Person, type PersonView, type SocialTrack,
 } from '../services/social'
 
@@ -177,6 +177,9 @@ function MyCard() {
                 <b>Scan to add {me.name.split(' ')[0]}</b>
                 <span className="t-caption">Whoever opens it becomes your friend.</span>
                 <code className="fr-link ellipsis">{link.replace(/^https?:\/\//, '')}</code>
+                <button className="btn btn-ghost btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => void resetInvite().then(() => toast('New invite link — old links and QR codes no longer work'), (e: unknown) => toast(e instanceof Error ? e.message : 'Couldn’t reset the link'))}>
+                  <Icon name="sync" size={14} /> Reset link
+                </button>
               </div>
             </div>
           </motion.div>

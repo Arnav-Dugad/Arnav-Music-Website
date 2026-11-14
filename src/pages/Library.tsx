@@ -174,7 +174,7 @@ export default function Library() {
       <ImportSheet open={fileImportOpen} onClose={() => setFileImportOpen(false)} />
       <DuplicatesSheet open={dupesOpen} onClose={() => setDupesOpen(false)} />
       <Sheet open={confirmOpen} onClose={() => setConfirmOpen(false)} title="Clear listening history?" width={420}>
-        <div className="t-sub">This removes your history from this browser. If you’re signed in, it’s removed from your other devices too. Taste DNA and recommendations start fresh.</div>
+        <div className="t-sub">This removes your history from this browser. If you’re signed in, it’s removed from your other devices too. Saved Replays go too, and Taste DNA and recommendations start fresh.</div>
         <div className="row" style={{ justifyContent: 'flex-end', marginTop: 18 }}>
           <button className="btn btn-ghost" onClick={() => setConfirmOpen(false)}>Cancel</button>
           <button className="btn btn-danger" onClick={() => { useLibrary.getState().clearHistory(); setConfirmOpen(false) }}><Icon name="trash" size={15} /> Clear history</button>

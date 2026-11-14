@@ -165,7 +165,16 @@ export function Gauge({ value, label, sub }: { value: number; label: string; sub
 export function Constellation({ nodes, links, onPick }: { nodes: { key: string; name: string; weight: number }[]; links: { a: string; b: string; w: number }[]; onPick?: (name: string) => void }) {
   const ref = useRef<HTMLCanvasElement>(null)
   const [hover, setHover] = useState<string | null>(null)
-  const view = useRef({ x: 0, y: 0, k: 1, drag: null as null | { x: number; y: number } })
+  // `moved` adds up how far the pointer travelled, so ending a pan over a star doesn't open it.
+  const view = useRef({ x: 0, y: 0, k: 1, drag: null as null | { x: number; y: number; moved: number } })
+  useEffect(() => {
+    // Wheel zoom must not scroll the page too: React's onWheel is passive, so listen natively.
+    const el = ref.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => { e.preventDefault(); const v = view.current; v.k = Math.min(3, Math.max(0.5, v.k * (e.deltaY < 0 ? 1.1 : 0.9))) }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [])
   const layout = useMemo(() => {
     // Deterministic phyllotaxis layout: the strongest artists sit at the centre.
     const sorted = [...nodes].sort((a, b) => b.weight - a.weight)
@@ -244,14 +253,14 @@ export function Constellation({ nodes, links, onPick }: { nodes: { key: string; 
     <canvas
       ref={ref}
       className="constellation"
-      onPointerDown={(e) => { view.current.drag = { x: e.clientX, y: e.clientY }; e.currentTarget.setPointerCapture(e.pointerId) }}
+      onPointerDown={(e) => { view.current.drag = { x: e.clientX, y: e.clientY, moved: 0 }; e.currentTarget.setPointerCapture(e.pointerId) }}
       onPointerMove={(e) => {
         const v = view.current
-        if (v.drag) { v.x += (e.clientX - v.drag.x) / v.k; v.y += (e.clientY - v.drag.y) / v.k; v.drag = { x: e.clientX, y: e.clientY } }
+        if (v.drag) { const dx = e.clientX - v.drag.x, dy = e.clientY - v.drag.y; v.x += dx / v.k; v.y += dy / v.k; v.drag = { x: e.clientX, y: e.clientY, moved: v.drag.moved + Math.hypot(dx, dy) } }
         else setHover(pick(e))
       }}
-      onPointerUp={(e) => { const moved = view.current.drag && (Math.abs(e.clientX - view.current.drag.x) > 3); view.current.drag = null; if (!moved) { const k = pick(e); const n = k && layout.get(k); if (n && onPick) onPick(n.name) } }}
-      onWheel={(e) => { const v = view.current; v.k = Math.min(3, Math.max(0.5, v.k * (e.deltaY < 0 ? 1.1 : 0.9))) }}
+      onPointerUp={(e) => { const moved = (view.current.drag?.moved ?? 0) > 4; view.current.drag = null; if (!moved) { const k = pick(e); const n = k && layout.get(k); if (n && onPick) onPick(n.name) } }}
+      onPointerCancel={() => { view.current.drag = null }}
       aria-label="Taste constellation: your artists as stars"
       role="img"
       style={{ cursor: hover ? 'pointer' : 'grab' }}

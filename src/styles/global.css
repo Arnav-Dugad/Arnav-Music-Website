@@ -107,6 +107,13 @@
   --hairline: rgba(255, 255, 255, 0.22);
 }
 
+/* Same idea on the light background: darker secondary text, firmer lines. */
+:root[data-contrast='high'][data-theme='light'] {
+  --text-2: rgba(29, 29, 31, 0.86);
+  --text-3: rgba(29, 29, 31, 0.68);
+  --hairline: rgba(0, 0, 0, 0.2);
+}
+
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; }
 html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }

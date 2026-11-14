@@ -229,6 +229,9 @@ export async function deleteProfile() {
   useSocial.setState({ status: 'none', me: null, friends: [], incoming: [], outgoing: [], unread: 0, presence: {}, connected: false, following: null, listeners: [], inbox: null, sent: [] })
 }
 
+/** Swaps your invite code: links and QR codes you shared before stop working. */
+export async function resetInvite() { applyMe(await api<MePayload>('code', { method: 'POST' })) }
+
 export const inviteLink = (code: string) => `${location.origin}/add/${code}`
 export const profileLink = (handle: string) => `${location.origin}/u/${handle}`
 
@@ -613,5 +616,5 @@ useLibrary.subscribe((s, p) => {
   if (tasteTimer) clearTimeout(tasteTimer)
   tasteTimer = setTimeout(() => void uploadTaste(), 60_000)
 })
-// Debug: window.__arnavSocial() shows the live state.
-;(window as unknown as { __arnavSocial: () => unknown }).__arnavSocial = () => ({ ...st(), ws: ws?.readyState ?? null, offset })
+// Debug (development builds only): window.__arnavSocial() shows the live state.
+if (import.meta.env.DEV) (window as unknown as { __arnavSocial: () => unknown }).__arnavSocial = () => ({ ...st(), ws: ws?.readyState ?? null, offset })

@@ -2,12 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'motion/react'
 import { Icon } from './Icon'
-import { useLibrary, liveEvents } from '../state/library'
+import { useLibrary, liveEvents, likedIds } from '../state/library'
 import { trackRegistry } from '../state/tracks'
 import { player } from '../state/player'
 import { idbGet } from '../lib/idb'
 import { credited } from '../lib/trust'
-import type { ItunesItem } from '../lib/meta'
+import { itunesMatchKey, type ItunesItem } from '../lib/meta'
 import type { Track } from '../lib/types'
 
 interface Year { year: number; albums: ItunesItem[]; loved: Track[]; plays: number }
@@ -18,13 +18,13 @@ export function ArtistEras({ name, disco }: { name: string; disco: ItunesItem[] 
   const nav = useNavigate()
   const likes = useLibrary((s) => s.likes)
   const events = useLibrary((s) => s.events)
-  const lovedTracks = useMemo(() => trackRegistry.many(Object.keys(likes)).filter((t) => credited(t, name)), [likes, name])
+  const lovedTracks = useMemo(() => trackRegistry.many([...likedIds(likes)]).filter((t) => credited(t, name)), [likes, name])
   // Release year and album of each loved song, from its Apple Music match when known.
   const [facts, setFacts] = useState<Map<string, { year: number | null; collectionId: number | null }>>(new Map())
   useEffect(() => {
     let alive = true
     void Promise.all(lovedTracks.map(async (t) => {
-      const hit = await idbGet<{ item: ItunesItem | null }>(`itm|v3|${t.id}`, 'cache')
+      const hit = await idbGet<{ item: ItunesItem | null }>(itunesMatchKey(t.id), 'cache')
       return [t.id, { year: hit?.item?.releaseDate ? Number(hit.item.releaseDate.slice(0, 4)) : t.year ?? null, collectionId: hit?.item?.collectionId ?? null }] as const
     })).then((rows) => { if (alive) setFacts(new Map(rows)) })
     return () => { alive = false }

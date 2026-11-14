@@ -336,6 +336,9 @@ function SyncSection() {
   const cloud = useSettings((s) => s.cloudSync)
   const [confirm, setConfirm] = useState(false)
   const [busy, setBusy] = useState(false)
+  // A Friends profile linked to this account lives on the social server, not in Firestore.
+  const socialLinked = useSocial((s) => !!s.me?.linked)
+  const [alsoSocial, setAlsoSocial] = useState(true)
   return (
     <>
       <Group>
@@ -369,9 +372,15 @@ function SyncSection() {
       )}
       <Sheet open={confirm} onClose={() => setConfirm(false)} title="Delete all cloud data?" width={440}>
         <div className="t-sub">This deletes everything Arnav Music stored in the cloud for {user?.email} — including what your phone synced and its backups. It can’t be undone. Cloud sync turns off.</div>
+        {socialLinked && (
+          <div className="row" style={{ marginTop: 14, gap: 12 }}>
+            <span className="grow t-sub">Also delete my Friends profile, friends, inbox and public playlists</span>
+            <Toggle on={alsoSocial} onChange={setAlsoSocial} label="Also delete my Friends profile" />
+          </div>
+        )}
         <div className="row" style={{ justifyContent: 'flex-end', marginTop: 18 }}>
           <button className="btn btn-ghost" onClick={() => setConfirm(false)}>Cancel</button>
-          <button className="btn btn-danger" disabled={busy} onClick={async () => { setBusy(true); try { await deleteCloudData(); toast('Cloud data deleted') } catch (e) { toast(e instanceof Error ? e.message : 'Delete failed') } finally { setBusy(false); setConfirm(false) } }}>{busy ? <Spinner size={14} /> : <Icon name="trash" size={14} />} Delete everything</button>
+          <button className="btn btn-danger" disabled={busy} onClick={async () => { setBusy(true); try { await deleteCloudData(); if (socialLinked && alsoSocial) await deleteProfile(); toast('Cloud data deleted') } catch (e) { toast(e instanceof Error ? e.message : 'Delete failed') } finally { setBusy(false); setConfirm(false) } }}>{busy ? <Spinner size={14} /> : <Icon name="trash" size={14} />} Delete everything</button>
         </div>
       </Sheet>
     </>

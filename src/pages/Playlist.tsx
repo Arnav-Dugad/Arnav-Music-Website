@@ -24,6 +24,8 @@ import { hasProfile, loadPubs, publicLink, publishPlaylist, unpublishPlaylist, u
 import { useMusicVideos, videosReady } from '../services/musicVideos'
 import { setMode } from '../player/controller'
 import { useSettings } from '../state/settings'
+import { useAuth } from '../state/auth'
+import { PLAYLIST_CLOUD_MAX } from '../services/sync'
 
 interface View {
   kind: 'liked' | 'local' | 'smart' | 'daily' | 'remote'
@@ -96,6 +98,7 @@ export default function PlaylistPage() {
   const coverUrl = view?.artUrl ?? (view?.tracks[0] ? artworkFor(view.tracks[0]) : null)
   const palette = usePaletteFor(coverUrl)
   usePageTheme(palette)
+  const signedIn = useAuth((s) => !!s.user)
 
   if (!view) {
     if (remoteId && remote.loading) return <div className="page"><div style={{ height: 320 }} /><SkeletonRows n={10} /></div>
@@ -154,6 +157,9 @@ export default function PlaylistPage() {
           {p && <PublicBar id={id} />}
           {(view.kind === 'local' || view.kind === 'liked') && view.tracks.length > 0 && <VideosLine tracks={view.tracks} title={view.title} id={id} />}
           {lyricsJob && <div className="t-caption" style={{ marginTop: 8 }}>Fetching lyrics {lyricsJob.done}/{lyricsJob.total}…</div>}
+          {p && signedIn && p.trackIds.length > PLAYLIST_CLOUD_MAX && (
+            <div style={{ marginTop: 12 }}><Notice tone="warn">Only the first {PLAYLIST_CLOUD_MAX} songs sync to your phone and other devices. The other {p.trackIds.length - PLAYLIST_CLOUD_MAX} stay on this browser.</Notice></div>
+          )}
         </div>
       </motion.header>
 

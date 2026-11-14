@@ -19,6 +19,9 @@ const listeners = new Set<() => void>()
 let version = 0
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 const MAX = 6000
+/** Tracks the library still points at (likes, playlists, history, queue): never evicted. */
+let keeper: () => Set<TrackId> = () => new Set()
+export function setRegistryKeeper(fn: () => Set<TrackId>) { keeper = fn }
 
 export const trackRegistry = {
   get: (id: TrackId) => map.get(id),
@@ -52,10 +55,14 @@ export function remember(tracks: Track[] | Track | undefined | null) {
     changed = true
   }
   if (!changed) return
-  while (map.size > MAX) {
-    const first = map.keys().next().value
-    if (first === undefined) break
-    map.delete(first)
+  if (map.size > MAX) {
+    // Oldest first, but only tracks nothing in the library uses: evicting a liked or playlisted
+    // song would hide it here and drop it from the next playlist push to the cloud.
+    const keep = keeper()
+    for (const id of map.keys()) {
+      if (map.size <= MAX) break
+      if (!keep.has(id)) map.delete(id)
+    }
   }
   version++
   listeners.forEach((l) => l())

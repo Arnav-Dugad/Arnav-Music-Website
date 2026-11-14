@@ -17,7 +17,8 @@ export function CinematicLyrics() {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).closest('input, textarea, select')) return
       if (e.key === 'Escape' && useLyrics.getState().cinematic) { e.stopPropagation(); useLyrics.getState().set({ cinematic: false }) }
-      if ((e.key === 'c' || e.key === 'C') && !e.metaKey && !e.ctrlKey) useLyrics.getState().set({ cinematic: !useLyrics.getState().cinematic })
+      // ⇧C: plain C skips to the chorus (Overlays' shortcuts).
+      if ((e.key === 'c' || e.key === 'C') && e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) useLyrics.getState().set({ cinematic: !useLyrics.getState().cinematic })
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)

@@ -8,6 +8,24 @@ export interface ApiEnv {
   YOUTUBE_ANDROID_CERT?: string
   /** Optional KV namespace (Cloudflare): shared response cache, community lyric timing, learned names. */
   YT_CACHE?: KVNamespace
+  /** Optional: other sites allowed to call the quota-spending routes, comma-separated origins ("https://a.com,https://b.com"). */
+  ALLOWED_ORIGINS?: string
+}
+
+/**
+ * Browsers send `Origin` on cross-site requests. Routes that spend the shared YouTube quota only
+ * answer this site (plus local development and any ALLOWED_ORIGINS); requests without an Origin
+ * (same-site GETs, the app's own server calls) pass. It stops other websites from using the
+ * proxy, not scripts — the per-visitor limits handle those.
+ */
+export function originAllowed(request: Request, env: ApiEnv): boolean {
+  const origin = request.headers.get('origin')
+  if (!origin || origin === 'null') return !origin
+  let o: URL
+  try { o = new URL(origin) } catch { return false }
+  if (o.host === new URL(request.url).host) return true
+  if (o.hostname === 'localhost' || o.hostname === '127.0.0.1') return true
+  return (env.ALLOWED_ORIGINS ?? '').split(',').map((x) => x.trim().replace(/\/+$/, '')).filter(Boolean).includes(o.origin)
 }
 
 export type WaitUntil = (p: Promise<unknown>) => void

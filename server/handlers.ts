@@ -13,7 +13,7 @@
  *   GET  /api/known                  → artist + film names learned from YouTube Topic data
  *   GET  /api/mv?ids=…               → songs' official music videos, found once for everyone (mv.ts)
  */
-import { cached, edgeCache, fetchWithTimeout, json, overLimit, USER_AGENT, type ApiEnv, type WaitUntil } from './util'
+import { cached, edgeCache, fetchWithTimeout, json, originAllowed, overLimit, USER_AGENT, type ApiEnv, type WaitUntil } from './util'
 import { creditsApi, communityApi, knownApi, metaApi } from './meta'
 import { musicVideosApi } from './mv'
 import { flushKnown, knownSets, learnFromYouTube, nameKey } from './known'
@@ -60,6 +60,10 @@ export async function handleApi(request: Request, env: ApiEnv, waitUntil?: WaitU
   // Friends and rooms need Durable Objects (the Cloudflare Workers host); other hosts say so clearly.
   if (route.startsWith('/api/social') || route.startsWith('/api/room')) return json({ error: 'social_unavailable', message: 'Friends and listening rooms need the Cloudflare Workers host.' }, 501)
   if (request.method !== 'GET' && !(request.method === 'POST' && route === '/api/community')) return json({ error: 'method_not_allowed' }, 405)
+  // The YouTube proxy, music-video lookups and lyric votes are for this app only, not other websites.
+  if ((route === '/api/yt' || route === '/api/mv' || (route === '/api/community' && request.method === 'POST')) && !originAllowed(request, env)) {
+    return json({ error: 'forbidden_origin', message: 'This API is only for Arnav Music.' }, 403)
+  }
 
   try {
     switch (route) {

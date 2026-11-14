@@ -110,9 +110,12 @@ function sameTitle(a: string, b: string): boolean {
   return common / Math.max(x.size, y.size) >= 0.75
 }
 
+/** Where `itunesMatch` caches its answer (readers must use this, not a copied key). */
+export const itunesMatchKey = (id: string) => `itm|v6|${id}`
+
 /** The audio release of a YouTube song (exact title, length, album) — null when unsure. */
 export async function itunesMatch(t: Track): Promise<ItunesItem | null> {
-  const key = `itm|v6|${t.id}`
+  const key = itunesMatchKey(t.id)
   const hit = await idbGet<{ item: ItunesItem | null; at: number }>(key, 'cache')
   if (hit && (hit.item || Date.now() - hit.at < 7 * 86_400_000)) return hit.item
   const title = t.title.replace(/\s*[([].*?[)\]]\s*/g, ' ').trim()

@@ -306,7 +306,7 @@ export function CommandPalette() {
 
 const SHORTCUTS: [string, string][] = [
   ['Space', 'Play / pause'], ['⇧ →', 'Next song'], ['⇧ ←', 'Previous song'], ['→ / ←', 'Seek 5 seconds'], ['↑ / ↓', 'Volume'],
-  ['M', 'Mute'], ['L', 'Like the current song'], ['S', 'Shuffle'], ['R', 'Repeat'], ['F', 'Now Playing'], ['Y', 'Lyrics'], ['Q', 'Queue'], ['C', 'Skip to the chorus'],
+  ['M', 'Mute'], ['L', 'Like the current song'], ['S', 'Shuffle'], ['R', 'Repeat'], ['F', 'Now Playing'], ['Y', 'Lyrics'], ['Q', 'Queue'], ['C', 'Skip to the chorus'], ['⇧ C', 'Cinematic lyrics'],
   ['⌘ K / Ctrl K', 'Command palette'], ['/', 'Search'], ['?', 'This list'],
 ]
 
@@ -347,7 +347,7 @@ export function useShortcuts() {
         case 'r': case 'R': p.cycleRepeat(); toast(`Repeat ${usePlayer.getState().repeat}`); break
         case 'f': case 'F': p.setExpanded(!usePlayer.getState().expanded); break
         case 'y': case 'Y': p.setExpanded(true); p.setPanel('lyrics'); break
-        case 'c': case 'C': skipToChorus(); break
+        case 'c': case 'C': if (!e.shiftKey) skipToChorus(); break // ⇧C is Cinematic lyrics
         case 'q': case 'Q': p.setExpanded(true); p.setPanel('queue'); break
         case 'l': case 'L': { const t = usePlayer.getState().queue[usePlayer.getState().index]?.track; if (t) toast(lib().toggleLike(t) ? 'Added to Liked Songs' : 'Removed from Liked Songs'); break }
         case '/': e.preventDefault(); p.setExpanded(false); nav('/explore?focus=1'); break

@@ -88,7 +88,9 @@ function classify(e: unknown): AiUnavailable {
     appCheckBlockedUntil = Date.now() + 6 * 3600_000
     return 'APP_CHECK'
   }
-  if (msg.includes('quota') || msg.includes('429') || msg.includes('resource_exhausted') || msg.includes('rate')) {
+  // Match whole phrases: a bare 'rate' would hit "generateContent", which is in every Firebase AI
+  // error URL, and shut cloud AI off for an hour after any failure.
+  if (/\bquota\b|\b429\b|resource[_ ]exhausted|rate[- ]?limit|too many requests/.test(msg)) {
     quotaBlockedUntil = Date.now() + 3600_000
     return 'QUOTA'
   }
