@@ -289,13 +289,19 @@ function syncTrack(prevPlaying: boolean) {
 // ── Hold-to-preview: ~15 s from a third of the way in; the queue and position come back after ──
 let preview: { track: Track | null; posSec: number; wasPlaying: boolean; timer: ReturnType<typeof setTimeout> } | null = null
 
-export function startPreview(t: Track) {
-  if (!yt || preview) return
+/**
+ * Plays a short clip of [t] from a third of the way in; what was playing comes back after.
+ * Called again while a clip plays, it switches to the new song and keeps the original to return
+ * to (Samples swipes from clip to clip). [ms] is how long the clip lasts.
+ */
+export function startPreview(t: Track, ms = 15_000) {
+  if (!yt) return
   const p = player()
   const cur = currentTrack()
-  if (cur?.id === t.id) return
+  if (cur?.id === t.id && !preview) return
   cancelMix()
-  preview = { track: cur, posSec: useProgress.getState().position / 1000, wasPlaying: p.isPlaying, timer: setTimeout(() => endPreview(), 15_000) }
+  if (preview) { clearTimeout(preview.timer); preview.timer = setTimeout(() => endPreview(), ms) }
+  else preview = { track: cur, posSec: useProgress.getState().position / 1000, wasPlaying: p.isPlaying, timer: setTimeout(() => endPreview(), ms) }
   p.patch({ previewing: t })
   const start = Math.max(0, Math.floor((t.durationMs ?? 180_000) / 3000))
   void fade(0, 140).then(() => {

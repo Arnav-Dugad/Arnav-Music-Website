@@ -19,6 +19,7 @@ import { expandBars } from '../lib/liquidGlass'
 export const useMoreMenu = create<{ open: boolean; set: (open: boolean) => void }>()((set) => ({ open: false, set: (open) => set({ open }) }))
 
 const PLACES: { to: string; label: string; sub: string; icon: IconName; tint: string }[] = [
+  { to: '/samples', label: 'Samples', sub: 'Swipe through new songs', icon: 'bolt', tint: '#ff6b6b' },
   { to: '/insights', label: 'Taste DNA', sub: 'Your listening, understood', icon: 'chart', tint: '#4cc9f0' },
   { to: '/together', label: 'Listen together', sub: 'Same song, same second', icon: 'radio', tint: '#3ddc97' },
   { to: '/friends', label: 'Friends', sub: 'Listening now, inbox', icon: 'users', tint: '#f72585' },

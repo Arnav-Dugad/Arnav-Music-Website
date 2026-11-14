@@ -113,6 +113,7 @@ export const TrackRow = memo(function TrackRow({ track, index, list, context, nu
   const nav = useNavigate()
   const isCurrent = id === track.id
   const arrived = useArrived(playlistId, track.id)
+  const swipe = useSwipe(() => { player().addToQueue([track]); toast(`Queued “${track.title}”`) }, () => { const on = useLibrary.getState().toggleLike(track); toast(on ? 'Added to Liked Songs' : 'Removed from Liked Songs') })
   const hold = usePreviewHold(track)
   const play = () => {
     if (onPlay) return onPlay()
@@ -122,8 +123,10 @@ export const TrackRow = memo(function TrackRow({ track, index, list, context, nu
   return (
     <div
       className={`track-row ${isCurrent ? 'current' : ''} ${compact ? 'compact' : ''} ${arrived ? 'arrived' : ''}`}
-      onClick={(e) => { if (!(e.target as HTMLElement).closest('button')) hold.guard(play)?.() }}
-      {...hold.handlers}
+      onClick={(e) => { if (swipe.consumed()) return; if (!(e.target as HTMLElement).closest('button')) hold.guard(play)?.() }}
+      {...merge(hold.handlers, swipe.handlers)}
+      data-swipe={swipe.dir ?? undefined}
+      style={swipe.dx ? { ['--dx' as string]: `${swipe.dx}px` } : undefined}
       onContextMenu={(e) => { if (hold.held()) { e.preventDefault(); return } openTrackMenu(e, track, { playlistId }) }}
       // A list item you can Tab to: Enter or Space plays, the Menu key or Shift+F10 opens its menu.
       // (Not role=button: it holds its own buttons — play, like, more.)
@@ -268,4 +271,58 @@ function WindowedTrackList({ tracks, context, number = true, showAlbum = true, p
       })}
     </div>
   )
+}
+
+type Handlers = Partial<Record<'onPointerDown' | 'onPointerMove' | 'onPointerUp' | 'onPointerCancel' | 'onPointerLeave', (e: React.PointerEvent) => void>>
+/** Runs both sets of pointer handlers (hold-to-preview and swipe). */
+function merge(a: Handlers, b: Handlers): Handlers {
+  const out: Handlers = {}
+  for (const k of ['onPointerDown', 'onPointerMove', 'onPointerUp', 'onPointerCancel', 'onPointerLeave'] as const) {
+    const x = a[k]
+    const y = b[k]
+    if (x || y) out[k] = (e) => { x?.(e); y?.(e) }
+  }
+  return out
+}
+
+/**
+ * Swipe a song row on a touch screen: right adds it to the queue, left likes it (Spotify and Apple
+ * Music style). Only a clearly sideways drag counts, so scrolling the list works as before.
+ */
+function useSwipe(onRight: () => void, onLeft: () => void) {
+  const st = useRef<{ x: number; y: number; on: boolean; dx: number } | null>(null)
+  const consumed = useRef(false)
+  const [dx, setDx] = useState(0)
+  const THRESHOLD = 84
+  const end = () => {
+    const s = st.current
+    st.current = null
+    if (s?.on) {
+      consumed.current = true
+      setTimeout(() => { consumed.current = false }, 350)
+      if (s.dx > THRESHOLD) onRight()
+      else if (s.dx < -THRESHOLD) onLeft()
+    }
+    setDx(0)
+  }
+  const handlers: Handlers = {
+    onPointerDown: (e) => { if (e.pointerType === 'touch') st.current = { x: e.clientX, y: e.clientY, on: false, dx: 0 } },
+    onPointerMove: (e) => {
+      const s = st.current
+      if (!s) return
+      const mx = e.clientX - s.x
+      const my = e.clientY - s.y
+      if (!s.on) {
+        if (Math.abs(my) > 12) { st.current = null; return }
+        if (Math.abs(mx) < 14 || Math.abs(mx) < Math.abs(my) * 1.6) return
+        s.on = true
+        try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId) } catch { /* gone */ }
+      }
+      s.dx = mx
+      setDx(Math.max(-130, Math.min(130, mx)))
+    },
+    onPointerUp: end,
+    onPointerCancel: () => { st.current = null; setDx(0) },
+  }
+  return { handlers, dx, dir: dx > 8 ? (dx > THRESHOLD ? 'queue-ready' : 'queue') : dx < -8 ? (dx < -THRESHOLD ? 'like-ready' : 'like') : null, consumed: () => consumed.current }
 }

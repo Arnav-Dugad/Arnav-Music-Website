@@ -13,6 +13,7 @@ import { openPopOut, popOutSupported } from './PopOut'
 import { Waveform, WaveTimes } from './Waveform'
 import { ChorusButton } from './SongMap'
 import { automixStyle } from '../player/controller'
+import { cycleShuffle } from '../services/smartShuffle'
 import type { PlayerBarPreset } from '../state/settings'
 
 const PRESETS: PlayerBarPreset[] = ['compact', 'wide', 'studio']
@@ -66,7 +67,7 @@ function LiveLyric() {
 }
 
 export function PreviewPill() {
-  const t = usePlayer((s) => s.previewing)
+  const t = usePlayer((s) => (location.pathname === '/samples' ? null : s.previewing))
   return (
     <AnimatePresence>
       {t && (
@@ -84,6 +85,7 @@ export function PlayerBar() {
   const buffering = usePlayer((s) => s.isBuffering && s.wantPlaying)
   const expanded = usePlayer((s) => s.expanded)
   const shuffle = usePlayer((s) => s.shuffle)
+  const smart = usePlayer((s) => s.smartShuffle)
   const repeat = usePlayer((s) => s.repeat)
   const panel = usePlayer((s) => s.panel)
   const docked = useSettings((s) => s.dockedPlayer)
@@ -115,7 +117,7 @@ export function PlayerBar() {
       </div>
       <div className="pb-center">
         <div className="pb-controls">
-          <button className={`icon-btn sm ${shuffle ? 'on' : ''}`} aria-label="Shuffle" aria-pressed={shuffle} onClick={() => player().toggleShuffle()}><Icon name="shuffle" size={17} /></button>
+          <button className={`icon-btn sm ${shuffle ? 'on' : ''} ${smart ? 'smart' : ''}`} aria-label={smart ? 'Smart shuffle on' : shuffle ? 'Shuffle on' : 'Shuffle off'} title="Shuffle · tap again for Smart shuffle" aria-pressed={shuffle} onClick={cycleShuffle}><Icon name={smart ? 'sparkles' : 'shuffle'} size={17} /></button>
           <button className="icon-btn" aria-label="Previous" onClick={() => player().prev(useProgress.getState().position)}><Icon name="prevFill" size={20} /></button>
           <button className="pb-play" aria-label={playing ? 'Pause' : 'Play'} onClick={() => player().toggle()}>
             {buffering ? <span className="spinner" style={{ width: 20, height: 20, borderTopColor: 'var(--bg)' }} /> : <PlayPauseIcon playing={playing} size={20} />}

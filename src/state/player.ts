@@ -17,6 +17,8 @@ interface PlayerState {
   /** Order before shuffle, to restore. */
   unshuffled: QueueItem[] | null
   shuffle: boolean
+  /** Smart shuffle: recommendations ('smart' queue items) mixed into a shuffle. */
+  smartShuffle: boolean
   repeat: Repeat
   /** User intent: should be playing. */
   wantPlaying: boolean
@@ -64,6 +66,8 @@ interface PlayerActions {
   /** Puts back an earlier queue (Undo), if the song playing now is still in it. */
   restore: (queue: QueueItem[]) => void
   toggleShuffle: () => void
+  /** A queue item for [track] (Smart shuffle marks its picks). */
+  makeItem: (track: Track, source?: string) => QueueItem
   cycleRepeat: () => void
   setVolume: (v: number) => void
   toggleMute: () => void
@@ -94,6 +98,7 @@ export const usePlayer = create<PlayerState & PlayerActions>()((set, get) => ({
   index: Math.min(saved?.index ?? 0, Math.max(0, (saved?.queue?.length ?? 1) - 1)),
   unshuffled: null,
   shuffle: saved?.shuffle ?? false,
+  smartShuffle: false,
   repeat: saved?.repeat ?? 'off',
   wantPlaying: false,
   isPlaying: false,
@@ -212,6 +217,7 @@ export const usePlayer = create<PlayerState & PlayerActions>()((set, get) => ({
     const index = queue.findIndex((q) => q.key === cur)
     if (index >= 0) set({ queue, index })
   },
+  makeItem: (track, source) => item(track, source),
   toggleShuffle() {
     const s = get()
     if (!s.queue.length) return set({ shuffle: !s.shuffle })

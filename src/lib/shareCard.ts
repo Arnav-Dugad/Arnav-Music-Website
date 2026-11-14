@@ -133,3 +133,74 @@ export async function shareCard(track: Track, lyric?: string | null) {
   a.click()
   setTimeout(() => URL.revokeObjectURL(a.href), 3000)
 }
+
+/**
+ * A lyric card (like the ones Spotify and Apple Music share): the lines you picked in large type
+ * over the song's colours, with the cover, title and artist at the bottom. 1080×1350.
+ */
+export async function renderLyricCard(track: Track, lines: string[]): Promise<Blob> {
+  const c = document.createElement('canvas')
+  c.width = W
+  c.height = H
+  const ctx = c.getContext('2d')!
+  const art = await loadImage(`https://i.ytimg.com/vi/${track.playbackRef}/hqdefault.jpg`).catch(() => null)
+  ctx.fillStyle = '#101018'
+  ctx.fillRect(0, 0, W, H)
+  if (art) {
+    ctx.save()
+    ctx.filter = 'blur(90px) saturate(1.8) brightness(0.75)'
+    ctx.drawImage(art, -300, -300, W + 600, H + 600)
+    ctx.restore()
+  }
+  const g = ctx.createLinearGradient(0, 0, 0, H)
+  g.addColorStop(0, 'rgba(0,0,0,0.05)')
+  g.addColorStop(1, 'rgba(0,0,0,0.45)')
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, W, H)
+  // The lyric, as big as it can be while fitting.
+  const text = lines.map((l) => l.trim()).filter(Boolean)
+  let size = 84
+  let wrapped: string[] = []
+  for (; size >= 44; size -= 4) {
+    ctx.font = `800 ${size}px Inter, system-ui, sans-serif`
+    wrapped = text.flatMap((l) => wrap(ctx, l, W - 180, 4))
+    if (wrapped.length * size * 1.18 <= H - 520) break
+  }
+  ctx.fillStyle = '#fff'
+  ctx.textBaseline = 'top'
+  let y = 150
+  for (const l of wrapped) { ctx.fillText(l, 90, y); y += size * 1.18 }
+  // Song strip at the bottom.
+  const by = H - 230
+  if (art) {
+    ctx.save()
+    roundRect(ctx, 90, by, 140, 140, 22)
+    ctx.clip()
+    const s = Math.min(art.width, art.height)
+    ctx.drawImage(art, (art.width - s) / 2, (art.height - s) / 2, s, s, 90, by, 140, 140)
+    ctx.restore()
+  }
+  ctx.fillStyle = '#fff'
+  ctx.font = '700 42px Inter, system-ui, sans-serif'
+  ctx.fillText(wrap(ctx, track.title, W - 360, 1)[0] ?? '', 260, by + 22)
+  ctx.fillStyle = 'rgba(255,255,255,0.75)'
+  ctx.font = '500 34px Inter, system-ui, sans-serif'
+  ctx.fillText(wrap(ctx, track.artist, W - 360, 1)[0] ?? '', 260, by + 78)
+  ctx.fillStyle = 'rgba(255,255,255,0.55)'
+  ctx.font = '600 26px Inter, system-ui, sans-serif'
+  ctx.fillText('Arnav Music', 90, H - 64)
+  return await new Promise<Blob>((resolve, reject) => c.toBlob((b) => (b ? resolve(b) : reject(new Error('card'))), 'image/png'))
+}
+
+/** Shares a lyric card (native share sheet) or downloads it. */
+export async function shareLyricCard(track: Track, lines: string[]) {
+  const blob = await renderLyricCard(track, lines)
+  const file = new File([blob], `${track.title.replace(/[^\p{L}\p{N} -]/gu, '').slice(0, 40) || 'lyrics'} - lyrics.png`, { type: 'image/png' })
+  const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean }
+  if (nav.canShare?.({ files: [file] })) { await nav.share({ files: [file], title: track.title }).catch(() => undefined); return }
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = file.name
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(a.href), 3000)
+}

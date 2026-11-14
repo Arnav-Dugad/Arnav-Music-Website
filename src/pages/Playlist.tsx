@@ -27,6 +27,8 @@ import { useSettings } from '../state/settings'
 import { useAuth } from '../state/auth'
 import { PinMixButton, PlaylistYtChip } from '../components/YouTubeMusic'
 import { deleteOnYouTube, unlink as unlinkYt, useYtMusic } from '../services/youtubeMusic'
+import { buildDaylist } from '../services/daylist'
+import { DaylistArt } from '../components/Daylist'
 import { PLAYLIST_CLOUD_MAX } from '../services/sync'
 
 interface View {
@@ -69,6 +71,11 @@ export default function PlaylistPage() {
     if (id === 'liked') {
       const tracks = likedTracks(likes)
       return { kind: 'liked', title: 'Liked Songs', tracks, art: <div className="liked-art hero-cover-inner"><Icon name="heartFill" size={72} /></div>, meta: 'Syncs with your phone' }
+    }
+    if (id === 'daylist') {
+      const d = buildDaylist()
+      if (!d) return null
+      return { kind: 'smart', title: d.title, description: d.subtitle, tracks: d.tracks, art: <DaylistArt d={d} large />, meta: `Daylist · changes at ${new Date(d.until).toLocaleTimeString([], { hour: 'numeric' })}` }
     }
     if (id.startsWith('smart:')) {
       const k = id.slice(6) as SmartKind

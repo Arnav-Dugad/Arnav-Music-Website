@@ -73,6 +73,10 @@ A premium, Apple-style music web app: YouTube discovery through the official API
 - **Link previews**: shared songs, public playlists, rooms and invite links show their own title and art in chat apps (`worker/preview.ts`).
 - **Tabs work as one**: only one tab syncs (Web Lock); tabs announce library saves to each other (`src/lib/tabs.ts`). Crash reports go to `/api/log` (error, page path and browser only).
 - **Safety**: invite codes are checked strictly and can be reset; quota-spending API routes refuse other websites; one lyric vote per visitor per song a day; no framing by other sites.
+- **Daylist**: a playlist for this part of the day, named after what you actually play then ("saturday afternoon bollywood easy"), opening Home in the colours of the time of day; it changes as the day does.
+- **Samples**: a swipeable feed of songs picked for you; each card plays a 30-second clip as it comes into view (like, queue, save, play), and your music comes back when you leave.
+- **Smart shuffle**: tap shuffle again and a recommendation (marked with a sparkle) slips in after every few of your songs; tap again to take them out.
+- **Swipe rows** on touch screens: right to queue, left to like. **Lyric cards**: pick up to four lines and share them as an image. **Recently opened** places lead the ⌘K palette.
 
 ## Architecture
 ```

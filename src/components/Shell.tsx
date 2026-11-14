@@ -14,6 +14,7 @@ import { useSocial } from '../services/social'
 export const NAV: { to: string; label: string; icon: IconName; end?: boolean }[] = [
   { to: '/', label: 'Home', icon: 'home', end: true },
   { to: '/explore', label: 'Explore', icon: 'compass' },
+  { to: '/samples', label: 'Samples', icon: 'bolt' },
   { to: '/ai', label: 'Arnav AI', icon: 'sparkles' },
   { to: '/library', label: 'Library', icon: 'library' },
 ]

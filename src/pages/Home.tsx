@@ -29,6 +29,7 @@ import { albumsForYou, dailyMixes, forYouNow, freshFinds, model, rediscover, top
 import { useYoutubeReady } from '../services/status'
 import { NowCard, useListeningNow } from '../components/Social'
 import { newReleases } from '../services/releases'
+import { HomeHero } from '../components/Daylist'
 import { useSocial } from '../services/social'
 
 // ── Top of the page ─────────────────────────────────────────────────────────
@@ -297,6 +298,7 @@ export default function Home() {
       {/* A page name for screen readers and the route announcer (Home has no visible title). */}
       <h1 className="sr-only">Home</h1>
       {!desktop && <TopBar />}
+      <HomeHero />
       {!data.cold && <MoodChips />}
       <Handoff />
       <SetupNotice />

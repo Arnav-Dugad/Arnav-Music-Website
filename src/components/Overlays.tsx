@@ -27,6 +27,8 @@ import { isHost, suggest, useTogether } from '../services/together'
 import { dialogOpen, useDialog } from '../lib/a11y'
 import { createPortal } from 'react-dom'
 import { settings } from '../state/settings'
+import { cycleShuffle } from '../services/smartShuffle'
+import { recentPlaces } from '../lib/recentPlaces'
 import { skipToChorus } from '../state/sections'
 
 export async function startRadio(track: Track) {
@@ -215,13 +217,14 @@ export function CommandPalette() {
       { id: 'pp', group: 'Playback', icon: 'play', label: usePlayer.getState().wantPlaying ? 'Pause' : 'Play', hint: 'Space', run: () => player().toggle() },
       { id: 'nx', group: 'Playback', icon: 'nextFill', label: 'Next song', hint: '⇧→', run: () => player().next() },
       { id: 'pv', group: 'Playback', icon: 'prevFill', label: 'Previous song', hint: '⇧←', run: () => player().prev(useProgress.getState().position) },
-      { id: 'sh', group: 'Playback', icon: 'shuffle', label: 'Toggle shuffle', hint: 'S', run: () => player().toggleShuffle() },
+      { id: 'sh', group: 'Playback', icon: 'shuffle', label: 'Shuffle / Smart shuffle', hint: 'S', run: cycleShuffle },
       { id: 'rp', group: 'Playback', icon: 'repeat', label: 'Cycle repeat', hint: 'R', run: () => player().cycleRepeat() },
       { id: 'np', group: 'Playback', icon: 'expand', label: 'Open Now Playing', hint: 'F', run: () => player().setExpanded(true) },
       { id: 'ly', group: 'Playback', icon: 'lyrics', label: 'Show lyrics', hint: 'Y', run: () => { player().setExpanded(true); if (player().panel !== 'lyrics') player().setPanel('lyrics') } },
       { id: 'qu', group: 'Playback', icon: 'queue', label: 'Show queue', hint: 'Q', run: () => { player().setExpanded(true); if (player().panel !== 'queue') player().setPanel('queue') } },
       { id: 'home', group: 'Go to', icon: 'home', label: 'Home', run: go('/') },
       { id: 'exp', group: 'Go to', icon: 'compass', label: 'Explore', run: go('/explore') },
+      { id: 'samples', group: 'Go to', icon: 'bolt', label: 'Samples', hint: 'Swipe through new songs', run: go('/samples') },
       { id: 'ai', group: 'Go to', icon: 'sparkles', label: 'Arnav AI', run: go('/ai') },
       { id: 'lib', group: 'Go to', icon: 'library', label: 'Library', run: go('/library') },
       { id: 'liked', group: 'Go to', icon: 'heartFill', label: 'Liked Songs', run: go('/playlist/liked') },
@@ -240,7 +243,11 @@ export function CommandPalette() {
   }, [open, playlists]) // eslint-disable-line react-hooks/exhaustive-deps
   const results = useMemo<PaletteItem[]>(() => {
     const query = q.trim()
-    if (!query) return items.slice(0, 14)
+    if (!query) {
+      // Before you type: the places you opened lately, then the usual list.
+      const recent: PaletteItem[] = recentPlaces().slice(0, 5).map((pl) => ({ id: `r-${pl.path}`, group: 'Recently opened', icon: 'history', label: pl.label, hint: pl.path.split('?')[0], run: go(pl.path) }))
+      return [...recent, ...items].slice(0, 18)
+    }
     const scored = items.map((i) => ({ i, s: Math.max(matchScore(query, i.label), i.hint ? matchScore(query, i.hint) * 0.7 : 0) })).filter((x) => x.s > 0.4)
     const pls = visiblePlaylists(playlists).map((p) => ({ i: { id: `pl-${p.id}`, group: 'Your library', icon: 'note' as IconName, label: p.name, hint: `${p.trackIds.length} songs`, run: go(`/playlist/${p.id}`) }, s: matchScore(query, p.name) })).filter((x) => x.s > 0.5)
     const known = verified([...likedTracks(), ...trackRegistry.all().slice(-800)])
@@ -359,7 +366,7 @@ export function useShortcuts() {
         case 'ArrowUp': if (!usePlayer.getState().expanded) return; e.preventDefault(); p.setVolume(usePlayer.getState().volume + 5); break
         case 'ArrowDown': if (!usePlayer.getState().expanded) return; e.preventDefault(); p.setVolume(usePlayer.getState().volume - 5); break
         case 'm': case 'M': p.toggleMute(); break
-        case 's': case 'S': p.toggleShuffle(); toast(usePlayer.getState().shuffle ? 'Shuffle on' : 'Shuffle off'); break
+        case 's': case 'S': cycleShuffle(); break
         case 'r': case 'R': p.cycleRepeat(); toast(`Repeat ${usePlayer.getState().repeat}`); break
         case 'f': case 'F': p.setExpanded(!usePlayer.getState().expanded); break
         case 'y': case 'Y': p.setExpanded(true); p.setPanel('lyrics'); break

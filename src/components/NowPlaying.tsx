@@ -24,6 +24,7 @@ import { useIsDesktop } from '../hooks'
 import { ui } from '../state/ui'
 import { artworkFor } from '../lib/classify'
 import { useDialog } from '../lib/a11y'
+import { cycleShuffle } from '../services/smartShuffle'
 import type { Track } from '../lib/types'
 
 function VideoSlot() {
@@ -223,6 +224,7 @@ function NowPlayingView({ track }: { track: Track }) {
   const playing = usePlayer((s) => s.wantPlaying)
   const buffering = usePlayer((s) => s.isBuffering && s.wantPlaying)
   const shuffle = usePlayer((s) => s.shuffle)
+  const smart = usePlayer((s) => s.smartShuffle)
   const repeat = usePlayer((s) => s.repeat)
   const panel = usePlayer((s) => s.panel)
   const mode = usePlayer((s) => s.mode)
@@ -342,7 +344,7 @@ function NowPlayingView({ track }: { track: Track }) {
           </div>
           <div className="np-progress"><SectionStrip /><Progress /></div>
           <div className="np-controls">
-            <button className={`icon-btn ${shuffle ? 'on' : ''}`} aria-label="Shuffle" aria-pressed={shuffle} onClick={() => player().toggleShuffle()}><Icon name="shuffle" size={21} /></button>
+            <button className={`icon-btn ${shuffle ? 'on' : ''} ${smart ? 'smart' : ''}`} aria-label={smart ? 'Smart shuffle on' : shuffle ? 'Shuffle on' : 'Shuffle off'} title="Shuffle · tap again for Smart shuffle" aria-pressed={shuffle} onClick={cycleShuffle}><Icon name={smart ? 'sparkles' : 'shuffle'} size={21} /></button>
             <motion.button whileTap={{ scale: 0.85 }} className="np-skip" aria-label="Previous" onClick={() => player().prev(useProgress.getState().position)}><Icon name="prevFill" size={34} /></motion.button>
             <motion.button whileTap={{ scale: 0.88 }} className="np-play" aria-label={playing ? 'Pause' : 'Play'} onClick={() => player().toggle()}>
               {buffering ? <Spinner size={30} /> : <PlayPauseIcon playing={playing} size={40} />}

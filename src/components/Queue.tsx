@@ -20,7 +20,7 @@ function removeWithUndo(key: string, title: string) {
 
 /** Section labels for the queue (shown on the first song of each run), when there's more than one kind. */
 function queueGroups(items: QueueItem[], context: string | null): (string | undefined)[] {
-  const label = (q: QueueItem) => (q.source === 'you' ? 'Next in queue' : q.source === 'autoplay' ? 'Autoplay · songs like this' : `Next from ${context ?? 'this list'}`)
+  const label = (q: QueueItem) => (q.source === 'you' ? 'Next in queue' : q.source === 'autoplay' ? 'Autoplay · songs like this' : `Next from ${context ?? 'this list'}${q.source === 'smart' || items.some((x) => x.source === 'smart') ? ' · Smart shuffle' : ''}`)
   const labels = items.map(label)
   if (new Set(labels).size < 2) return labels.map(() => undefined)
   return labels.map((l, i) => (i === 0 || labels[i - 1] !== l ? l : undefined))
@@ -62,7 +62,7 @@ function Row({ item, onRemove, eta, group }: { item: QueueItem; onRemove: () => 
       <button className="q-main" onClick={() => { const i = player().queue.findIndex((q) => q.key === item.key); player().jumpTo(i) }}>
         <Artwork src={artworkFor(t, 'sm')} seed={t.artist} className="q-art" />
         <span className="grow" style={{ minWidth: 0 }}>
-          <span className="q-title ellipsis">{t.title}</span>
+          <span className="q-title ellipsis">{item.source === 'smart' && <Icon name="sparkles" size={12} className="q-smart" aria-label="Smart shuffle pick" />}{t.title}</span>
           <span className="q-sub ellipsis">{t.artist}{eta ? <span className="subtle"> · {eta}</span> : null}</span>
         </span>
       </button>

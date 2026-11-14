@@ -2,6 +2,7 @@ import { SMART, smartPlaylist, type SmartKind } from '../lib/taste'
 import { dailyMixes } from './recs'
 import { likedIds, lib, liveEvents } from '../state/library'
 import { trackRegistry } from '../state/tracks'
+import { buildDaylist } from './daylist'
 import type { Track } from '../lib/types'
 
 /**
@@ -10,6 +11,7 @@ import type { Track } from '../lib/types'
  * rotated away keeps its last songs).
  */
 export function resolveMix(source: string): { title: string; tracks: Track[] } | null {
+  if (source === 'daylist') { const d = buildDaylist(); return d ? { title: 'Daylist', tracks: d.tracks } : null }
   if (source.startsWith('smart:')) {
     const k = source.slice(6) as SmartKind
     if (!SMART[k]) return null

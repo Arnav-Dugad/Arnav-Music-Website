@@ -8,6 +8,7 @@ import { Spinner } from './ui'
 import { aiAvailability } from '../lib/ai'
 import { useMotionLevel } from '../state/settings'
 import { loopWhileVisible } from '../lib/frames'
+import { LyricCardSheet } from './LyricCard'
 import { songNotes } from '../lib/aiFeatures'
 
 const LEAD_MS = 140
@@ -398,6 +399,7 @@ export function LyricsPanel({ size = 'lg', dual = false }: { size?: 'lg' | 'md' 
             {aligning ? <Spinner size={13} /> : <Icon name="tune" size={14} />} {src}{aligning ? <span className="lyr-src-t"> · lining up…</span> : tl ? <span className="lyr-src-t"> · {tl.split(' · ').slice(1).join(' · ')}</span> : null}
           </button>
           <span className="grow" />
+          <ShareLyricsChip />
           {size !== 'xl' && <button className="chip" onClick={() => useLyrics.getState().set({ cinematic: true })} title="Cinematic full screen"><Icon name="expand" size={14} /> Cinematic</button>}
           <button className={`chip ${notes ? 'on' : ''}`} disabled={notesBusy || !!aiAvailability()} onClick={() => void about()}>{notesBusy ? <Spinner size={13} /> : <Icon name="info" size={14} />} About</button>
           {translation && (
@@ -418,5 +420,16 @@ export function LyricsPanel({ size = 'lg', dual = false }: { size?: 'lg' | 'md' 
         </div>
       )}
     </div>
+  )
+}
+
+/** Opens the lyric card picker (share a few lines as an image). */
+function ShareLyricsChip() {
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <button className="chip" onClick={() => setOpen(true)} title="Share lyrics as a card"><Icon name="share" size={14} /> Share</button>
+      <LyricCardSheet open={open} onClose={() => setOpen(false)} />
+    </>
   )
 }

@@ -19,9 +19,11 @@ import { TogetherLayer } from './components/TogetherLayer'
 import { SendSheet } from './components/Social'
 import { MobileAccountButton, TopTabs, MoreSheet } from './components/MobileMenu'
 import { YtLinkReview } from './components/YouTubeMusic'
+import { rememberPlace } from './lib/recentPlaces'
 import Home from './pages/Home'
 
 const Explore = lazy(() => import('./pages/Explore'))
+const SamplesPage = lazy(() => import('./pages/Samples'))
 const ReplayPage = lazy(() => import('./pages/Replay'))
 const PublicPlaylistPage = lazy(() => import('./pages/PublicPlaylist'))
 const Library = lazy(() => import('./pages/Library'))
@@ -109,6 +111,7 @@ export default function App() {
     const t = setTimeout(() => {
       const h1 = el.querySelector('h1')
       setAnnounce(h1?.textContent?.trim() || '')
+      rememberPlace(loc.pathname + loc.search, h1?.textContent?.trim() || '')
       if (h1 && navType !== 'POP' && document.activeElement === document.body) { h1.tabIndex = -1; h1.focus({ preventScroll: true }) }
     }, 450)
     return () => { cancelAnimationFrame(raf); clearTimeout(t) }
@@ -130,6 +133,7 @@ export default function App() {
               <Routes location={loc} key={loc.pathname}>
                 <Route path="/" element={<Page><Home /></Page>} />
                 <Route path="/explore" element={<Page><Explore /></Page>} />
+                <Route path="/samples" element={<Page><SamplesPage /></Page>} />
                 <Route path="/search" element={<Page><Explore /></Page>} />
                 <Route path="/library" element={<Page><Library /></Page>} />
                 <Route path="/library/:tab" element={<Page><Library /></Page>} />
