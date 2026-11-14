@@ -94,7 +94,8 @@ export default function ReplayPage() {
       </header>
 
       {!view ? (
-        <Empty icon="story" title="Nothing to replay yet" body="Listen for a while — your top artists, songs and albums land here as soon as you've played 30 minutes in a month." />
+        <Empty icon="story" title="Nothing to replay yet" body="Listen for a while — your top artists, songs and albums land here as soon as you've played 30 minutes in a month."
+          action={<div className="row" style={{ gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}><button className="btn btn-primary" onClick={() => nav('/explore')}><Icon name="compass" size={15} /> Explore music</button><button className="btn btn-secondary" onClick={() => nav('/ai')}><Icon name="sparkles" size={15} /> Ask Arnav AI</button></div>} />
       ) : (
         <>
           {fromSaved && (

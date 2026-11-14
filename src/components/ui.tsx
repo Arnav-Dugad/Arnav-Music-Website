@@ -278,15 +278,32 @@ export function Spinner({ size = 18 }: { size?: number }) {
 
 /** Large title that fades into a compact sticky header as you scroll (iOS-style). */
 export function PageHeader({ title, subtitle, actions, eyebrow }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode; eyebrow?: ReactNode }) {
+  // iOS-style: once the large title scrolls away, a compact glass title takes its place at the
+  // top (tap it to go back up). It takes no room in the layout, so nothing jumps.
+  const titleRef = useRef<HTMLHeadingElement>(null)
+  const [compact, setCompact] = useState(false)
+  useLayoutEffect(() => {
+    const el = titleRef.current
+    if (!el || typeof IntersectionObserver !== 'function') return
+    const io = new IntersectionObserver(([e]) => setCompact(!e.isIntersecting && e.boundingClientRect.top < 0))
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
   return (
+    <>
+    <div className="page-compact-anchor">
+      <button className={`page-compact glass-thick ${compact ? 'on' : ''}`} tabIndex={compact ? 0 : -1} aria-hidden={!compact}
+        onClick={() => titleRef.current?.closest('.main-scroll')?.scrollTo({ top: 0, behavior: 'smooth' })}>{title}</button>
+    </div>
     <header className="page-header">
       <div className="grow">
         {eyebrow && <div className="t-eyebrow" style={{ marginBottom: 6 }}>{eyebrow}</div>}
-        <h1 className="t-large">{title}</h1>
+        <h1 className="t-large" ref={titleRef}>{title}</h1>
         {subtitle && <div className="t-sub" style={{ marginTop: 6 }}>{subtitle}</div>}
       </div>
       {actions && <div className="row page-header-actions" style={{ gap: 8 }}>{actions}</div>}
     </header>
+    </>
   )
 }
 

@@ -299,3 +299,24 @@ button:disabled, .btn:disabled, .chip:disabled { cursor: not-allowed; }
 
 /* Programmatic focus targets (skip link, page heading) don't need a ring. */
 .main-scroll:focus-visible, h1[tabindex='-1']:focus-visible { outline: none; }
+
+/* Compact page title (PageHeader): appears when the large title scrolls away. */
+.page-compact-anchor { position: sticky; top: 0; height: 0; z-index: 20; }
+.page-compact { position: absolute; left: 50%; top: 12px; max-width: min(70vw, 520px); padding: 8px 18px; border-radius: 99px; font-size: 15px; font-weight: 700; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); opacity: 0; pointer-events: none; transform: translate(-50%, -10px) scale(0.96); transition: opacity 0.22s var(--ease), transform 0.32s var(--ease); }
+.page-compact.on { opacity: 1; pointer-events: auto; transform: translate(-50%, 0) scale(1); }
+@media (max-width: 699px) { .page-compact { top: calc(12px + env(safe-area-inset-top)); max-width: 56vw; } }
+/* Tablets have the top tab pill there already. */
+@media (min-width: 700px) and (max-width: 1023px) { .page-compact-anchor { display: none; } }
+:root[data-motion='off'] .page-compact { transition: none; }
+
+/* Settings rows on phones: the description keeps a readable width; a wide control (a segmented
+   picker, a slider) moves under it instead of squeezing the text to one word per line. */
+@media (max-width: 700px) {
+  .set-row { flex-wrap: wrap; row-gap: 10px; }
+  .set-row > .grow { flex: 1 1 210px; }
+  .set-row > :not(.grow) { flex: 0 1 auto; max-width: 100%; }
+  .set-row > .segmented { overflow-x: auto; scrollbar-width: none; }
+  .set-row > .segmented::-webkit-scrollbar { display: none; }
+  .set-row:has(> .segmented, > input[type='range'], > .row input[type='range']) > :not(.grow) { flex-basis: 100%; }
+  .set-row > .row:has(input[type='range']) input[type='range'] { flex: 1; }
+}
