@@ -1,6 +1,6 @@
-import { getAI, getGenerativeModel, GoogleAIBackend, type Part } from 'firebase/ai'
-import { fetchAndActivate, getRemoteConfig, getValue, type RemoteConfig } from 'firebase/remote-config'
-import { firebaseApp } from './firebase'
+// Firebase AI Logic and Remote Config load on first use (`loadSdk`), not with the first paint.
+import type { Part } from 'firebase/ai'
+import type { RemoteConfig } from 'firebase/remote-config'
 import { idbGet, idbSet } from './idb'
 import { useUsage } from './usage'
 import { settings } from '../state/settings'
@@ -37,10 +37,14 @@ let appCheckBlockedUntil = 0
 let deadModels = new Set<string>()
 export let lastAiError: string | null = null
 
+let sdk: Promise<[typeof import('firebase/ai'), typeof import('firebase/remote-config'), typeof import('./firebaseSdk')]> | null = null
+const loadSdk = () => (sdk ??= Promise.all([import('firebase/ai'), import('firebase/remote-config'), import('./firebaseSdk')]).catch((e) => { sdk = null; throw e }))
+
 function loadRemoteConfig(): Promise<void> {
   if (rcLoaded) return rcLoaded
   rcLoaded = (async () => {
     try {
+      const [, { fetchAndActivate, getRemoteConfig, getValue }, { firebaseApp }] = await loadSdk()
       rc = getRemoteConfig(firebaseApp())
       rc.settings.minimumFetchIntervalMillis = 6 * 3600_000
       rc.settings.fetchTimeoutMillis = 4000
@@ -131,6 +135,7 @@ export async function generate(prompt: string | Part[], version: string, opts: {
   for (const modelName of models) {
     useUsage.getState().bump({ aiRequests: 1 })
     try {
+      const [{ getAI, getGenerativeModel, GoogleAIBackend }, , { firebaseApp }] = await loadSdk()
       const ai = getAI(firebaseApp(), { backend: new GoogleAIBackend() })
       const model = getGenerativeModel(ai, {
         model: modelName,

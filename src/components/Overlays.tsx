@@ -21,7 +21,7 @@ import { artworkFor } from '../lib/classify'
 import { matchScore } from '../lib/query'
 import { MOMENTS } from '../lib/moments'
 import { authMessage, linkGoogle, resetPassword, signInEmail, signInWithGoogle, signUpEmail } from '../lib/firebase'
-import { refreshAuthUser } from '../services/sync'
+import { refreshAuthUser, warmSync } from '../services/sync'
 import type { Track } from '../lib/types'
 import { artistKey, MOODS, MOOD_KEYS } from '../lib/types'
 import { isHost, suggest, useTogether } from '../services/together'
@@ -366,6 +366,8 @@ export function AuthSheet() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
+  // Fetch Firebase as the sheet opens, so the Google popup opens on the tap (popup blockers).
+  useEffect(() => { if (open) warmSync() }, [open])
   const [error, setError] = useState<string | null>(null)
   const [linkStep, setLinkStep] = useState(false)
   const close = () => { ui().set({ authOpen: false }); setError(null); setLinkStep(false) }

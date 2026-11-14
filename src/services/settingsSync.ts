@@ -1,5 +1,5 @@
 import { doc, collection, runTransaction, serverTimestamp } from 'firebase/firestore'
-import { firestore } from '../lib/firebase'
+import { firestore } from '../lib/firebaseSdk'
 import { ls } from '../lib/idb'
 import { useUsage } from '../lib/usage'
 import { MOOD_KEYS, type Mood } from '../lib/types'

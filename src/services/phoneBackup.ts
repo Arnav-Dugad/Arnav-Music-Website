@@ -6,7 +6,7 @@
  * phone or in the backup changes; merges never duplicate.
  */
 import { collection, doc, getDoc, getDocs, limit, orderBy, query } from 'firebase/firestore'
-import { firestore } from '../lib/firebase'
+import { firestore } from '../lib/firebaseSdk'
 import { idbGet, idbSet } from '../lib/idb'
 import { artistKey, type Track } from '../lib/types'
 import { lib, useLibrary, type LocalEvent } from '../state/library'

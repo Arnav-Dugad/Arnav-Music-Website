@@ -90,7 +90,7 @@ function applyMe(d: MePayload) {
 async function idToken(): Promise<string | null> {
   if (useAuth.getState().status !== 'signedIn') return null
   try {
-    const { firebaseAuth } = await import('../lib/firebase')
+    const { firebaseAuth } = await import('../lib/firebaseSdk')
     return (await firebaseAuth().currentUser?.getIdToken()) ?? null
   } catch { return null }
 }
