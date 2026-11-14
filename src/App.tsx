@@ -1,5 +1,5 @@
-import { lazy, Suspense, useEffect, useRef } from 'react'
-import { Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { Route, Routes, useLocation, useNavigate, useNavigationType } from 'react-router-dom'
 import { AnimatePresence, motion, MotionConfig } from 'motion/react'
 import { Sidebar, TabBar } from './components/Shell'
 import { PlayerBar, MiniPlayer, PreviewPill } from './components/PlayerBar'
@@ -13,7 +13,7 @@ import { useCurrentPalette, useIsDesktop, useThemeEffects } from './hooks'
 import { useMotionLevel, useSettings } from './state/settings'
 import { usePlayer } from './state/player'
 import { Spinner } from './components/ui'
-import { PageBoundary } from './components/ErrorBoundary'
+import { PageBoundary, QuietBoundary } from './components/ErrorBoundary'
 import { isMorphing } from './lib/reveal'
 import { TogetherLayer } from './components/TogetherLayer'
 import { SendSheet } from './components/Social'
@@ -73,6 +73,7 @@ export default function App() {
   const onboardingDone = useSettings((s) => s.onboardingDone)
   const hasTrack = usePlayer((s) => s.queue.length > 0)
   const expanded = usePlayer((s) => s.expanded)
+  const trackKey = usePlayer((s) => s.queue[s.index]?.track.id ?? '')
   const scroller = useRef<HTMLDivElement>(null)
   const docked = useSettings((s) => s.dockedPlayer) && desktop && hasTrack
 
@@ -80,16 +81,50 @@ export default function App() {
     // Shared links (a song, a listening room) open straight away, even on a first visit.
     if (!onboardingDone && !/^\/(welcome|track\/|together|add\/|u\/|friends|p\/|share)/.test(loc.pathname)) nav('/welcome', { replace: true })
   }, [onboardingDone, loc.pathname, nav])
-  useEffect(() => { scroller.current?.scrollTo({ top: 0 }) }, [loc.pathname])
+  // Back and Forward return to where you were on that page; anything new starts at the top.
+  const navType = useNavigationType()
+  const scrollSaved = useRef(new Map<string, number>())
+  const lastKey = useRef(loc.key)
+  const [announce, setAnnounce] = useState('')
+  useEffect(() => {
+    const el = scroller.current
+    if (!el) return
+    const onScroll = () => { scrollSaved.current.set(lastKey.current, el.scrollTop) }
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => el.removeEventListener('scroll', onScroll)
+  }, [])
+  useEffect(() => {
+    const el = scroller.current
+    lastKey.current = loc.key
+    if (!el) return
+    const target = navType === 'POP' ? scrollSaved.current.get(loc.key) ?? 0 : 0
+    // Pages fill in as their data arrives: keep trying for a moment until the spot exists.
+    let tries = 0
+    let raf = 0
+    const go = () => {
+      el.scrollTop = target
+      if (Math.abs(el.scrollTop - target) > 2 && ++tries < 45) raf = requestAnimationFrame(go)
+    }
+    go()
+    // Screen readers hear the new page's name; keyboard focus moves to its heading.
+    const t = setTimeout(() => {
+      const h1 = el.querySelector('h1')
+      setAnnounce(h1?.textContent?.trim() || '')
+      if (h1 && navType !== 'POP' && document.activeElement === document.body) { h1.tabIndex = -1; h1.focus({ preventScroll: true }) }
+    }, 450)
+    return () => { cancelAnimationFrame(raf); clearTimeout(t) }
+  }, [loc.key]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (expanded) usePlayer.getState().setExpanded(false) }, [loc.pathname]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const onboarding = loc.pathname.startsWith('/welcome')
   return (
     <MotionConfig reducedMotion={motionLevel === 'full' ? 'user' : 'always'}>
       <div className={`app ${desktop ? 'desktop' : 'mobile'} ${hasTrack ? 'has-track' : ''} ${onboarding ? 'onboarding' : ''} ${docked && !onboarding ? 'docked' : ''} ${expanded && !desktop ? 'np-open' : ''} ${/^\/(wrapped|wall)(\/|$)/.test(loc.pathname) ? 'immersive' : ''}`}>
+        <a className="skip-link" href="#main" onClick={(e) => { e.preventDefault(); scroller.current?.focus() }}>Skip to content</a>
+        <div className="sr-only" aria-live="polite" aria-atomic="true">{announce}</div>
         <div className="ambient" aria-hidden><div className="ambient-glow" /></div>
         {desktop && !onboarding && <Sidebar />}
-        <main className="main-scroll" ref={scroller} id="main">
+        <main className="main-scroll" ref={scroller} id="main" tabIndex={-1}>
           <PageBoundary resetKey={loc.pathname}>
           <Suspense fallback={<Fallback />}>
             <AnimatePresence mode="wait" initial={false}>
@@ -130,20 +165,20 @@ export default function App() {
           </PageBoundary>
         </main>
         {!onboarding && (desktop ? <PlayerBar /> : <><TopTabs /><MiniPlayer /><TabBar /><MobileAccountButton /><MoreSheet /></>)}
-        <DockPanel />
-        <NowPlaying />
-        <CinematicLyrics />
+        <QuietBoundary name="dock" resetKey={trackKey}><DockPanel /></QuietBoundary>
+        <QuietBoundary name="now playing" resetKey={trackKey}><NowPlaying /></QuietBoundary>
+        <QuietBoundary name="cinematic" resetKey={trackKey}><CinematicLyrics /></QuietBoundary>
         <VideoHost />
-        <TrackMenu />
-        <AddToPlaylist />
-        <CommandPalette />
-        <ShortcutsSheet />
-        <AuthSheet />
-        <PhoneSheet />
+        <QuietBoundary name="track menu"><TrackMenu /></QuietBoundary>
+        <QuietBoundary name="add to playlist"><AddToPlaylist /></QuietBoundary>
+        <QuietBoundary name="command palette"><CommandPalette /></QuietBoundary>
+        <QuietBoundary name="shortcuts"><ShortcutsSheet /></QuietBoundary>
+        <QuietBoundary name="sign in"><AuthSheet /></QuietBoundary>
+        <QuietBoundary name="phone"><PhoneSheet /></QuietBoundary>
         <Toasts />
-        <PreviewPill />
-        <TogetherLayer />
-        <SendSheet />
+        <QuietBoundary name="preview"><PreviewPill /></QuietBoundary>
+        <QuietBoundary name="together"><TogetherLayer /></QuietBoundary>
+        <QuietBoundary name="send"><SendSheet /></QuietBoundary>
       </div>
     </MotionConfig>
   )

@@ -48,3 +48,40 @@ export class PageBoundary extends Component<{ children: ReactNode; resetKey: str
     )
   }
 }
+
+/**
+ * Around an overlay (Now Playing, the dock, menus…): if it crashes it disappears quietly and the
+ * rest of the app keeps working. It tries again when `resetKey` changes (the next song, say).
+ */
+export class QuietBoundary extends Component<{ children: ReactNode; name: string; resetKey?: string }, { error: unknown }> {
+  state: { error: unknown } = { error: null }
+  static getDerivedStateFromError(error: unknown) { return { error } }
+  componentDidCatch(error: unknown) {
+    if (isStaleChunk(error)) reloadForNewVersion()
+    else console.error(`[Arnav Music] ${this.props.name} error`, error)
+  }
+  componentDidUpdate(prev: { resetKey?: string }) {
+    if (prev.resetKey !== this.props.resetKey && this.state.error) this.setState({ error: null })
+  }
+  render() { return this.state.error ? null : this.props.children }
+}
+
+/** The last line: a crash anywhere else shows a calm screen with Reload instead of a blank page. */
+export class RootBoundary extends Component<{ children: ReactNode }, { error: unknown }> {
+  state: { error: unknown } = { error: null }
+  static getDerivedStateFromError(error: unknown) { return { error } }
+  componentDidCatch(error: unknown) {
+    if (isStaleChunk(error)) reloadForNewVersion()
+    else console.error('[Arnav Music] app error', error)
+  }
+  render() {
+    if (!this.state.error) return this.props.children
+    return (
+      <div className="center" style={{ height: '100dvh', flexDirection: 'column', gap: 12, padding: 24, textAlign: 'center' }} role="alert">
+        <div className="t-title">Arnav Music hit a snag</div>
+        <div className="t-sub" style={{ maxWidth: 420 }}>Your library and settings are safe on this device. Reloading usually fixes it.</div>
+        <button className="btn btn-primary" onClick={() => location.reload()}>Reload</button>
+      </div>
+    )
+  }
+}

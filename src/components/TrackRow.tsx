@@ -123,9 +123,21 @@ export const TrackRow = memo(function TrackRow({ track, index, list, context, nu
       onClick={(e) => { if (!(e.target as HTMLElement).closest('button')) hold.guard(play)?.() }}
       {...hold.handlers}
       onContextMenu={(e) => { if (hold.held()) { e.preventDefault(); return } openTrackMenu(e, track, { playlistId }) }}
-      role="button"
+      // A list item you can Tab to: Enter or Space plays, the Menu key or Shift+F10 opens its menu.
+      // (Not role=button: it holds its own buttons — play, like, more.)
+      role="listitem"
       tabIndex={0}
-      onKeyDown={(e) => { if (e.key === 'Enter') play() }}
+      aria-label={`${track.title}, ${track.artist}${isCurrent ? (playing ? ', now playing' : ', paused') : ''}`}
+      aria-current={isCurrent ? 'true' : undefined}
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); play() }
+        else if (e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) {
+          e.preventDefault()
+          const r = e.currentTarget.getBoundingClientRect()
+          ui().set({ menu: { track, x: r.left + 48, y: r.bottom, playlistId } })
+        }
+      }}
     >
       {number && (
         <div className="tr-num tabular">
@@ -191,7 +203,7 @@ function ProgressiveTrackList({ tracks, context, number = true, showAlbum = true
     return () => clearTimeout(h)
   }, [limit, tracks.length])
   return (
-    <div className="track-list">
+    <div className="track-list" role="list">
       {tracks.slice(0, limit).map((t, i) => (
         <TrackRow key={`${t.id}-${i}`} track={t} index={i} list={tracks} context={context} number={number} showAlbum={showAlbum} caption={captions?.[t.id]} playlistId={playlistId} />
       ))}
@@ -247,7 +259,7 @@ function WindowedTrackList({ tracks, context, number = true, showAlbum = true, p
   const start = Math.min(range.start, n)
   const end = Math.min(Math.max(range.end, start), n)
   return (
-    <div className="track-list" ref={ref} style={{ paddingTop: start * rowH, paddingBottom: (n - end) * rowH }}>
+    <div className="track-list" role="list" ref={ref} style={{ paddingTop: start * rowH, paddingBottom: (n - end) * rowH }}>
       {tracks.slice(start, end).map((t, j) => {
         const i = start + j
         return <TrackRow key={`${t.id}-${i}`} track={t} index={i} list={tracks} context={context} number={number} showAlbum={showAlbum} playlistId={playlistId} />

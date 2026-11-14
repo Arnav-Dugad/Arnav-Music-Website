@@ -23,6 +23,7 @@ import { useMotionLevel, useSettings } from '../state/settings'
 import { useIsDesktop } from '../hooks'
 import { ui } from '../state/ui'
 import { artworkFor } from '../lib/classify'
+import { useDialog } from '../lib/a11y'
 import type { Track } from '../lib/types'
 
 function VideoSlot() {
@@ -249,16 +250,17 @@ function NowPlayingView({ track }: { track: Track }) {
     window.addEventListener('pointermove', wake)
     window.addEventListener('keydown', wake)
     window.addEventListener('pointerdown', wake)
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !document.querySelector('.sheet-root, .menu-root, .palette-root')) close() }
-    window.addEventListener('keydown', onKey)
     return () => {
       clearTimeout(idleTimer.current)
       window.removeEventListener('pointermove', wake)
       window.removeEventListener('keydown', wake)
       window.removeEventListener('pointerdown', wake)
-      window.removeEventListener('keydown', onKey)
     }
   }, [ambientIdle])
+  // A dialog: Escape closes it (after any sheet or menu on top), Tab stays inside, focus returns
+  // to the mini player or bar you opened it from. Playback shortcuts keep working.
+  const npRef = useRef<HTMLDivElement>(null)
+  useDialog(true, npRef, close, { initialFocus: 'container', blocksShortcuts: false })
 
   const onDragEnd = (_: unknown, info: PanInfo) => { if (info.offset.y > 140 || info.velocity.y > 700) close() }
   const split = desktop && panel != null
@@ -276,7 +278,9 @@ function NowPlayingView({ track }: { track: Track }) {
       dragConstraints={{ top: 0, bottom: 0 }}
       dragElastic={{ top: 0, bottom: 0.6 }}
       onDragEnd={onDragEnd}
+      ref={npRef}
       role="dialog"
+      aria-modal="true"
       aria-label="Now Playing"
     >
       <div className={`np-bg living ${movingGradient ? '' : 'static'}`}>

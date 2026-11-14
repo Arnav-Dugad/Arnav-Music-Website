@@ -111,15 +111,17 @@ export function useThemeEffects(palette: Palette) {
   const { themeMode, glass, accentMode, presetAccent, highContrast } = useSettings(useShallow((s) => ({ themeMode: s.themeMode, glass: s.glass, accentMode: s.accentMode, presetAccent: s.presetAccent, highContrast: s.highContrast })))
   const motion = useMotionLevel()
   const prefersLight = useMediaQuery('(prefers-color-scheme: light)')
+  // The device asking for more contrast turns on high contrast too.
+  const prefersMoreContrast = useMediaQuery('(prefers-contrast: more)')
   useEffect(() => {
     const root = document.documentElement
     const theme = themeMode === 'system' ? (prefersLight ? 'light' : 'dark') : themeMode
     root.dataset.theme = theme
     root.dataset.glass = glass ? 'on' : 'off'
     root.dataset.motion = motion
-    root.dataset.contrast = highContrast ? 'high' : 'normal'
+    root.dataset.contrast = highContrast || prefersMoreContrast ? 'high' : 'normal'
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'light' ? '#f5f5f7' : '#060609')
-  }, [themeMode, glass, motion, prefersLight, highContrast])
+  }, [themeMode, glass, motion, prefersLight, highContrast, prefersMoreContrast])
   useEffect(() => {
     const root = document.documentElement.style
     root.setProperty('--np-1', palette.bg[0])

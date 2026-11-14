@@ -5,7 +5,7 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import { loadTracks, pruneRegistry, setRegistryKeeper } from './state/tracks'
 import { usePlayer } from './state/player'
-import { reloadForNewVersion } from './components/ErrorBoundary'
+import { reloadForNewVersion, RootBoundary } from './components/ErrorBoundary'
 import { useLibrary } from './state/library'
 import { startSync } from './services/sync'
 import { setAppBadge, startPwa } from './lib/pwa'
@@ -70,9 +70,11 @@ async function boot() {
   startDj()
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
+      <RootBoundary>
+        <BrowserRouter>
+          <App />
+        </BrowserRouter>
+      </RootBoundary>
     </StrictMode>,
   )
   document.getElementById('boot')?.classList.add('done')

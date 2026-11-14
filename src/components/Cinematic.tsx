@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { Icon } from './Icon'
 import { Artwork } from './ui'
@@ -6,6 +6,7 @@ import { LyricsPanel } from './Lyrics'
 import { PlayPauseIcon } from './PlayerBar'
 import { useLyrics } from '../state/lyrics'
 import { player, usePlayer, useProgress } from '../state/player'
+import { useDialog } from '../lib/a11y'
 import { artworkFor } from '../lib/classify'
 
 /** Cinematic lyrics: full screen, large serif type over the blurred cover. Esc or C to leave. */
@@ -16,7 +17,6 @@ export function CinematicLyrics() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).closest('input, textarea, select')) return
-      if (e.key === 'Escape' && useLyrics.getState().cinematic) { e.stopPropagation(); useLyrics.getState().set({ cinematic: false }) }
       // ⇧C: plain C skips to the chorus (Overlays' shortcuts).
       if ((e.key === 'c' || e.key === 'C') && e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) useLyrics.getState().set({ cinematic: !useLyrics.getState().cinematic })
     }
@@ -28,10 +28,12 @@ export function CinematicLyrics() {
     document.documentElement.requestFullscreen?.().catch(() => undefined)
     return () => { if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined) }
   }, [open])
+  const ref = useRef<HTMLDivElement>(null)
+  useDialog(open && !!track, ref, () => useLyrics.getState().set({ cinematic: false }), { initialFocus: 'container', blocksShortcuts: false })
   return (
     <AnimatePresence>
       {open && track && (
-        <motion.div className="cine" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.5 }}>
+        <motion.div ref={ref} role="dialog" aria-modal="true" aria-label="Cinematic lyrics" className="cine" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.5 }}>
           <div className="cine-bg">
             <AnimatePresence initial={false}>
               <motion.img key={track.id} src={artworkFor(track)} alt="" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 1.4 }} />

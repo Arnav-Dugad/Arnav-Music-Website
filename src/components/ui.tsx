@@ -1,11 +1,12 @@
 import { createPortal } from 'react-dom'
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type PointerEvent as RPointerEvent } from 'react'
+import { useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type PointerEvent as RPointerEvent } from 'react'
 import { AnimatePresence, motion, useMotionValue, useSpring, useTransform } from 'motion/react'
 import { Icon, type IconName } from './Icon'
 import { hashHue } from '../lib/color'
 import { usePreviewHold } from '../player/usePreviewHold'
 import type { Track } from '../lib/types'
 import { morphTo } from '../lib/reveal'
+import { useDialog } from '../lib/a11y'
 
 export const spring = { type: 'spring', stiffness: 420, damping: 36, mass: 0.9 } as const
 export const softSpring = { type: 'spring', stiffness: 260, damping: 30 } as const
@@ -157,9 +158,19 @@ export function Shelf({ title, subtitle, action, children, id }: { title?: React
 
 export function Segmented<T extends string>({ value, options, onChange, id, size = 'md' }: { value: T; options: { value: T; label: ReactNode }[]; onChange: (v: T) => void; id: string; size?: 'sm' | 'md' }) {
   return (
-    <div className={`segmented ${size}`} role="tablist">
+    <div className={`segmented ${size}`} role="radiogroup" onKeyDown={(e) => {
+      // Arrow keys move the choice, like native radio buttons.
+      const i = options.findIndex((o) => o.value === value)
+      const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0
+      if (!step || i < 0) return
+      e.preventDefault()
+      const group = e.currentTarget
+      const next = options[(i + step + options.length) % options.length]
+      onChange(next.value)
+      requestAnimationFrame(() => (group.querySelector('[aria-checked="true"]') as HTMLElement | null)?.focus())
+    }}>
       {options.map((o) => (
-        <button key={o.value} role="tab" aria-selected={value === o.value} className={value === o.value ? 'on' : ''} onClick={() => onChange(o.value)}>
+        <button key={o.value} role="radio" aria-checked={value === o.value} tabIndex={value === o.value ? 0 : -1} className={value === o.value ? 'on' : ''} onClick={() => onChange(o.value)}>
           {value === o.value && <motion.span layoutId={`seg-${id}`} className="seg-pill" transition={spring} />}
           <span className="seg-label">{o.label}</span>
         </button>
@@ -172,13 +183,12 @@ export function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boo
   return <button role="switch" aria-checked={on} aria-label={label} className={`switch ${on ? 'on' : ''}`} onClick={() => onChange(!on)} />
 }
 
-export function Sheet({ open, onClose, children, title, width = 520, className = '' }: { open: boolean; onClose: () => void; children: ReactNode; title?: ReactNode; width?: number; className?: string }) {
-  useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+export function Sheet({ open, onClose, children, title, width = 520, className = '', label }: { open: boolean; onClose: () => void; children: ReactNode; title?: ReactNode; width?: number; className?: string; label?: string }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const titleId = useId()
+  // Focus moves in and comes back, Tab stays inside, Escape closes the top sheet only, and the
+  // app behind is inert for screen readers and the keyboard.
+  useDialog(open, ref, onClose, { inertApp: true })
   // Portalled to <body>: a page's enter animation (transform / filter) would otherwise trap the
   // fixed overlay inside the page, under the tab bar and mini player.
   return createPortal(
@@ -186,10 +196,13 @@ export function Sheet({ open, onClose, children, title, width = 520, className =
       {open && (
         <motion.div className="sheet-root" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.22 }} onClick={onClose}>
           <motion.div
+            ref={ref}
             className={`sheet glass-thick ${className}`}
             style={{ maxWidth: width }}
             role="dialog"
             aria-modal="true"
+            aria-labelledby={title ? titleId : undefined}
+            aria-label={title ? undefined : label}
             initial={{ y: 40, scale: 0.96, opacity: 0 }}
             animate={{ y: 0, scale: 1, opacity: 1 }}
             exit={{ y: 30, scale: 0.97, opacity: 0 }}
@@ -198,7 +211,7 @@ export function Sheet({ open, onClose, children, title, width = 520, className =
           >
             {title ? (
               <div className="sheet-head">
-                <div className="t-title">{title}</div>
+                <div className="t-title" id={titleId}>{title}</div>
                 <button className="icon-btn sm" aria-label="Close" onClick={onClose}><Icon name="close" size={18} /></button>
               </div>
             ) : (

@@ -5,7 +5,7 @@ import { Icon, Logo, type IconName } from './Icon'
 import { Artwork, Sheet, Spinner, spring } from './ui'
 import { PlaylistThumb } from './Shell'
 import { albumHref, artistHref, splitArtists } from './TrackRow'
-import { useUi, ui, toast } from '../state/ui'
+import { useUi, ui, toast, holdToast } from '../state/ui'
 import { useLibrary, lib, visiblePlaylists, likedTracks, liveEvents } from '../state/library'
 import { player, usePlayer, useProgress } from '../state/player'
 import { useSettings } from '../state/settings'
@@ -25,6 +25,9 @@ import { refreshAuthUser, warmSync } from '../services/sync'
 import type { Track } from '../lib/types'
 import { artistKey, MOODS, MOOD_KEYS } from '../lib/types'
 import { isHost, suggest, useTogether } from '../services/together'
+import { dialogOpen, useDialog } from '../lib/a11y'
+import { createPortal } from 'react-dom'
+import { settings } from '../state/settings'
 import { skipToChorus } from '../state/sections'
 
 export async function startRadio(track: Track) {
@@ -61,12 +64,18 @@ export function TrackMenu() {
     const top = Math.min(Math.max(8, menu.y), innerHeight - r.height - 8)
     setPos({ left, top })
   }, [menu])
-  useEffect(() => {
-    if (!menu) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') ui().set({ menu: null }) }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [menu])
+  // Focus moves into the menu and back to the ⋯ button; Escape closes it.
+  useDialog(!!menu, ref, () => ui().set({ menu: null }))
+  const onMenuKey = (e: React.KeyboardEvent) => {
+    const items = [...(ref.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])]
+    if (!items.length) return
+    const i = items.indexOf(document.activeElement as HTMLElement)
+    const go = (n: number) => { e.preventDefault(); items[(n + items.length) % items.length].focus() }
+    if (e.key === 'ArrowDown') go(i + 1)
+    else if (e.key === 'ArrowUp') go(i < 0 ? items.length - 1 : i - 1)
+    else if (e.key === 'Home') go(0)
+    else if (e.key === 'End') go(items.length - 1)
+  }
   const stats = useMemo(() => {
     if (!menu) return null
     const ev = liveEvents().filter((e) => e.trackId === menu.track.id)
@@ -81,6 +90,8 @@ export function TrackMenu() {
           <motion.div
             ref={ref}
             role="menu"
+            aria-label={`${t.title} options`}
+            onKeyDown={onMenuKey}
             className="menu glass-thick"
             style={{ left: pos?.left ?? -9999, top: pos?.top ?? -9999 }}
             initial={{ opacity: 0, scale: 0.92 }}
@@ -171,17 +182,19 @@ export function AddToPlaylist() {
 
 export function Toasts() {
   const toasts = useUi((s) => s.toasts)
-  return (
-    <div className="toasts" aria-live="polite">
+  // On <body>, not in the app: while a sheet makes the app inert, an Undo toast still works.
+  return createPortal(
+    <div className="toasts" role="status" aria-live="polite">
       <AnimatePresence>
         {toasts.map((t) => (
-          <motion.div key={t.id} layout className="toast glass-thick" initial={{ opacity: 0, y: 18, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.97 }} transition={spring}>
+          <motion.div key={t.id} layout onPointerEnter={() => holdToast(t.id, true)} onPointerLeave={() => holdToast(t.id, false)} onFocus={() => holdToast(t.id, true)} onBlur={() => holdToast(t.id, false)} className="toast glass-thick" initial={{ opacity: 0, y: 18, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.97 }} transition={spring}>
             <span>{t.text}</span>
             {t.action && <button className="btn btn-sm btn-secondary" onClick={() => { t.action!.run(); ui().dismiss(t.id) }}>{t.action.label}</button>}
           </motion.div>
         ))}
       </AnimatePresence>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -264,6 +277,10 @@ export function CommandPalette() {
     return [...tail.slice(0, 1), ...goSingers.map((x) => x.i), ...goAlbums.map((x) => x.i), ...songs.map((x) => x.i), ...goMoods.map((x) => x.i), ...[...scored, ...pls].sort((a, b) => b.s - a.s).map((x) => x.i).slice(0, 8), tail[1]]
   }, [q, items, playlists]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => setSel(0), [q])
+  const paletteRef = useRef<HTMLDivElement>(null)
+  useDialog(open, paletteRef, close)
+  // The highlighted result stays in view as you arrow through a long list.
+  useEffect(() => { document.getElementById(`pal-opt-${sel}`)?.scrollIntoView({ block: 'nearest' }) }, [sel])
   const onKey = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') { e.preventDefault(); setSel((s) => Math.min(results.length - 1, s + 1)) }
     if (e.key === 'ArrowUp') { e.preventDefault(); setSel((s) => Math.max(0, s - 1)) }
@@ -275,20 +292,20 @@ export function CommandPalette() {
     <AnimatePresence>
       {open && (
         <motion.div className="palette-root" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} onClick={close}>
-          <motion.div className="palette glass-thick" initial={{ opacity: 0, y: -14, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -10, scale: 0.98 }} transition={spring} onClick={(e) => e.stopPropagation()}>
+          <motion.div ref={paletteRef} role="dialog" aria-modal="true" aria-label="Command palette" className="palette glass-thick" initial={{ opacity: 0, y: -14, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -10, scale: 0.98 }} transition={spring} onClick={(e) => e.stopPropagation()}>
             <div className="palette-input">
               <Icon name="search" size={19} />
-              <input ref={inputRef} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onKey} placeholder="Go to a singer, album, film or mood — search songs or ask Arnav AI" aria-label="Command palette" />
+              <input ref={inputRef} role="combobox" aria-expanded="true" aria-controls="palette-list" aria-activedescendant={results[sel] ? `pal-opt-${sel}` : undefined} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onKey} placeholder="Go to a singer, album, film or mood — search songs or ask Arnav AI" aria-label="Command palette" />
               <span className="kbd">esc</span>
             </div>
-            <div className="palette-list" role="listbox">
+            <div className="palette-list" role="listbox" id="palette-list" aria-label="Results">
               {results.map((r, i) => {
                 const head = r.group !== lastGroup ? r.group : null
                 lastGroup = r.group
                 return (
                   <div key={r.id}>
                     {head && <div className="palette-group t-eyebrow">{head}</div>}
-                    <button role="option" aria-selected={i === sel} className={`palette-item ${i === sel ? 'sel' : ''}`} onMouseEnter={() => setSel(i)} onClick={() => { close(); r.run() }}>
+                    <button role="option" id={`pal-opt-${i}`} tabIndex={-1} aria-selected={i === sel} className={`palette-item ${i === sel ? 'sel' : ''}`} onMouseEnter={() => setSel(i)} onClick={() => { close(); r.run() }}>
                       {r.art ? <Artwork src={r.art} className="palette-art" /> : <span className="palette-icon"><Icon name={r.icon} size={16} /></span>}
                       <span className="grow ellipsis">{r.label}</span>
                       {r.hint && <span className="t-caption ellipsis" style={{ maxWidth: 220 }}>{r.hint}</span>}
@@ -333,7 +350,9 @@ export function useShortcuts() {
       const el = e.target as HTMLElement
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); ui().set({ palette: !useUi.getState().palette }); return }
       if (el.closest('input, textarea, select, [contenteditable="true"]') || e.metaKey || e.ctrlKey || e.altKey) return
-      if (useUi.getState().palette) return
+      if (useUi.getState().palette || dialogOpen()) return
+      // Letter and symbol shortcuts can be turned off; Space and the arrow keys always work.
+      if (!settings().singleKeyShortcuts && e.key.length === 1 && e.key !== ' ') return
       const p = player()
       const pos = useProgress.getState().position
       switch (e.key) {

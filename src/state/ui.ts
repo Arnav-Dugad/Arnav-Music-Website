@@ -39,11 +39,18 @@ export const useUi = create<UiState>()((set, get) => ({
   pushToast(t) {
     const id = ++seq
     set({ toasts: [...get().toasts.slice(-2), { ...t, id }] })
-    setTimeout(() => get().dismiss(id), t.action ? 6000 : 3200)
+    toastTimers.set(id, setTimeout(() => get().dismiss(id), t.action ? 6000 : 3200))
   },
-  dismiss: (id) => set({ toasts: get().toasts.filter((x) => x.id !== id) }),
+  dismiss: (id) => { clearTimeout(toastTimers.get(id)); toastTimers.delete(id); set({ toasts: get().toasts.filter((x) => x.id !== id) }) },
   set: (p) => set(p),
 }))
+
+const toastTimers = new Map<number, ReturnType<typeof setTimeout>>()
+/** Hovering or focusing a toast holds it; leaving gives a little time to read the rest. */
+export function holdToast(id: number, hold: boolean) {
+  clearTimeout(toastTimers.get(id))
+  if (!hold) toastTimers.set(id, setTimeout(() => useUi.getState().dismiss(id), 2500))
+}
 
 export const toast = (text: string, action?: Toast['action']) => useUi.getState().pushToast({ text, action })
 export const ui = () => useUi.getState()

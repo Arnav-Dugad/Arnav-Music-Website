@@ -68,9 +68,9 @@ const CHIPS: { label: string; q: string; mood?: Mood }[] = [
 function MoodChips() {
   const nav = useNavigate()
   return (
-    <div className="h-chips" role="list">
+    <div className="h-chips" role="group" aria-label="Moods">
       {CHIPS.map((c, i) => (
-        <motion.button key={c.label} role="listitem" className="chip h-chip" onClick={() => nav(`/ai?q=${encodeURIComponent(c.q)}`)}
+        <motion.button key={c.label} className="chip h-chip" onClick={() => nav(`/ai?q=${encodeURIComponent(c.q)}`)}
           initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring, delay: i * 0.025 }} whileTap={{ scale: 0.94 }}>
           {c.label}
         </motion.button>

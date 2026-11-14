@@ -553,6 +553,7 @@ function About() {
         <AppRow />
         <Row title="Source" sub="Open source on GitHub"><a className="btn btn-ghost btn-sm" href="https://github.com/Arnav-Dugad/Arnav-Music-Website" target="_blank" rel="noreferrer"><Icon name="external" size={14} /> GitHub</a></Row>
         <Row title="Keyboard shortcuts"><button className="btn btn-ghost btn-sm" onClick={() => ui().set({ shortcutsOpen: true })}><Icon name="keyboard" size={14} /> Show</button></Row>
+        <Bool k="singleKeyShortcuts" title="Single-key shortcuts" sub="L to like, S to shuffle and the like. Turn off if you use voice control or a switch, so stray letters don’t act." />
       </Group>
       <Group title="Credits">
         <Row title="Playback" sub="The official YouTube IFrame player. Music and videos belong to their owners; YouTube attribution stays intact." />

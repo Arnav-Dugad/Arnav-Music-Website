@@ -103,7 +103,7 @@ button:disabled, .btn:disabled, .chip:disabled { cursor: not-allowed; }
   .together-pill { top: auto; right: 12px; bottom: calc(var(--tabbar-h) + var(--player-h) + 16px + env(safe-area-inset-bottom)); height: 32px; box-shadow: var(--shadow-2); }
   .app:not(.has-track) .together-pill { bottom: calc(var(--tabbar-h) + 12px + env(safe-area-inset-bottom)); }
 }
-@media (max-width: 700px) { .app:has(.together-pill) .toasts { bottom: calc(var(--tabbar-h) + var(--player-h) + 62px + env(safe-area-inset-bottom)); } }
+@media (max-width: 700px) { body:has(.together-pill) .toasts { bottom: calc(var(--tabbar-h) + var(--player-h) + 62px + env(safe-area-inset-bottom)); } }
 
 /* Text fields show their own soft focus ring — no second outline on top. */
 .field:focus-visible, .fr-search input:focus-visible { outline: none; }
@@ -272,3 +272,30 @@ button:disabled, .btn:disabled, .chip:disabled { cursor: not-allowed; }
   .ob-mood { height: 42px; padding: 0 16px; font-size: 14.5px; }
   .ob-actions { position: sticky; bottom: 0; padding-top: 14px; background: linear-gradient(transparent, rgba(0,0,0,.25)); }
 }
+
+/* ── Accessibility ─────────────────────────────────────────────────────── */
+/* One keyboard focus ring everywhere, including the parts that switched theirs off. */
+:where(.card, .track-row, .menu-item, .chip-select, .prog-track, .wave, .palette-item, .m-tile, [role='menuitem'], [role='option'], [tabindex]):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+:where(.track-row, .menu-item, .palette-item):focus-visible { outline-offset: -2px; }
+/* Search boxes show focus on the whole box (their input hides its own outline). */
+:where(.search-box, .ask, .mini-search, .qchat-box, .ai-follow, .palette-input):has(input:focus-visible) { outline: 2px solid color-mix(in oklab, var(--accent) 80%, transparent); outline-offset: 2px; }
+/* Long menus scroll instead of running off the screen (phones especially). */
+.menu { max-height: calc(100dvh - 16px); overflow-y: auto; overscroll-behavior: contain; }
+@media (max-width: 700px) { .menu { max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); } }
+/* Touch: small icon buttons get a 44 px hit area without changing how they look. */
+@media (pointer: coarse) {
+  .icon-btn.sm { position: relative; }
+  .icon-btn.sm::after { content: ''; position: absolute; inset: -6px; }
+}
+/* Skip link: hidden until you Tab to it. */
+.skip-link { position: fixed; left: 12px; top: -60px; z-index: 10001; padding: 10px 16px; border-radius: 12px; background: var(--accent); color: var(--on-accent, #0b0b0f); font-weight: 650; transition: top 0.15s var(--ease); }
+.skip-link:focus-visible { top: 12px; outline: 2px solid var(--text); }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+/* Windows High Contrast / forced colours: keep borders and focus visible. */
+@media (forced-colors: active) {
+  .glass, .glass-thick, .glass-thin, .sheet, .menu, .toast { border: 1px solid CanvasText; }
+  :focus-visible { outline: 2px solid Highlight !important; }
+}
+
+/* Programmatic focus targets (skip link, page heading) don't need a ring. */
+.main-scroll:focus-visible, h1[tabindex='-1']:focus-visible { outline: none; }

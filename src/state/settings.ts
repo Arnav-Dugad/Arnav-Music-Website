@@ -18,6 +18,8 @@ export interface Settings {
   glass: boolean
   motion: MotionLevel
   highContrast: boolean
+  /** Letter shortcuts (L to like, S to shuffle…). Off for speech input and switch users (WCAG 2.1.4). */
+  singleKeyShortcuts: boolean
   // playback
   preferVideos: boolean
   /** Official uploads only (Topic / VEVO / labels / artist channels / established channels). */
@@ -87,6 +89,7 @@ export const DEFAULT_SETTINGS: Settings = {
   glass: true,
   motion: 'full',
   highContrast: false,
+  singleKeyShortcuts: true,
   preferVideos: false,
   verifiedOnly: true,
   autoReplaceUnavailable: true,
