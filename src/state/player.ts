@@ -45,15 +45,20 @@ interface PlayerState {
   /** A 15-second hold-to-preview is playing (the queue is untouched). */
   previewing: Track | null
   engineReady: boolean
+  /** The last skip you made yourself (for Undo): the song you left and where you were in it. */
+  lastSkip: { key: string; posMs: number; title: string; at: number } | null
+  /** Where the next song to load should start (read once by the engine). */
+  startMs: number | null
 }
 
 interface PlayerActions {
-  play: (tracks: Track[], startIndex?: number, opts?: { context?: string; contextId?: string; shuffle?: boolean }) => void
+  play: (tracks: Track[], startIndex?: number, opts?: { context?: string; contextId?: string; shuffle?: boolean; startMs?: number }) => void
   playNext: (tracks: Track[]) => void
   addToQueue: (tracks: Track[]) => void
   /** Endless radio's picks, at the very end and labelled Autoplay. */
   addAutoplay: (tracks: Track[]) => void
-  jumpTo: (i: number) => void
+  /** [startMs]: start that song there (Undo skip, Jump back in) rather than at the top. */
+  jumpTo: (i: number, startMs?: number) => void
   next: (opts?: { auto?: boolean }) => void
   prev: (positionMs: number) => void
   toggle: () => void
@@ -120,6 +125,8 @@ export const usePlayer = create<PlayerState & PlayerActions>()((set, get) => ({
   radioLoading: false,
   previewing: null,
   engineReady: false,
+  lastSkip: null,
+  startMs: null,
 
   play(tracks, startIndex = 0, opts = {}) {
     if (!tracks.length) return
@@ -134,7 +141,7 @@ export const usePlayer = create<PlayerState & PlayerActions>()((set, get) => ({
       items = [first, ...shuffled(items.filter((_, i) => i !== index))]
       index = 0
     }
-    set({ queue: items, index, unshuffled, shuffle, wantPlaying: true, issue: null, context: opts.context ?? null, contextId: opts.contextId ?? null, duration: 0, seekRequest: null })
+    set({ queue: items, index, unshuffled, shuffle, wantPlaying: true, issue: null, context: opts.context ?? null, contextId: opts.contextId ?? null, duration: 0, seekRequest: null, startMs: opts.startMs ?? null })
   },
   playNext(tracks) {
     remember(tracks)
@@ -162,14 +169,16 @@ export const usePlayer = create<PlayerState & PlayerActions>()((set, get) => ({
     if (!s.queue.length) return get().play(tracks)
     set({ queue: [...s.queue, ...tracks.map((t) => item(t, 'autoplay'))] })
   },
-  jumpTo(i) {
+  jumpTo(i, startMs) {
     const s = get()
     if (i < 0 || i >= s.queue.length) return
-    set({ index: i, wantPlaying: true, issue: null, duration: 0, seekRequest: null })
+    set({ index: i, wantPlaying: true, issue: null, duration: 0, seekRequest: null, startMs: startMs ?? null })
   },
   next(opts = {}) {
     const s = get()
     if (!s.queue.length) return
+    const cur = s.queue[s.index]
+    if (!opts.auto && cur) set({ lastSkip: { key: cur.key, posMs: useProgress.getState().position, title: cur.track.title, at: Date.now() } })
     if (opts.auto && s.repeat === 'one') {
       set({ seekRequest: { ms: 0, n: (s.seekRequest?.n ?? 0) + 1 }, wantPlaying: true })
       return

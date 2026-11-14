@@ -29,8 +29,7 @@ export function resume(r: Resume) {
   const tracks = trackRegistry.many(r.ids)
   if (!tracks.length) return false
   const at = Math.max(0, Math.min(tracks.length - 1, tracks.findIndex((t) => t.id === r.ids[r.index]) ?? 0))
-  player().play(tracks, at, { context: r.label, contextId: r.key.startsWith('ctx:') ? undefined : r.key })
-  if (r.posMs > 5000) setTimeout(() => player().seek(r.posMs), 900)
+  player().play(tracks, at, { context: r.label, contextId: r.key.startsWith('ctx:') ? undefined : r.key, startMs: r.posMs > 5000 ? r.posMs : undefined })
   return true
 }
 

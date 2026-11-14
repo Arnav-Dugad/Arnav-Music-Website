@@ -66,6 +66,7 @@ async function boot() {
   startSync()
   startPwa()
   void import('./services/jumpBack').then((m) => m.startJumpBack())
+  void import('./services/skipUndo').then((m) => m.startSkipUndo())
   startErrorReports()
   void import('./services/youtubeMusic').then((m) => m.startYtMusic())
   startReplaySnapshots()

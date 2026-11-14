@@ -9,6 +9,8 @@ import { startController } from './controller'
  */
 const slots: HTMLElement[] = []
 const hosts: (HTMLDivElement | null)[] = [null, null]
+/** A layer over the video (captions, its CC button), kept on the slot like the decks. */
+let overlay: HTMLDivElement | null = null
 let active = 0
 /** 0..1 while a crossfade runs: how far the incoming deck has faded in. */
 let mix: number | null = null
@@ -39,6 +41,11 @@ function place() {
       host.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;z-index:${fading ? 66 : 65};opacity:${op};${mix == null ? 'transition:opacity .6s ease;' : ''}border-radius:${style.borderRadius};overflow:hidden;pointer-events:none;box-shadow:0 30px 80px rgba(0,0,0,.5);background:#000;`
     } else host.style.cssText = PARKED
   })
+  if (overlay) {
+    overlay.style.cssText = r && style
+      ? `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;z-index:67;opacity:${style.opacity};border-radius:${style.borderRadius};overflow:hidden;pointer-events:none;`
+      : 'display:none;'
+  }
   if (visible || mix != null) raf = requestAnimationFrame(place)
 }
 const schedule = () => { if (!raf) raf = requestAnimationFrame(place) }
@@ -72,10 +79,12 @@ export function useVideoSlot<T extends HTMLElement>() {
 export function VideoHost() {
   const a = useRef<HTMLDivElement>(null)
   const b = useRef<HTMLDivElement>(null)
+  const o = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!a.current || !b.current) return
     hosts[0] = a.current
     hosts[1] = b.current
+    overlay = o.current
     place()
     void startController(a.current, b.current)
   }, [])
@@ -83,6 +92,7 @@ export function VideoHost() {
     <>
       <div ref={a} id="yt-host" aria-hidden="true" />
       <div ref={b} id="yt-host-b" aria-hidden="true" />
+      <div ref={o} id="yt-overlay" />
     </>
   )
 }

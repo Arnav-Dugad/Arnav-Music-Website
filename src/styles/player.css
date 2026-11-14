@@ -314,3 +314,19 @@ html.vt-morph::view-transition-new(root) { animation: vt-in .38s .06s ease both;
 .sec-strip .sec.bridge { background: rgba(255,255,255,0.32); }
 .sec-strip .sec.intro, .sec-strip .sec.outro, .sec-strip .sec.instrumental { background: rgba(255,255,255,0.06); }
 .chorus-btn:disabled { opacity: .6; }
+
+/* Lyrics over music videos (drawn on the layer above the video). */
+.vcap { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; padding: 0 6% 7%; }
+.vcap-line { max-width: 88%; text-align: center; }
+.vcap-line span { display: inline; padding: 0.18em 0.5em; line-height: 1.55; font-size: clamp(15px, 2.1vw, 26px); font-weight: 700; letter-spacing: -0.01em; color: #fff; background: rgba(0, 0, 0, 0.55); -webkit-box-decoration-break: clone; box-decoration-break: clone; border-radius: 8px; text-shadow: 0 1px 2px rgba(0,0,0,0.5); }
+.vcap-cc { position: absolute; right: 12px; bottom: 12px; pointer-events: auto; height: 26px; padding: 0 8px; border-radius: 7px; font-size: 11.5px; font-weight: 800; letter-spacing: 0.04em; color: rgba(255,255,255,0.75); background: rgba(0,0,0,0.45); box-shadow: inset 0 0 0 1.5px rgba(255,255,255,0.35); transition: opacity 0.3s, background 0.2s, color 0.2s; }
+.vcap-cc.on { color: #0b0b0f; background: rgba(255,255,255,0.9); box-shadow: none; }
+.vcap-cc { opacity: 0.6; }
+.vcap-cc:hover, .vcap-cc:focus-visible { opacity: 1; }
+/* Theatre: it steps aside with the other controls. */
+:root:has(.np.idle) .vcap-cc { opacity: 0; }
+
+/* Video switch: a dot when the music video is already found (switches at once). */
+.seg-ready { display: inline-block; width: 6px; height: 6px; margin-left: 5px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); vertical-align: middle; animation: seg-ready-in 0.5s var(--ease) both; }
+@keyframes seg-ready-in { from { transform: scale(0); } 60% { transform: scale(1.5); } to { transform: none; } }
+:root[data-motion='off'] .seg-ready { animation: none; }

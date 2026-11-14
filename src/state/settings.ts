@@ -50,6 +50,8 @@ export interface Settings {
   // lyrics
   onlineLyrics: boolean
   miniPlayerLyrics: boolean
+  /** Synced lyrics as subtitles over music videos. */
+  videoCaptions: boolean
   // AI
   aiEnabled: boolean
   /** Spoken AI DJ intros between songs (on-device voice). */
@@ -109,6 +111,7 @@ export const DEFAULT_SETTINGS: Settings = {
   movingGradient: true,
   onlineLyrics: true,
   miniPlayerLyrics: true,
+  videoCaptions: true,
   aiEnabled: true,
   aiDj: false,
   weatherMoods: false,

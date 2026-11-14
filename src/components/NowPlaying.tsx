@@ -1,5 +1,6 @@
 import { AnimatePresence, motion, useDragControls, useMotionValue, useTransform, animate as animateValue, type PanInfo } from 'motion/react'
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { Icon } from './Icon'
 import { Artwork, Segmented, Sheet, spring, Spinner } from './ui'
@@ -16,7 +17,10 @@ import { ListenersPill, useSendSheet } from './Social'
 import { ChorusButton, SectionStrip } from './SongMap'
 import { useMoodPick } from '../services/moodAutomix'
 import { useCurrentPalette } from '../hooks'
-import { rescue, setMode, warmMode } from '../player/controller'
+import { peekVideo, rescue, setMode, usePairs, videoReady, warmMode } from '../player/controller'
+import { useMusicVideos } from '../services/musicVideos'
+import { useLyrics } from '../state/lyrics'
+import { activeIndex } from '../lib/lyrics'
 import { errorCopy } from '../player/youtube'
 import { usePlayer, player, useProgress } from '../state/player'
 import { useMotionLevel, useSettings } from '../state/settings'
@@ -40,6 +44,43 @@ function VideoSlot({ track }: { track: Track }) {
         <img src={src} alt="" onLoad={(e) => { if (poster && e.currentTarget.naturalWidth <= 120) setSrc(art) }} onError={() => setSrc(art)} />
       </div>
     </div>
+  )
+}
+
+/**
+ * Lyrics as subtitles over a music video (synced lyrics only), drawn on the layer that sits above
+ * the video. The CC button turns them on and off.
+ */
+function VideoCaptions() {
+  const on = useSettings((s) => s.videoCaptions)
+  const found = useLyrics((s) => (s.status === 'found' ? s.lyrics : null))
+  const lyrics = found && found.kind === 'synced' ? found : null
+  const [line, setLine] = useState<string | null>(null)
+  const [host, setHost] = useState<HTMLElement | null>(null)
+  useEffect(() => { setHost(document.getElementById('yt-overlay')) }, [])
+  useEffect(() => {
+    if (!on || !lyrics) { setLine(null); return }
+    const lines = lyrics.lines
+    return useProgress.subscribe((p) => {
+      const i = activeIndex(lines, p.position + 150)
+      const text = i >= 0 ? lines[i].text || null : null
+      setLine((prev) => (prev === text ? prev : text))
+    })
+  }, [lyrics, on])
+  if (!host || !lyrics) return null
+  return createPortal(
+    <div className="vcap">
+      <AnimatePresence mode="wait" initial={false}>
+        {on && line && (
+          <motion.div key={line} className="vcap-line" initial={{ opacity: 0, y: 8, filter: 'blur(4px)' }} animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }} exit={{ opacity: 0, y: -6, filter: 'blur(4px)' }} transition={{ duration: 0.28 }}>
+            <span>{line}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <button className={`vcap-cc ${on ? 'on' : ''}`} aria-pressed={on} aria-label={on ? 'Hide lyrics on the video' : 'Show lyrics on the video'} title="Lyrics on the video"
+        onClick={() => useSettings.getState().update({ videoCaptions: !on })}>CC</button>
+    </div>,
+    host,
   )
 }
 
@@ -114,12 +155,13 @@ function Cover({ track, playing, showVideo, compact = false }: { track: Track; p
   return (
     <div className="np-cover-stage">
       <motion.div
+        layout="size"
         className="np-cover-frame"
         animate={{ scale: showVideo ? 1 : playing || !breathing ? 1 : 0.86 }}
         transition={{ type: 'spring', stiffness: 170, damping: 22 }}
       >
         {showVideo ? (
-          <div className="np-video"><VideoSlot track={track} /></div>
+          <div className="np-video"><VideoSlot track={track} /><VideoCaptions /></div>
         ) : (
           <motion.div
             className="np-cover-drag"
@@ -251,13 +293,19 @@ function NowPlayingView({ track }: { track: Track }) {
   // An audio upload (a Topic "art track") is only the cover as a video: show the real artwork instead.
   const artTrack = track?.variant === 'SONG' || /- Topic$/i.test(track?.channelTitle ?? '')
   const showVideo = mode === 'VIDEO' && !artTrack
+  // Theatre: a music video on a big screen — the controls step aside after a few seconds.
+  const theatre = showVideo && desktop && !panel
+  usePairs((s) => s.n)
+  useMusicVideos((s) => s.index)
+  const ready = mode === 'SONG' && videoReady(track)
+  useEffect(() => { void peekVideo(track) }, [track?.id]) // eslint-disable-line react-hooks/exhaustive-deps
   const dragControls = useDragControls()
 
   useEffect(() => {
     const wake = () => {
       setIdle(false)
       clearTimeout(idleTimer.current)
-      if (ambientIdle) idleTimer.current = setTimeout(() => { if (usePlayer.getState().isPlaying) setIdle(true) }, 9000)
+      if (ambientIdle) idleTimer.current = setTimeout(() => { if (usePlayer.getState().isPlaying) setIdle(true) }, theatre ? 3500 : 9000)
     }
     wake()
     window.addEventListener('pointermove', wake)
@@ -269,7 +317,7 @@ function NowPlayingView({ track }: { track: Track }) {
       window.removeEventListener('keydown', wake)
       window.removeEventListener('pointerdown', wake)
     }
-  }, [ambientIdle])
+  }, [ambientIdle, theatre])
   // A dialog: Escape closes it (after any sheet or menu on top), Tab stays inside, focus returns
   // to the mini player or bar you opened it from. Playback shortcuts keep working.
   const npRef = useRef<HTMLDivElement>(null)
@@ -317,7 +365,7 @@ function NowPlayingView({ track }: { track: Track }) {
         </div>
         <div className="np-top-right">
           <div className="np-mode" onPointerEnter={() => warmMode(mode === 'SONG' ? 'VIDEO' : 'SONG')} onFocusCapture={() => warmMode(mode === 'SONG' ? 'VIDEO' : 'SONG')}>
-            <Segmented id="np-mode" size="sm" value={mode} onChange={(m) => void setMode(m)} options={[{ value: 'SONG', label: 'Song' }, { value: 'VIDEO', label: resolving ? <><Spinner size={11} /> Video</> : 'Video' }]} />
+            <Segmented id="np-mode" size="sm" value={mode} onChange={(m) => void setMode(m)} options={[{ value: 'SONG', label: 'Song' }, { value: 'VIDEO', label: resolving ? <><Spinner size={11} /> Video</> : <>Video{ready && <i className="seg-ready" title="Music video ready" aria-label="(ready)" />}</> }]} />
           </div>
           <button className="icon-btn" aria-label="Send to friends" title="Send to friends" onClick={() => useSendSheet.getState().open(track)}><Icon name="send" size={18} /></button>
           <button className="icon-btn np-phone" aria-label="Continue on your phone" title="Continue on your phone" onClick={() => ui().set({ phoneOpen: true })}><Icon name="phone" size={19} /></button>

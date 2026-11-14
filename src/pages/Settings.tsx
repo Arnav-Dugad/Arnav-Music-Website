@@ -205,6 +205,7 @@ function Lyrics() {
       <Bool k="autoAlignLyrics" title="Fit lyrics to music videos" sub="Lyrics are timed to the audio release; when a video has extra scenes first, shift them to match." />
       <LyricsScript />
       <Bool k="miniPlayerLyrics" title="Lyrics in the player bar" sub="The line being sung, under the song title" />
+      <Bool k="videoCaptions" title="Lyrics over music videos" sub="Subtitles while a video plays (CC on the video turns them off)" />
     </Group>
   )
 }

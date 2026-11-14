@@ -1,4 +1,6 @@
+import { create } from 'zustand'
 import { createPlayer, STATE, UNPLAYABLE_CODES, type YTPlayer } from './youtube'
+import { useMusicVideos } from '../services/musicVideos'
 import { currentTrack, player, usePlayer, useProgress, type QueueItem } from '../state/player'
 import { lib } from '../state/library'
 import { defaultAutomix, settings, type AutomixStyle } from '../state/settings'
@@ -30,6 +32,13 @@ let radioTried = new Set<string>()
 const failedRefs = new Set<string>()
 /** Song ↔ Video pairs found by the resolver, so switching back is free. */
 const altPairs = new Map<string, Track>()
+/** Bumped whenever a Song/Video pair is learned (the switch shows when a video is ready). */
+export const usePairs = create<{ n: number }>()(() => ({ n: 0 }))
+function pairSet(key: string, t: Track) {
+  if (altPairs.get(key)?.id === t.id) return
+  altPairs.set(key, t)
+  usePairs.setState((s) => ({ n: s.n + 1 }))
+}
 let positionSavedAt = 0
 /** Last known position of the current song (replay map). */
 let lastPos = 0
@@ -281,6 +290,7 @@ async function load(track: Track, startSec: number, autoplay: boolean, smooth: b
   if (smooth && p.isPlaying && settings().crossfadeOnSkip && settings().motion !== 'off') await fade(0, 180)
   if (!yt) return
   currentId = track.id
+  setVideoVeil(true) // a new video's overlay stays hidden until it's running
   if (autoplay) {
     yt.setVolume(smooth && settings().crossfadeOnSkip ? 0 : targetVolume())
     yt.unMute()
@@ -328,7 +338,10 @@ function syncTrack(prevPlaying: boolean) {
       if (session) session.track = v
       usePlayer.getState().replaceCurrent(v)
     }
-    void load(v ?? it.track, 0, usePlayer.getState().wantPlaying, prevPlaying)
+    // Undo skip / Jump back in ask for a song to start part-way: load it right there.
+    const startMs = usePlayer.getState().startMs
+    if (startMs != null) usePlayer.getState().patch({ startMs: null })
+    void load(v ?? it.track, (startMs ?? 0) / 1000, usePlayer.getState().wantPlaying, prevPlaying)
   } else if (it.track.id !== currentId) {
     // Same queue slot, different upload (Song/Video switch or rescue): keep position and session.
     cancelMix()
@@ -634,6 +647,7 @@ function blendSwap(s: Swap) {
   // YouTube's overlay restarts with every seek of the line-up: count from the hand-over.
   veilRef = s.track.playbackRef
   videoStartedAt = performance.now()
+  setVideoVeil(true)
   player().replaceCurrent(s.track)
   player().patch({ resolvingMode: false, isPlaying: true, isBuffering: false })
   const t0 = performance.now()
@@ -682,6 +696,20 @@ function videoFirst(t: Track): Track | null {
   return altPairs.get(`${t.id}|VIDEO`) ?? null
 }
 
+/** Whether this song's music video is already known, so Video switches at once. */
+export function videoReady(t: Track | null): boolean {
+  if (!t) return false
+  if (t.variant === 'VIDEO' || (t.variant == null && !/- Topic$/i.test(t.channelTitle ?? ''))) return true
+  return altPairs.has(`${t.id}|VIDEO`) || useMusicVideos.getState().index[t.id]?.[0] === 1
+}
+
+/** Looks in this browser's saved pairs (no search) so the switch knows if a video is ready. */
+export async function peekVideo(t: Track | null) {
+  if (!t || t.variant === 'VIDEO' || altPairs.has(`${t.id}|VIDEO`)) return
+  const saved = await idbGet<{ alt: Track | null; at: number }>(`alt|v2|${t.id}|VIDEO`, 'cache').catch(() => null)
+  if (saved?.alt) { remember(saved.alt); pairSet(`${t.id}|VIDEO`, saved.alt); pairSet(`${saved.alt.id}|${t.variant ?? 'SONG'}`, t) }
+}
+
 /** Warms the other upload of what's playing (pointer on the Song/Video switch). */
 export function warmMode(mode: MediaVariant) { prefetchCounterpart(currentTrack(), mode) }
 
@@ -695,7 +723,7 @@ async function counterpart(t: Track, mode: MediaVariant, background = false): Pr
   const key = `alt|v2|${t.id}|${mode}`
   const saved = await idbGet<{ alt: Track | null; at: number }>(key, 'cache')
   if (saved && (saved.alt || Date.now() - saved.at < 3 * 86_400_000)) {
-    if (saved.alt) { remember(saved.alt); altPairs.set(`${t.id}|${mode}`, saved.alt); altPairs.set(`${saved.alt.id}|${t.variant ?? (mode === 'VIDEO' ? 'SONG' : 'VIDEO')}`, t) }
+    if (saved.alt) { remember(saved.alt); pairSet(`${t.id}|${mode}`, saved.alt); pairSet(`${saved.alt.id}|${t.variant ?? (mode === 'VIDEO' ? 'SONG' : 'VIDEO')}`, t) }
     return saved.alt
   }
   if (!background) player().patch({ resolvingMode: true })
@@ -703,8 +731,8 @@ async function counterpart(t: Track, mode: MediaVariant, background = false): Pr
     const alt = await alternativeUpload(t, mode, failedRefs).catch(() => null)
     const ok = alt && alt.variant === mode ? alt : alt && mode === 'VIDEO' && alt.variant == null && !/- Topic$/i.test(alt.channelTitle ?? '') ? { ...alt, variant: 'VIDEO' as const } : null
     if (ok) {
-      altPairs.set(`${t.id}|${mode}`, ok)
-      altPairs.set(`${ok.id}|${t.variant ?? 'SONG'}`, t)
+      pairSet(`${t.id}|${mode}`, ok)
+      pairSet(`${ok.id}|${t.variant ?? 'SONG'}`, t)
     }
     // A quota or network failure isn't "no video": only real answers are remembered.
     if (alt !== undefined && ytQuotaState() !== 'EXHAUSTED') void idbSet(key, { alt: ok, at: Date.now() }, 'cache')
