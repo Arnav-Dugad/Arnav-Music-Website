@@ -8,7 +8,8 @@ import { MomentArt } from '../components/Mix'
 import { useAsync, useDebounced, useRegistryVersion } from '../hooks'
 import { cachedSearch, search, trending, video, type SearchFilter, type SearchResults } from '../lib/youtube'
 import { artworkFor, rankForListening } from '../lib/classify'
-import { DEBOUNCE_MS, isRemoteWorthy, matchScore } from '../lib/query'
+import { isRemoteWorthy, matchScore, SEARCH_IDLE_MS, SUGGEST_MS } from '../lib/query'
+import { itunesSongSearch, type ItunesItem } from '../lib/meta'
 import { relative } from '../lib/format'
 import { MOMENTS } from '../lib/moments'
 import { MOODS, MOOD_KEYS, MusicError, type Track } from '../lib/types'
@@ -20,6 +21,7 @@ import { useYoutubeReady } from '../services/status'
 import { splitByTrust, verified } from '../services/catalog'
 import { useVoice } from '../services/voice'
 import { YT_LINK, YT_PLAYLIST } from '../lib/links'
+import { splitArtists } from '../components/TrackRow'
 import { useSettings } from '../state/settings'
 
 const GENRES: { name: string; q: string; hue: number }[] = [
@@ -136,7 +138,40 @@ function LocalMatches({ q }: { q: string }) {
   )
 }
 
-function Results({ q, filter }: { q: string; filter: SearchFilter }) {
+/**
+ * Free suggestions while you type (Apple's catalogue, cached): artists, albums and songs as chips.
+ * Picking one searches for exactly that, or opens the artist or album.
+ */
+function Suggestions({ q, onPick }: { q: string; onPick: (text: string) => void }) {
+  const nav = useNavigate()
+  const term = useDebounced(q.trim(), SUGGEST_MS)
+  const [items, setItems] = useState<ItunesItem[]>([])
+  useEffect(() => {
+    if (term.length < 2 || /youtu/.test(term)) { setItems([]); return }
+    let alive = true
+    void itunesSongSearch(term).then((r) => { if (alive) setItems(r) }).catch(() => { if (alive) setItems([]) })
+    return () => { alive = false }
+  }, [term])
+  const { artists, albums, songs } = useMemo(() => {
+    // Single artists out of credit lines ("Pritam & Arijit Singh"), the ones you're typing first.
+    const t = term.toLowerCase()
+    const names = [...new Map(items.flatMap((i) => (i.artist ? splitArtists(i.artist) : [])).map((n) => [n.toLowerCase(), n])).values()]
+    const artists = names.sort((a, b) => Number(b.toLowerCase().includes(t)) - Number(a.toLowerCase().includes(t))).slice(0, 3)
+    const albums = [...new Map(items.filter((i) => i.album && !/ - single$/i.test(i.album)).map((i) => [i.album!.toLowerCase(), i])).values()].slice(0, 3)
+    const songs = [...new Map(items.filter((i) => i.title).map((i) => [`${i.title}|${i.artist}`.toLowerCase(), i])).values()].slice(0, 5)
+    return { artists, albums, songs }
+  }, [items])
+  if (!items.length || term !== q.trim()) return null
+  return (
+    <div className="suggest" role="group" aria-label="Suggestions">
+      {artists.map((a) => <button key={`ar-${a}`} className="chip suggest-chip" onClick={() => nav(`/artist/${encodeURIComponent(a)}`)}><Icon name="user" size={13} /> {a}</button>)}
+      {albums.map((a) => <button key={`al-${a.album}`} className="chip suggest-chip" onClick={() => nav(`/album/${encodeURIComponent(a.album!)}?a=${encodeURIComponent(a.artist ?? '')}`)}><Icon name="album" size={13} /> {a.album!.replace(/\s*\((?:original\s+)?(?:motion\s+picture\s+)?soundtrack\)\s*$/i, '')}</button>)}
+      {songs.map((s) => <button key={`s-${s.title}-${s.artist}`} className="chip suggest-chip" onClick={() => onPick(`${s.title} ${s.artist ?? ''}`.trim())}><Icon name="note" size={13} /> {s.title}<span className="subtle"> · {s.artist}</span></button>)}
+    </div>
+  )
+}
+
+function Results({ q, filter, committed }: { q: string; filter: SearchFilter; committed: string | null }) {
   const nav = useNavigate()
   const prefer = usePlayer((s) => s.mode)
   const [res, setRes] = useState<SearchResults | null>(null)
@@ -147,7 +182,9 @@ function Results({ q, filter }: { q: string; filter: SearchFilter }) {
   const [error, setError] = useState<MusicError | null>(null)
   const [showAll, setShowAll] = useState(false)
   const verifiedOnly = useSettings((s) => s.verifiedOnly)
-  const debounced = useDebounced(q, DEBOUNCE_MS)
+  // Enter (or picking a suggestion) searches at once; typing waits for a pause.
+  const idle = useDebounced(q, SEARCH_IDLE_MS)
+  const debounced = committed === q ? q : idle
   useEffect(() => setShowAll(false), [q, filter])
   const reqId = useRef(0)
 
@@ -169,7 +206,6 @@ function Results({ q, filter }: { q: string; filter: SearchFilter }) {
         if (id !== reqId.current) return
         setRes(r)
         setToken(r.nextPageToken ?? null)
-        useLibrary.getState().addRecentSearch(debounced)
       })
       .catch((e) => { if (id === reqId.current) setError(e instanceof MusicError ? e : new MusicError('http', 'Search failed.')) })
       .finally(() => { if (id === reqId.current) setLoading(false) })
@@ -282,6 +318,21 @@ export default function Explore() {
   useEffect(() => { setText(q) }, [q])
   useEffect(() => { if (params.get('focus')) input.current?.focus() }, [params])
 
+  // A search counts as "recent" when you press Enter or pick a suggestion — or once its results
+  // have been on screen a few seconds — never for half-typed words on the way.
+  const [committed, setCommitted] = useState<string | null>(null)
+  const commit = (v: string) => {
+    const t = v.trim()
+    if (!t) return
+    if (t !== text) onChange(t)
+    setCommitted(t)
+    useLibrary.getState().addRecentSearch(t)
+  }
+  useEffect(() => {
+    if (!q || q.length < 2) return
+    const t = setTimeout(() => useLibrary.getState().addRecentSearch(q), 4000)
+    return () => clearTimeout(t)
+  }, [q])
   const onChange = (v: string) => {
     setText(v)
     const link = YT_LINK.exec(v)
@@ -304,7 +355,7 @@ export default function Explore() {
         <h1 className="t-large">{q ? 'Search' : 'Explore'}</h1>
         <div className="search-box glass">
           <Icon name="search" size={19} />
-          <input ref={input} value={text} onChange={(e) => onChange(e.target.value)} placeholder={typeof window !== 'undefined' && window.innerWidth < 600 ? 'Songs, artists or a YouTube link' : 'Songs, artists, playlists — or paste a YouTube link'} aria-label="Search" autoComplete="off" spellCheck={false} />
+          <input ref={input} value={text} enterKeyHint="search" onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commit(text) } }} onChange={(e) => onChange(e.target.value)} placeholder={typeof window !== 'undefined' && window.innerWidth < 600 ? 'Songs, artists or a YouTube link' : 'Songs, artists, playlists — or paste a YouTube link'} aria-label="Search" autoComplete="off" spellCheck={false} />
           {voice.supported && <button className={`icon-btn sm ${voice.listening ? 'on recording' : ''}`} aria-label="Search by voice" onClick={voice.toggle}><Icon name="mic" size={16} /></button>}
           <AnimatePresence>{text && <motion.button initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="icon-btn sm" aria-label="Clear" onClick={() => onChange('')}><Icon name="close" size={16} /></motion.button>}</AnimatePresence>
         </div>
@@ -316,8 +367,9 @@ export default function Explore() {
       </div>
       {q ? (
         <>
+          <Suggestions q={text} onPick={commit} />
           <LocalMatches q={q} />
-          <Results q={q} filter={filter} />
+          <Results q={q} filter={filter} committed={committed} />
         </>
       ) : <Browse />}
     </div>

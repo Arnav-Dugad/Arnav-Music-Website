@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { motion, Reorder, useScroll, useTransform } from 'motion/react'
-import { Empty, Notice, Sheet, SkeletonRows, Spinner } from '../components/ui'
+import { Empty, Notice, Sheet, SkeletonRows, Spinner, Artwork } from '../components/ui'
 import { Icon } from '../components/Icon'
 import { TrackList, TrackRow } from '../components/TrackRow'
 import { MixArt } from '../components/Mix'
@@ -126,7 +126,7 @@ export default function PlaylistPage() {
       <div className="pl-tint" style={{ ['--t1' as string]: palette.bg[0], ['--t2' as string]: palette.vivid }} />
       <motion.header className="pl-hero" style={{ opacity: heroOpacity }}>
         <motion.div className="hero-cover" style={{ scale: coverScale, y: coverY, viewTransitionName: 'cover' }}>
-          {view.art ?? <div className="hero-cover-inner"><img src={coverUrl ?? ''} alt="" className="hero-img" /></div>}
+          {view.art ?? <div className="hero-cover-inner">{coverUrl ? <img src={coverUrl} alt="" className="hero-img" /> : <Artwork src={null} seed={view.title} icon="note" className="hero-img" />}</div>}
         </motion.div>
         <div className="pl-hero-text">
           <div className="t-eyebrow">{view.kind === 'remote' ? <span className="badge yt"><Icon name="youtube" size={11} /> YouTube</span> : view.kind === 'smart' || view.kind === 'daily' ? <span className="badge ai">Made for you</span> : 'Playlist'}</div>
@@ -221,7 +221,7 @@ function EditSheet({ open, onClose, id }: { open: boolean; onClose: () => void; 
         <label className="col" style={{ gap: 6 }}><span className="t-caption">Description</span><textarea className="field" rows={3} maxLength={500} value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Add an optional description" /></label>
         <div className="row" style={{ justifyContent: 'space-between', marginTop: 6 }}>
           {confirm ? (
-            <button type="button" className="btn btn-danger" onClick={() => { lib().deletePlaylist(id); onClose(); toast('Playlist deleted'); nav('/library') }}><Icon name="trash" size={15} /> Delete for good</button>
+            <button type="button" className="btn btn-danger" onClick={() => { lib().deletePlaylist(id); onClose(); toast('Playlist deleted', { label: 'Undo', run: () => { lib().restorePlaylist(id); nav(`/playlist/${id}`) } }); nav('/library') }}><Icon name="trash" size={15} /> Delete for good</button>
           ) : (
             <button type="button" className="btn btn-ghost" onClick={() => setConfirm(true)}><Icon name="trash" size={15} /> Delete playlist</button>
           )}

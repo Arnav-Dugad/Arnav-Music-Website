@@ -72,11 +72,11 @@ function jsonp<T>(url: string, timeoutMs = 9000): Promise<T> {
   })
 }
 
-async function itunes(path: 'search' | 'lookup', params: Record<string, string | number>): Promise<ItunesItem[]> {
+async function itunes(path: 'search' | 'lookup', params: Record<string, string | number>, ttlMs = 14 * 86_400_000): Promise<ItunesItem[]> {
   const qs = new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)])).toString()
   const key = `it|v1|${path}?${qs}`
   const hit = await idbGet<{ items: ItunesItem[]; at: number }>(key, 'cache')
-  if (hit && Date.now() - hit.at < 14 * 86_400_000) return hit.items
+  if (hit && Date.now() - hit.at < ttlMs) return hit.items
   // Apple allows ~20 requests a minute: space them out.
   const wait = lastItunes + 400 - Date.now()
   if (wait > 0) await new Promise((r) => setTimeout(r, wait))
@@ -89,8 +89,11 @@ async function itunes(path: 'search' | 'lookup', params: Record<string, string |
 
 const country = () => regionCode()
 
-export const itunesAlbums = (artist: string, limit = 25) =>
-  itunes('search', { term: artist, media: 'music', entity: 'album', attribute: 'artistTerm', limit, country: country() })
+export const itunesAlbums = (artist: string, limit = 25, ttlMs?: number) =>
+  itunes('search', { term: artist, media: 'music', entity: 'album', attribute: 'artistTerm', limit, country: country() }, ttlMs)
+/** Songs for search suggestions (one request; artists and albums are read from the songs). */
+export const itunesSongSearch = (term: string, limit = 12) =>
+  itunes('search', { term, media: 'music', entity: 'song', limit, country: country() })
 export const itunesAlbumSearch = (term: string, limit = 10) =>
   itunes('search', { term, media: 'music', entity: 'album', limit, country: country() })
 export async function itunesAlbum(collectionId: number): Promise<{ album: ItunesItem | null; tracks: ItunesItem[] }> {

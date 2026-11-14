@@ -29,6 +29,7 @@ import { useSync } from '../services/sync'
 import { albumsForYou, dailyMixes, forYouNow, freshFinds, model, rediscover, topArtists, trendingForYou, warmSeeds, type Rec } from '../services/recs'
 import { useYoutubeReady } from '../services/status'
 import { NowCard, useListeningNow } from '../components/Social'
+import { newReleases } from '../services/releases'
 import { useSocial } from '../services/social'
 
 // ── Top of the page ─────────────────────────────────────────────────────────
@@ -344,6 +345,8 @@ export default function Home() {
         </Shelf>
       )}
 
+      <NewReleases />
+
       {data.daily.length > 0 && (
         <Shelf title="Your daily mixes" subtitle="A familiar core with a few close new songs">
           {data.daily.map((d) => (
@@ -408,6 +411,33 @@ function FriendsNow() {
   return (
     <Shelf title="Friends listening now" action={<button className="btn btn-ghost btn-sm" onClick={() => nav('/friends')}>All friends</button>}>
       {live.slice(0, 8).map((f) => <NowCard key={f.id} f={f} compact />)}
+    </Shelf>
+  )
+}
+
+/** New releases from artists you follow (topped up with your most-played artists). */
+function NewReleases() {
+  const nav = useNavigate()
+  const followed = useLibrary((s) => s.followedArtists)
+  const names = useMemo(() => {
+    const list = followed.map((a) => a.name)
+    if (list.length < 5) for (const a of topArtists(8)) if (!list.some((n) => n.toLowerCase() === a.name.toLowerCase())) list.push(a.name)
+    return list.slice(0, 10)
+  }, [followed])
+  const res = useAsync(() => (names.length ? newReleases(names) : Promise.resolve([])), [names.join('|')])
+  const items = res.data ?? []
+  if (items.length < 2) return null
+  const when = (d: string | null) => {
+    if (!d) return ''
+    const days = Math.round((Date.now() - Date.parse(d)) / 86_400_000)
+    return days < 1 ? 'Today' : days < 7 ? `${days} day${days === 1 ? '' : 's'} ago` : new Date(d).toLocaleDateString([], { month: 'short', day: 'numeric' })
+  }
+  return (
+    <Shelf title="New releases" subtitle={followed.length ? 'From artists you follow' : 'From artists you listen to — follow artists to tune this'}>
+      {items.map((a) => (
+        <Card key={a.collectionId ?? a.album} title={(a.album ?? '').replace(/\s*\((?:original\s+)?(?:motion\s+picture\s+)?soundtrack\)\s*$/i, '')} subtitle={`${when(a.releaseDate)} · ${a.artist}`} art={a.artwork} seed={a.album ?? undefined}
+          onOpen={() => nav(albumHref({ album: a.album, artist: a.artist ?? '' }))} />
+      ))}
     </Shelf>
   )
 }

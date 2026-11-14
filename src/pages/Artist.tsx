@@ -19,6 +19,7 @@ import { verified } from '../services/catalog'
 import { credited } from '../lib/trust'
 import { albumHref } from '../components/TrackRow'
 import { artistOverlap, itunesAlbums } from '../lib/meta'
+import { toast } from '../state/ui'
 import { ArtistEras } from '../components/ArtistEras'
 
 export default function ArtistPage() {
@@ -138,6 +139,7 @@ export default function ArtistPage() {
               <button className="btn btn-primary btn-lg" disabled={!playable.length} onClick={() => player().play(playable, 0, { context: displayName, shuffle: false })}><Icon name="play" size={16} /> Play</button>
               <button className="btn btn-secondary btn-lg" disabled={!playable.length} onClick={() => player().play(playable, 0, { context: displayName, shuffle: true })}><Icon name="shuffle" size={16} /> Shuffle</button>
               <button className="btn btn-secondary btn-lg" disabled={!playable.length} onClick={() => playable[0] && void startRadio(playable[0])}><Icon name="radio" size={16} /> Radio</button>
+              <FollowButton name={name} />
               {channel.data && <a className="icon-btn" href={`https://www.youtube.com/channel/${channel.data.id}`} target="_blank" rel="noreferrer" aria-label="Open on YouTube"><Icon name="youtube" size={20} /></a>}
             </div>
           </div>
@@ -147,7 +149,7 @@ export default function ArtistPage() {
       <section className="section">
         <div className="section-head"><div><h2>Top songs</h2><div className="t-sub">Official uploads first</div></div></div>
         {top.loading && !top.data ? <SkeletonRows n={8} /> : top.error && !topTracks.length ? (
-          <Notice tone="warn">{top.error instanceof MusicError ? top.error.message : 'Songs couldn’t load.'}</Notice>
+          <Notice tone="warn" action={<button className="btn btn-secondary btn-sm" onClick={top.reload}>Try again</button>}>{top.error instanceof MusicError ? top.error.message : 'Songs couldn’t load.'}</Notice>
         ) : topTracks.length ? <TrackList tracks={topTracks} context={displayName} /> : <div className="t-sub">No songs found.</div>}
       </section>
 
@@ -220,5 +222,16 @@ export default function ArtistPage() {
       )}
       {channel.loading && <div className="t-caption" style={{ marginTop: 20 }}><Spinner size={12} /> Loading artist…</div>}
     </div>
+  )
+}
+
+/** Follow an artist: their new releases appear on Home (synced with your other browsers). */
+function FollowButton({ name }: { name: string }) {
+  const following = useLibrary((s) => s.followedArtists.some((a) => a.name.toLowerCase() === name.trim().toLowerCase()))
+  return (
+    <button className={`btn btn-lg ${following ? 'btn-secondary' : 'btn-ghost'}`} aria-pressed={following}
+      onClick={() => { const on = useLibrary.getState().toggleFollow(name); toast(on ? `Following ${name} — new releases show on Home` : `Unfollowed ${name}`) }}>
+      <Icon name={following ? 'check' : 'plus'} size={16} /> {following ? 'Following' : 'Follow'}
+    </button>
   )
 }

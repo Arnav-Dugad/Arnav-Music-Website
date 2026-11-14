@@ -25,6 +25,8 @@ interface LibraryData {
   blockedArtists: string[]
   /** Saved remote YouTube playlists (bookmarks, not copies). */
   savedRemote: { id: string; name: string; owner: string; artworkUrl?: string | null; savedAt: number }[]
+  /** Artists you follow (their new releases show on Home). */
+  followedArtists: { name: string; at: number }[]
 }
 
 interface LibraryStore extends LibraryData {
@@ -41,6 +43,9 @@ interface LibraryStore extends LibraryData {
   reorderPlaylist: (id: string, trackIds: TrackId[]) => void
   updatePlaylist: (id: string, patch: Partial<Pick<Playlist, 'name' | 'description' | 'pinned' | 'artworkUrl'>>) => void
   deletePlaylist: (id: string) => void
+  /** Undo for deletePlaylist. */
+  restorePlaylist: (id: string) => void
+  toggleFollow: (name: string) => boolean
   recordPlay: (e: Omit<LocalEvent, 'localId'>) => void
   clearHistory: () => void
   removeEvent: (localId: string) => void
@@ -55,7 +60,7 @@ interface LibraryStore extends LibraryData {
   markClean: (what: { likes?: TrackId[]; playlists?: string[]; events?: string[] }) => void
 }
 
-const EMPTY: LibraryData = { likes: {}, playlists: {}, events: [], recentSearches: [], notInterested: [], blockedArtists: [], savedRemote: [] }
+const EMPTY: LibraryData = { likes: {}, playlists: {}, events: [], recentSearches: [], notInterested: [], blockedArtists: [], savedRemote: [], followedArtists: [] }
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 const uid = () => (crypto.randomUUID?.() ?? `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`).replace(/-/g, '')
 
@@ -64,8 +69,8 @@ export const useLibrary = create<LibraryStore>()((set, get) => {
     set((s) => ({ ...patch, revision: s.revision + 1 }))
     if (saveTimer) clearTimeout(saveTimer)
     saveTimer = setTimeout(() => {
-      const { likes, playlists, events, recentSearches, notInterested, blockedArtists, savedRemote } = get()
-      void idbSet('library', { likes, playlists, events, recentSearches, notInterested, blockedArtists, savedRemote })
+      const { likes, playlists, events, recentSearches, notInterested, blockedArtists, savedRemote, followedArtists } = get()
+      void idbSet('library', { likes, playlists, events, recentSearches, notInterested, blockedArtists, savedRemote, followedArtists })
     }, 400)
   }
   const touchPlaylist = (id: string, fn: (p: SyncedPlaylist) => SyncedPlaylist) => {
@@ -123,6 +128,17 @@ export const useLibrary = create<LibraryStore>()((set, get) => {
       const p = get().playlists[id]
       if (!p) return
       commit({ playlists: { ...get().playlists, [id]: { ...p, deleted: true, updatedAt: Date.now(), dirty: true } } })
+    },
+    restorePlaylist: (id) => {
+      const p = get().playlists[id]
+      if (!p) return
+      commit({ playlists: { ...get().playlists, [id]: { ...p, deleted: false, updatedAt: Date.now(), dirty: true } } })
+    },
+    toggleFollow(name) {
+      const k = name.trim().toLowerCase()
+      const has = get().followedArtists.some((a) => a.name.toLowerCase() === k)
+      commit({ followedArtists: has ? get().followedArtists.filter((a) => a.name.toLowerCase() !== k) : [{ name: name.trim(), at: Date.now() }, ...get().followedArtists].slice(0, 300) })
+      return !has
     },
     recordPlay(e) {
       if (e.listenedMs < 5000) return

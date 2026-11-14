@@ -561,3 +561,9 @@ button.heat-cell:hover { outline: 2px solid var(--text); outline-offset: 1px; }
 @media (max-width: 700px) { .pf-pubs { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; } }
 .pl-videos { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 12px; }
 .pl-videos .link { font-weight: 700; color: var(--text); }
+
+/* Search suggestions (free, from Apple's catalogue) while you type. */
+.suggest { display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 14px; scrollbar-width: none; -webkit-mask-image: linear-gradient(90deg, #000 92%, transparent); mask-image: linear-gradient(90deg, #000 92%, transparent); }
+.suggest::-webkit-scrollbar { display: none; }
+.suggest-chip { flex: none; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; gap: 6px; }
+.suggest-chip .subtle { color: var(--text-3); font-weight: 500; }

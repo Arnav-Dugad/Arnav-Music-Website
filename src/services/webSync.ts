@@ -82,7 +82,7 @@ const FAMILIES: Family[] = [
   },
   {
     id: 'w_library',
-    read: () => { const l = useLibrary.getState(); return { notInterested: l.notInterested, blockedArtists: l.blockedArtists, savedRemote: l.savedRemote, recentSearches: l.recentSearches.slice(0, 30) } },
+    read: () => { const l = useLibrary.getState(); return { notInterested: l.notInterested, blockedArtists: l.blockedArtists, savedRemote: l.savedRemote, recentSearches: l.recentSearches.slice(0, 30), followedArtists: l.followedArtists } },
     apply: (d) => {
       if (!d || typeof d !== 'object') return
       const x = d as Record<string, unknown>
@@ -92,11 +92,12 @@ const FAMILIES: Family[] = [
         ...(strs(x.notInterested) ? { notInterested: strs(x.notInterested) } : {}),
         ...(strs(x.blockedArtists) ? { blockedArtists: strs(x.blockedArtists) } : {}),
         ...(strs(x.recentSearches) ? { recentSearches: strs(x.recentSearches) } : {}),
+        ...(arr(x.followedArtists) ? { followedArtists: (arr(x.followedArtists) as { name?: unknown; at?: unknown }[]).filter((a) => typeof a?.name === 'string').slice(0, 300).map((a) => ({ name: String(a.name).slice(0, 120), at: Number(a.at) || 0 })) } : {}),
         ...(arr(x.savedRemote) ? { savedRemote: (arr(x.savedRemote) as { id?: unknown; name?: unknown }[]).filter((r) => typeof r?.id === 'string' && typeof r?.name === 'string') as never } : {}),
       })
     },
     subscribe: (cb) => useLibrary.subscribe((s, p) => {
-      if (s.notInterested !== p.notInterested || s.blockedArtists !== p.blockedArtists || s.savedRemote !== p.savedRemote || s.recentSearches !== p.recentSearches) cb()
+      if (s.notInterested !== p.notInterested || s.blockedArtists !== p.blockedArtists || s.savedRemote !== p.savedRemote || s.recentSearches !== p.recentSearches || s.followedArtists !== p.followedArtists) cb()
     }),
   },
   {

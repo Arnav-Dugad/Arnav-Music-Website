@@ -56,6 +56,7 @@ export default function Library() {
     return q ? l.filter((t) => Math.max(matchScore(q, t.title), matchScore(q, t.artist)) >= 0.55) : l
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [likes, q, v])
+  const followed = useLibrary((st) => st.followedArtists)
   const artists = useMemo(() => {
     const a = topArtists(liveEvents(events), (id) => trackRegistry.get(id))
     return q ? a.filter((x) => matchScore(q, x.name) >= 0.5) : a
@@ -128,11 +129,25 @@ export default function Library() {
           </>
         ) : <Empty icon="heart" title="No liked songs yet" body="Tap the heart on any song and it lands here — and on your phone." />)}
 
-        {tab === 'artists' && (artists.length ? (
-          <div className="grid-cards">
-            {artists.map((a) => <Card key={a.key} title={a.name} subtitle={`${a.plays} plays`} art={a.artwork} round icon="user" onOpen={() => nav(`/artist/${encodeURIComponent(a.name)}`)} />)}
-          </div>
-        ) : <Empty icon="user" title="Your artists appear as you listen" />)}
+        {tab === 'artists' && (artists.length || followed.length ? (
+          <>
+            {followed.length > 0 && (
+              <>
+                <h2 className="t-eyebrow" style={{ margin: '4px 0 12px' }}>Following</h2>
+                <div className="grid-cards" style={{ marginBottom: 26 }}>
+                  {followed.map((f) => {
+                    const played = artists.find((a) => a.name.toLowerCase() === f.name.toLowerCase())
+                    return <Card key={`f-${f.name}`} title={f.name} subtitle={played ? `Following · ${played.plays} plays` : 'Following'} art={played?.artwork} round icon="user" seed={f.name} onOpen={() => nav(`/artist/${encodeURIComponent(f.name)}`)} />
+                  })}
+                </div>
+                {artists.length > 0 && <h2 className="t-eyebrow" style={{ margin: '4px 0 12px' }}>You listen to</h2>}
+              </>
+            )}
+            <div className="grid-cards">
+              {artists.map((a) => <Card key={a.key} title={a.name} subtitle={`${a.plays} plays`} art={a.artwork} round icon="user" onOpen={() => nav(`/artist/${encodeURIComponent(a.name)}`)} />)}
+            </div>
+          </>
+        ) : <Empty icon="user" title="Your artists appear as you listen" body="Or follow an artist from their page — their new releases show on Home." />)}
 
         {tab === 'history' && (history.length ? (
           <>

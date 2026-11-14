@@ -196,7 +196,7 @@ export default function AlbumPage() {
       )}
       <section className="section" style={{ marginTop: 28 }}>
         {loading ? <SkeletonRows n={8} /> : found.error && !rows.length ? (
-          <Notice tone="warn">{found.error instanceof MusicError ? found.error.message : 'This album couldn’t load.'}</Notice>
+          <Notice tone="warn" action={<button className="btn btn-secondary btn-sm" onClick={found.reload}>Try again</button>}>{found.error instanceof MusicError ? found.error.message : 'This album couldn’t load.'}</Notice>
         ) : rows.length ? <TrackList tracks={rows} context={title} showAlbum={false} /> : !missing.length ? <Empty icon="album" title="No official songs found for this album" /> : null}
       </section>
       {missing.length > 0 && (

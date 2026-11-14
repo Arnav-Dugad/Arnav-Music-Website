@@ -2,6 +2,12 @@
 const noise = new Set(['official', 'video', 'audio', 'lyrics', 'lyric', 'hd', '4k', 'mv'])
 export const MIN_REMOTE_LENGTH = 2
 export const DEBOUNCE_MS = 650
+/**
+ * A YouTube search costs 100 units of a shared 10,000-a-day quota, so it waits for a real pause
+ * in typing (or Enter). Free iTunes suggestions fill the gap while you type.
+ */
+export const SEARCH_IDLE_MS = 1100
+export const SUGGEST_MS = 380
 
 export function normalize(raw: string): string {
   return raw

@@ -5,7 +5,7 @@
 import { useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { motion } from 'motion/react'
-import { Empty, Notice, SkeletonRows, Spinner } from '../components/ui'
+import { Empty, Notice, SkeletonRows, Spinner, Artwork } from '../components/ui'
 import { Icon } from '../components/Icon'
 import { TrackList } from '../components/TrackRow'
 import { Avatar } from '../components/Social'
@@ -60,7 +60,7 @@ export default function PublicPlaylistPage() {
       <div className="pl-tint" style={{ ['--t1' as string]: palette.bg[0], ['--t2' as string]: palette.vivid }} />
       <header className="pl-hero">
         <motion.div className="hero-cover" initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} transition={{ type: 'spring', stiffness: 260, damping: 26 }}>
-          <div className="hero-cover-inner"><img src={cover ?? ''} alt="" className="hero-img" /></div>
+          <div className="hero-cover-inner">{cover ? <img src={cover} alt="" className="hero-img" /> : <Artwork src={null} seed="playlist" icon="note" className="hero-img" />}</div>
         </motion.div>
         <div className="pl-hero-text">
           <div className="t-eyebrow"><span className="pl-public-badge"><Icon name="globe" size={12} /> Public playlist</span></div>
