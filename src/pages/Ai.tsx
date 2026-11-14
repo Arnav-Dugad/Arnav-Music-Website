@@ -235,7 +235,8 @@ export default function AiPage() {
                 <motion.button key={it.title} className="ai-idea glass-card lg-press" style={{ ['--h' as string]: it.hue }} onClick={() => ask(it.prompt)}
                   initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring, delay: 0.1 + 0.04 * i }}>
                   <span className="ai-idea-icon"><Icon name={it.icon} size={18} /></span>
-                  <b>{i === 0 ? <><span className="ai-now">Right now</span> {it.title}</> : it.title}</b>
+                  {i === 0 && <span className="ai-now">Right now</span>}
+                  <b>{it.title}</b>
                   <span className="t-caption">{it.prompt}</span>
                 </motion.button>
               ))}

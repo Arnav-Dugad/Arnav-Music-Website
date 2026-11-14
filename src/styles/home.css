@@ -58,15 +58,16 @@
 .h-playall { border-radius: 99px; }
 
 /* Blend invite */
-.h-blend { position: relative; display: flex; align-items: stretch; width: 100%; min-height: 132px; padding: 18px 0 18px 18px; border-radius: 16px; overflow: hidden; text-align: left; background: #d8d0fb; color: #3a2c8f; }
-.h-blend b { font-size: 17px; line-height: 1.3; font-weight: 720; color: #e5532f; max-width: 15em; }
-.h-blend .t-caption { color: rgba(58,44,143,.75); }
-.h-blend-go { display: grid; place-items: center; width: 32px; height: 32px; margin-top: auto; border-radius: 50%; border: 2px solid #e5532f; color: #e5532f; }
+.h-blend { position: relative; display: flex; align-items: stretch; width: 100%; min-height: 132px; padding: 18px 0 18px 20px; border-radius: 20px; overflow: hidden; text-align: left; color: var(--text); border: 1px solid var(--hairline-strong); background: radial-gradient(120% 140% at 100% 0%, color-mix(in oklab, var(--brand-b) 34%, transparent), transparent 60%), radial-gradient(90% 120% at 0% 100%, color-mix(in oklab, var(--brand-a) 26%, transparent), transparent 62%), var(--surface-raised); box-shadow: var(--shadow-1); transition: transform 0.25s var(--ease), box-shadow 0.25s var(--ease); }
+.h-blend:hover { box-shadow: var(--shadow-2); }
+.h-blend b { font-size: 17px; line-height: 1.3; font-weight: 720; letter-spacing: -0.01em; color: var(--text); max-width: 15em; }
+.h-blend .t-caption { color: var(--text-2); }
+.h-blend-go { display: grid; place-items: center; width: 32px; height: 32px; margin-top: auto; border-radius: 50%; background: var(--text); color: var(--bg); }
 .h-blend-art { position: relative; width: 130px; flex: none; }
-.h-blend-art i { position: absolute; right: -40px; width: 150px; height: 150px; border-radius: 50%; border: 22px solid rgba(229,83,47,.35); }
+.h-blend-art i { position: absolute; right: -40px; width: 150px; height: 150px; border-radius: 50%; border: 22px solid color-mix(in oklab, var(--brand-b) 30%, transparent); }
 .h-blend-art i:first-child { top: -80px; }
-.h-blend-art i:nth-child(2) { bottom: -90px; border-color: rgba(229,83,47,.55); }
-.h-blend-art span { position: absolute; right: 26px; top: 50%; width: 46px; height: 46px; margin-top: -23px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: radial-gradient(circle at 30% 30%, #ff8a5c, #e5532f); box-shadow: 0 8px 24px rgba(229,83,47,.45); animation: h-pulse 2.6s ease-in-out infinite; }
+.h-blend-art i:nth-child(2) { bottom: -90px; border-color: color-mix(in oklab, var(--brand-a) 38%, transparent); }
+.h-blend-art span { position: absolute; right: 26px; top: 50%; width: 46px; height: 46px; margin-top: -23px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: radial-gradient(circle at 30% 30%, var(--brand-a), var(--brand-b)); color: #0b0b0f; box-shadow: 0 8px 24px rgba(229,83,47,.45); animation: h-pulse 2.6s ease-in-out infinite; }
 @keyframes h-pulse { 50% { transform: scale(1.08); } }
 :root[data-motion='off'] .h-blend-art span { animation: none; }
 

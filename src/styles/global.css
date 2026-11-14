@@ -318,8 +318,10 @@ input[type='range'].range::-moz-range-thumb { width: 14px; height: 14px; border:
 }
 
 /* Toasts */
-.toasts { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--player-h) + 28px); z-index: var(--z-toast); display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
-.toast { pointer-events: auto; display: flex; align-items: center; gap: 14px; padding: 11px 12px 11px 18px; border-radius: var(--r-full); font-size: 14px; font-weight: 520; max-width: min(92vw, 520px); }
+.toasts { position: fixed; left: 12px; right: 12px; bottom: calc(var(--player-h) + 28px); z-index: var(--z-toast); display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
+.toast { pointer-events: auto; display: flex; align-items: center; gap: 14px; padding: 11px 12px 11px 18px; border-radius: var(--r-full); font-size: 14px; font-weight: 520; max-width: min(100%, 520px); line-height: 1.35; }
+.toast > span { min-width: 0; }
+.toast .btn { flex: none; }
 
 /* Responsive */
 @media (max-width: 1023px) {

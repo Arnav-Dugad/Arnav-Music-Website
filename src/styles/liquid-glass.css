@@ -83,7 +83,7 @@
 .np .segmented { background: var(--lg-sheen), linear-gradient(rgba(255,255,255,0.10), rgba(255,255,255,0.10)); }
 /* Menus, sheets and toasts float above everything. */
 .menu, .sheet, .toast { --lg-blur: calc(var(--lg-b) * 1.5); }
-.toast { border: 1px solid transparent; background: var(--lg-sheen) padding-box, linear-gradient(var(--lg-tint-thick), var(--lg-tint-thick)) padding-box, var(--lg-rim) border-box !important; -webkit-backdrop-filter: blur(36px) saturate(1.9); backdrop-filter: blur(36px) saturate(1.9); box-shadow: var(--lg-inner), var(--lg-shadow); }
+.toast { border: 1px solid transparent; background: var(--lg-sheen) padding-box, linear-gradient(var(--lg-tint-thick), var(--lg-tint-thick)) padding-box, linear-gradient(color-mix(in oklab, var(--surface-solid) 80%, transparent), color-mix(in oklab, var(--surface-solid) 80%, transparent)) padding-box, var(--lg-rim) border-box !important; -webkit-backdrop-filter: blur(36px) saturate(1.9); backdrop-filter: blur(36px) saturate(1.9); box-shadow: var(--lg-inner), var(--lg-shadow); }
 .sheet-root { background: rgba(0, 0, 0, 0.32); }
 
 /* ── Desktop: a floating glass sidebar and player bar ─────────────────── */

@@ -48,7 +48,7 @@ export function applyUpdate() {
 function offerUpdate(sw: ServiceWorker) {
   waiting = sw
   usePwa.setState({ updateReady: true })
-  toast('A new version of Arnav Music is ready', { label: 'Reload', run: applyUpdate })
+  toast('New version ready', { label: 'Reload', run: applyUpdate })
 }
 
 export function startPwa() {

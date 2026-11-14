@@ -184,7 +184,7 @@ function SongPages({ title, recs, context, more }: { title: string; recs: Rec[];
                   </span>
                   <span className="h-song-text">
                     <span className="ellipsis h-song-title">{r.track.title}</span>
-                    <span className="ellipsis t-caption">{r.track.artist}{r.track.views ? ` · ${compactCount(r.track.views)} plays` : ''}{r.caption && !/^More from/.test(r.caption) ? ` · ${r.caption}` : ''}</span>
+                    <span className="ellipsis t-caption">{r.track.artist}{r.track.views ? ` · ${compactCount(r.track.views)} views` : ''}{r.caption && !/^More from/.test(r.caption) ? ` · ${r.caption}` : ''}</span>
                   </span>
                   <button className="icon-btn sm" aria-label="More" onClick={(e) => { e.stopPropagation(); openTrackMenu(e, r.track) }}><Icon name="more" size={18} /></button>
                 </motion.div>
@@ -296,7 +296,7 @@ export default function Home() {
   return (
     <div className="page home h-home">
       {!desktop && <TopBar />}
-      <MoodChips />
+      {!data.cold && <MoodChips />}
       <Handoff />
       <SetupNotice />
       <SpeedDial />
