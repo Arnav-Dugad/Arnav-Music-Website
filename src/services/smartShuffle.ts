@@ -10,17 +10,17 @@ const EVERY = 3
 
 export function smartShuffleOn(): boolean { return usePlayer.getState().smartShuffle }
 
-export function setSmartShuffle(on: boolean) {
+/** Returns whether Smart shuffle is on afterwards (it needs some listening to recommend from). */
+export function setSmartShuffle(on: boolean, quiet = false): boolean {
   const s = usePlayer.getState()
   if (!on) {
     player().patch({ smartShuffle: false })
     player().setUpcoming(s.queue.slice(s.index + 1).filter((q) => q.source !== 'smart'))
-    return
+    return false
   }
-  const upcoming = s.queue.slice(s.index + 1).filter((q) => q.source !== 'smart')
   const have = new Set(s.queue.map((q) => q.track.id))
   const recs = [...forYouNow(24), ...freshFinds(12)].map((r) => r.track).filter((t) => !have.has(t.id))
-  if (!recs.length) { toast('Smart shuffle needs a little more listening first'); return }
+  if (!recs.length) { if (!quiet) toast('Smart shuffle needs a little more listening first'); return false }
   if (!s.shuffle) player().toggleShuffle()
   const fresh = usePlayer.getState()
   const mine = fresh.queue.slice(fresh.index + 1).filter((q) => q.source !== 'smart')
@@ -32,16 +32,22 @@ export function setSmartShuffle(on: boolean) {
   })
   // A short queue still gets a couple at the end.
   while (out.filter((q) => q.source === 'smart').length < 2 && r < recs.length) out.push(player().makeItem(recs[r++], 'smart'))
-  void upcoming
   player().setUpcoming(out)
   player().patch({ smartShuffle: true })
+  return true
 }
 
 /** The shuffle button: off → shuffle → smart shuffle → off. */
 export function cycleShuffle() {
   const s = usePlayer.getState()
   if (!s.shuffle) { player().toggleShuffle(); toast('Shuffle on'); return }
-  if (!s.smartShuffle) { setSmartShuffle(true); if (usePlayer.getState().smartShuffle) toast('Smart shuffle — a few recommendations mixed in'); return }
+  if (!s.smartShuffle) {
+    if (setSmartShuffle(true, true)) { toast('Smart shuffle — a few recommendations mixed in'); return }
+    // Nothing to recommend yet: skip that step rather than get stuck on Shuffle.
+    player().toggleShuffle()
+    toast('Shuffle off · Smart shuffle unlocks after a little more listening')
+    return
+  }
   setSmartShuffle(false)
   player().toggleShuffle()
   toast('Shuffle off')

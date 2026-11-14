@@ -13,6 +13,14 @@ let active = 0
 /** 0..1 while a crossfade runs: how far the incoming deck has faded in. */
 let mix: number | null = null
 let raf = 0
+/** The active video is hidden (its artwork shows) while it starts or is paused. */
+let veil = false
+
+export function setVideoVeil(v: boolean) {
+  if (veil === v) return
+  veil = v
+  schedule()
+}
 
 const PARKED = 'position:fixed;right:0;bottom:0;width:160px;height:90px;z-index:-1;opacity:0.001;pointer-events:none;overflow:hidden;'
 
@@ -27,8 +35,8 @@ function place() {
     const isActive = i === active
     const fading = mix != null && !isActive
     if (r && style && (isActive || fading)) {
-      const op = Number(style.opacity) * (fading ? 1 - (mix ?? 0) : 1)
-      host.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;z-index:${fading ? 66 : 65};opacity:${op};border-radius:${style.borderRadius};overflow:hidden;pointer-events:none;box-shadow:0 30px 80px rgba(0,0,0,.5);background:#000;`
+      const op = veil ? 0 : Number(style.opacity) * (fading ? 1 - (mix ?? 0) : 1)
+      host.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;z-index:${fading ? 66 : 65};opacity:${op};${mix == null ? 'transition:opacity .6s ease;' : ''}border-radius:${style.borderRadius};overflow:hidden;pointer-events:none;box-shadow:0 30px 80px rgba(0,0,0,.5);background:#000;`
     } else host.style.cssText = PARKED
   })
   if (visible || mix != null) raf = requestAnimationFrame(place)

@@ -139,3 +139,11 @@
 .automix-chip { position: relative; gap: 6px; }
 .automix-chip select { appearance: none; -webkit-appearance: none; background: transparent; border: 0; color: inherit; font: inherit; font-weight: 640; padding-right: 2px; cursor: pointer; }
 .automix-chip select option { color: #000; }
+
+/* Touch: small controls get a finger-sized hit area (44 px) without growing visually. */
+@media (pointer: coarse) {
+  .segmented.sm button { height: 32px; }
+  .segmented.sm button::after, .vol > .icon-btn::after { content: ''; position: absolute; left: 50%; top: 50%; width: max(100%, 44px); height: max(100%, 44px); transform: translate(-50%, -50%); }
+  .vol > .icon-btn { position: relative; }
+}
+@media (max-width: 640px) { .np .segmented.sm button { height: 32px; padding: 0 14px; } }

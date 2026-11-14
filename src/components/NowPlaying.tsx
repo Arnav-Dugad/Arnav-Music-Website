@@ -16,7 +16,7 @@ import { ListenersPill, useSendSheet } from './Social'
 import { ChorusButton, SectionStrip } from './SongMap'
 import { useMoodPick } from '../services/moodAutomix'
 import { useCurrentPalette } from '../hooks'
-import { rescue, setMode } from '../player/controller'
+import { rescue, setMode, warmMode } from '../player/controller'
 import { errorCopy } from '../player/youtube'
 import { usePlayer, player, useProgress } from '../state/player'
 import { useMotionLevel, useSettings } from '../state/settings'
@@ -27,9 +27,20 @@ import { useDialog } from '../lib/a11y'
 import { cycleShuffle } from '../services/smartShuffle'
 import type { Track } from '../lib/types'
 
-function VideoSlot() {
+function VideoSlot({ track }: { track: Track }) {
   const ref = useVideoSlot<HTMLDivElement>()
-  return <div ref={ref} className="np-video-slot" />
+  const art = artworkFor(track)
+  // A video's own poster fills the 16:9 frame (like a paused video); album art sits in the middle.
+  const poster = /ytimg\.com/.test(art)
+  const [src, setSrc] = useState(poster ? `https://i.ytimg.com/vi/${track.playbackRef}/maxresdefault.jpg` : art)
+  useEffect(() => { setSrc(poster ? `https://i.ytimg.com/vi/${track.playbackRef}/maxresdefault.jpg` : art) }, [track.playbackRef, art, poster])
+  return (
+    <div ref={ref} className="np-video-slot">
+      <div className={`np-video-veil ${poster ? 'poster' : ''}`} style={{ ['--veil-art' as string]: `url("${art}")` }} aria-hidden>
+        <img src={src} alt="" onLoad={(e) => { if (poster && e.currentTarget.naturalWidth <= 120) setSrc(art) }} onError={() => setSrc(art)} />
+      </div>
+    </div>
+  )
 }
 
 function SleepSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -108,7 +119,7 @@ function Cover({ track, playing, showVideo, compact = false }: { track: Track; p
         transition={{ type: 'spring', stiffness: 170, damping: 22 }}
       >
         {showVideo ? (
-          <div className="np-video"><VideoSlot /></div>
+          <div className="np-video"><VideoSlot track={track} /></div>
         ) : (
           <motion.div
             className="np-cover-drag"
@@ -305,7 +316,7 @@ function NowPlayingView({ track }: { track: Track }) {
           <span className="ellipsis" style={{ fontWeight: 650, fontSize: 13.5 }}>{context ?? 'Your queue'}</span>
         </div>
         <div className="np-top-right">
-          <div className="np-mode">
+          <div className="np-mode" onPointerEnter={() => warmMode(mode === 'SONG' ? 'VIDEO' : 'SONG')} onFocusCapture={() => warmMode(mode === 'SONG' ? 'VIDEO' : 'SONG')}>
             <Segmented id="np-mode" size="sm" value={mode} onChange={(m) => void setMode(m)} options={[{ value: 'SONG', label: 'Song' }, { value: 'VIDEO', label: resolving ? <><Spinner size={11} /> Video</> : 'Video' }]} />
           </div>
           <button className="icon-btn" aria-label="Send to friends" title="Send to friends" onClick={() => useSendSheet.getState().open(track)}><Icon name="send" size={18} /></button>

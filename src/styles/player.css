@@ -24,7 +24,7 @@
 .np-stage { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; width: min(var(--cover), 92vw); flex: none; transition: opacity .6s var(--ease); }
 .np.split .np-stage { width: min(var(--cover), 40vw); }
 .np.split .np-panel { flex: 1; max-width: 760px; }
-.np-cover-stage { width: 100%; display: grid; place-items: center; }
+.np-cover-stage { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; }
 .np-cover-frame { position: relative; width: 100%; }
 .np-cover-drag { position: relative; width: 100%; touch-action: pan-y; cursor: grab; }
 .np-cover-drag:active { cursor: grabbing; }
@@ -36,7 +36,12 @@
 @keyframes halo { 50% { transform: scale(1.08); opacity: 0.7; } }
 .np-video { width: min(880px, 86vw); aspect-ratio: 16 / 9; position: relative; left: 50%; transform: translateX(-50%); }
 .np.split .np-video { width: 100%; left: 0; transform: none; }
-.np-video-slot { position: absolute; inset: 0; border-radius: 16px; background: #000; }
+.np-video-slot { position: absolute; inset: 0; border-radius: 16px; background: #000; overflow: hidden; }
+/* The song's artwork waits in the frame: it shows while the video starts or is paused (YouTube's own overlays stay hidden). */
+.np-video-veil { position: absolute; inset: 0; display: grid; place-items: center; }
+.np-video-veil::before { content: ''; position: absolute; inset: -20%; background: var(--veil-art) center / cover; filter: blur(36px) saturate(1.3) brightness(0.55); }
+.np-video-veil img { position: relative; height: 82%; aspect-ratio: 1; object-fit: cover; border-radius: 12px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
+.np-video-veil.poster img { position: absolute; inset: 0; width: 100%; height: 100%; aspect-ratio: auto; border-radius: 0; box-shadow: none; }
 .np-ripple { position: absolute; top: 50%; z-index: 3; transform: translateY(-50%); display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 99px; background: rgba(0,0,0,0.45); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); font-weight: 700; font-size: 13px; }
 .np-ripple.l { left: 14px; }
 .np-ripple.r { right: 14px; }

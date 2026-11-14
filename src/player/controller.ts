@@ -11,7 +11,7 @@ import { alternativeUpload, radioFor } from '../services/recs'
 import { artworkFor } from '../lib/classify'
 import { toast } from '../state/ui'
 import { tuner } from '../lib/tuner'
-import { setDeckView } from './VideoHost'
+import { setDeckView, setVideoVeil } from './VideoHost'
 import { glassCrossfade } from '../lib/liquidGlass'
 import { recordHeard, recordPlay, recordRewind, recordSkip } from '../lib/replayMap'
 import { maybePickNext } from '../services/moodAutomix'
@@ -164,12 +164,13 @@ function preload(next: QueueItem, plan: { fadeMs: number; startAt: number }) {
   const deck = 1 - activeDeck
   const sb = decks[deck]
   if (!sb || failedRefs.has(next.track.playbackRef)) return
-  mix = { key: next.key, track: next.track, deck, phase: 'preloading', fadeMs: plan.fadeMs, startAt: plan.startAt, token: ++mixToken }
+  const track = videoFirst(next.track) ?? next.track
+  mix = { key: next.key, track, deck, phase: 'preloading', fadeMs: plan.fadeMs, startAt: plan.startAt, token: ++mixToken }
   try {
     sb.mute()
     sb.setVolume(0)
     sb.setPlaybackRate(usePlayer.getState().rate)
-    sb.loadVideoById({ videoId: next.track.playbackRef, startSeconds: 0 })
+    sb.loadVideoById({ videoId: track.playbackRef, startSeconds: 0 })
   } catch { mix = null }
 }
 
@@ -194,6 +195,13 @@ function beginMix(instant = false) {
   handoffKey = m.key
   endedNaturally = true
   player().next({ auto: true })
+  // The deck may be playing the music video of the queued song (Video mode).
+  if (currentTrack()?.id !== m.track.id && player().queue[player().index]?.key === m.key) {
+    currentId = m.track.id
+    if (session) session.track = m.track
+    player().replaceCurrent(m.track)
+    updateMediaSession(m.track)
+  }
   const token = m.token
   const t0 = performance.now()
   const step = () => {
@@ -214,7 +222,7 @@ function beginMix(instant = false) {
 }
 
 function planAutomix(pos: number, d: number) {
-  if (singleDeck || !decks[1] || preview) return
+  if (singleDeck || !decks[1] || preview || swap || swapFading) return
   const style = automixStyle()
   if (style === 'off') { if (mix && mix.phase !== 'mixing') cancelMix(); return }
   const cur = currentTrack()
@@ -230,6 +238,42 @@ function planAutomix(pos: number, d: number) {
   if (mix?.phase === 'ready' && pos >= mix.startAt) beginMix()
 }
 
+/**
+ * Now and then a freshly loaded video sits unstarted (a slow embed, a dropped play request).
+ * If the song that should be playing hasn't started after a few seconds, ask again.
+ */
+let startWatch: ReturnType<typeof setTimeout> | null = null
+/** When the active deck was asked to load and play a video (0 once it plays). */
+let loadingSince = 0
+function watchStart(id: string, tries = 2) {
+  if (startWatch) clearTimeout(startWatch)
+  startWatch = setTimeout(() => {
+    if (currentId !== id || !yt || preview || !player().wantPlaying) return
+    let st = -2
+    try { st = yt.getPlayerState() } catch { /* not ready */ }
+    if (st !== STATE.UNSTARTED && st !== STATE.CUED) return
+    try { yt.playVideo() } catch { /* ignore */ }
+    if (tries > 1) watchStart(id, tries - 1)
+  }, 3000)
+}
+
+/**
+ * YouTube draws its own title, "More videos" and pause overlays over a video that's starting or
+ * paused. Until they're gone the frame shows the song's artwork instead (VideoHost fades between).
+ */
+let veilRef: string | null = null
+let videoStartedAt = 0
+const VEIL_START_MS = 3500
+function updateVeil() {
+  if (!yt) return
+  let st = -1
+  try { st = yt.getPlayerState() } catch { /* not ready */ }
+  const ref = currentTrack()?.playbackRef ?? null
+  if (st === STATE.PLAYING && ref !== veilRef) { veilRef = ref; videoStartedAt = performance.now() }
+  const playing = st === STATE.PLAYING || st === STATE.BUFFERING
+  setVideoVeil(!playing || ref !== veilRef || performance.now() - videoStartedAt < VEIL_START_MS)
+}
+
 // ── Loading ─────────────────────────────────────────────────────────────────
 async function load(track: Track, startSec: number, autoplay: boolean, smooth: boolean) {
   if (!yt) return
@@ -241,6 +285,8 @@ async function load(track: Track, startSec: number, autoplay: boolean, smooth: b
     yt.setVolume(smooth && settings().crossfadeOnSkip ? 0 : targetVolume())
     yt.unMute()
     yt.loadVideoById({ videoId: track.playbackRef, startSeconds: startSec })
+    loadingSince = performance.now()
+    watchStart(track.id)
   } else {
     yt.cueVideoById({ videoId: track.playbackRef, startSeconds: startSec })
   }
@@ -276,7 +322,13 @@ function syncTrack(prevPlaying: boolean) {
     }
     handoffKey = null
     settleMix()
-    void load(it.track, 0, usePlayer.getState().wantPlaying, prevPlaying)
+    const v = videoFirst(it.track)
+    if (v) {
+      currentId = v.id
+      if (session) session.track = v
+      usePlayer.getState().replaceCurrent(v)
+    }
+    void load(v ?? it.track, 0, usePlayer.getState().wantPlaying, prevPlaying)
   } else if (it.track.id !== currentId) {
     // Same queue slot, different upload (Song/Video switch or rescue): keep position and session.
     cancelMix()
@@ -330,6 +382,7 @@ export const isPreviewing = () => preview != null
 
 /** States from the standby deck only matter while it preloads the next song. */
 function onStandbyState(deck: number, state: number) {
+  if (swap?.deck === deck) return // a Song/Video switch is syncing there (polled)
   if (!mix || mix.deck !== deck || mix.phase !== 'preloading') return
   const sb = decks[deck]
   if (state === STATE.PLAYING && sb) {
@@ -344,15 +397,18 @@ function onState(deck: number, state: number) {
   if (preview) { if (state === STATE.ENDED) endPreview(); return }
   const p = player()
   if (state === STATE.PLAYING) {
+    loadingSince = 0
     p.patch({ isPlaying: true, isBuffering: false, issue: null })
     if (!p.wantPlaying) p.patch({ wantPlaying: true })
     const d = (yt?.getDuration() ?? 0) * 1000
     if (d > 0 && Math.abs(d - p.duration) > 1500) p.patch({ duration: d })
-    if (mix?.phase === 'mixing') return // the blend sets the volume
+    if (mix?.phase === 'mixing' || swapFading) return // the blend sets the volume
     if (settings().crossfadeOnSkip) void fade(targetVolume(), 420)
     else yt?.setVolume(targetVolume())
   } else if (state === STATE.PAUSED) {
     if (mix?.phase === 'mixing') return
+    // A video on its way in can report "paused" before it starts; that isn't you pausing.
+    if (loadingSince && performance.now() - loadingSince < 10_000 && p.wantPlaying) { try { yt?.playVideo() } catch { /* ignore */ } return }
     p.patch({ isPlaying: false, isBuffering: false })
     if (p.wantPlaying) p.patch({ wantPlaying: false })
   } else if (state === STATE.BUFFERING) {
@@ -436,6 +492,8 @@ export async function rescue(auto = false): Promise<boolean> {
 export async function setMode(mode: MediaVariant, quiet = false) {
   const p = player()
   if (p.mode !== mode) p.patch({ mode })
+  // Changed your mind mid-switch: drop the switch that's still lining up.
+  if (swap && swap.track.variant !== mode) cancelSwap()
   const t = currentTrack()
   if (!t) return
   // Already the right kind of upload (an unknown kind counts as a video only when it isn't an art track).
@@ -443,7 +501,7 @@ export async function setMode(mode: MediaVariant, quiet = false) {
   if (mode === 'SONG' && t.variant == null) return
   const alt = await counterpart(t, mode)
   if (currentTrack()?.id !== t.id || player().mode !== mode) return
-  if (alt) { player().replaceCurrent(alt); return }
+  if (alt) { switchUpload(alt); return }
   if (mode === 'VIDEO') {
     noVideo.add(t.id)
     // You asked for the video: say so and go back to Song. Automatic switches just show the artwork.
@@ -451,11 +509,187 @@ export async function setMode(mode: MediaVariant, quiet = false) {
   } else if (!quiet) toast('No audio-only upload found — showing the artwork over the video’s sound')
 }
 
+// ── Seamless Song ↔ Video ───────────────────────────────────────────────────
+/**
+ * The other upload starts silently on the standby deck, is brought to exactly the same moment
+ * (seeks that learn how long a seek takes), and then the two are blended in ~0.6 s: no gap, no
+ * jump. Paused, on iOS (one media element) or before the second deck exists, it simply reloads.
+ */
+interface Swap { track: Track; deck: number; token: number; tries: number; lead: number; seekedAt: number; seekTarget: number; best: number; started: number; firstPlaying: number; poll: ReturnType<typeof setInterval> | null }
+let swap: Swap | null = null
+let swapToken = 0
+/** True while a swap blend runs (the blend owns the volume). */
+let swapFading = false
+let blendToken = 0
+/** How the last switch landed (debug: window.__arnavEngine()). */
+let lastSwap: { drift: number; tries: number; ms: number } | null = null
+let blendOut: YTPlayer | null = null
+const SWAP_FADE_MS = 600
+const SWAP_TOLERANCE = 0.07
+
+/**
+ * The IFrame API reports the time only every so often; between reports it is extrapolated from the
+ * moment the value last changed, so two decks can be compared to a few hundredths of a second.
+ */
+const clocks = new WeakMap<YTPlayer, { v: number; at: number }>()
+function clock(p: YTPlayer): number {
+  let v = 0
+  try { v = p.getCurrentTime() } catch { return 0 }
+  const now = performance.now()
+  const c = clocks.get(p)
+  if (!c || c.v !== v) { clocks.set(p, { v, at: now }); return v }
+  let playing = false
+  try { playing = p.getPlayerState() === STATE.PLAYING } catch { /* not ready */ }
+  return playing ? v + Math.min(0.6, (now - c.at) / 1000) * usePlayer.getState().rate : v
+}
+
+function switchUpload(alt: Track) {
+  const p = player()
+  const deck = 1 - activeDeck
+  const sb = decks[deck]
+  cancelSwap()
+  settleSwap()
+  if (singleDeck || !sb || !yt || preview || !p.isPlaying) { p.replaceCurrent(alt); return }
+  settleMix()
+  const pos = clock(yt)
+  const s: Swap = { track: alt, deck, token: ++swapToken, tries: 0, lead: 0.25, seekedAt: 0, seekTarget: 0, best: Infinity, started: performance.now(), firstPlaying: 0, poll: null }
+  swap = s
+  p.patch({ resolvingMode: true })
+  try {
+    sb.mute()
+    sb.setVolume(0)
+    sb.setPlaybackRate(p.rate)
+    // It takes a moment to start: begin a little ahead of where the song will be by then.
+    sb.loadVideoById({ videoId: alt.playbackRef, startSeconds: pos + 0.9 })
+  } catch { cancelSwap(); p.replaceCurrent(alt); return }
+  s.poll = setInterval(() => syncSwap(s), 40)
+}
+
+/** Ends a swap that hasn't blended yet. [fallback] finishes the switch the plain way. */
+function cancelSwap(fallback = false) {
+  const s = swap
+  if (!s) return
+  swap = null
+  swapToken++
+  if (s.poll) clearInterval(s.poll)
+  const sb = decks[s.deck]
+  if (sb && s.deck !== activeDeck) { try { sb.mute(); sb.pauseVideo() } catch { /* ignore */ } }
+  player().patch({ resolvingMode: false })
+  if (fallback && currentTrack() && player().mode === (s.track.variant ?? player().mode)) player().replaceCurrent(s.track)
+}
+
+function syncSwap(s: Swap) {
+  if (swap !== s || !yt) return
+  const sb = decks[s.deck]
+  if (!sb) { cancelSwap(true); return }
+  if (s.track.variant && player().mode !== s.track.variant) { cancelSwap(); return }
+  // Taking too long (a slow network): switch the plain way rather than keep you waiting.
+  if (performance.now() - s.started > 9000) { cancelSwap(true); return }
+  let state = -1
+  try { state = sb.getPlayerState() } catch { /* not ready */ }
+  if (state !== STATE.PLAYING) return
+  const now = performance.now()
+  if (!s.firstPlaying) s.firstPlaying = now
+  if (s.seekedAt && now - s.seekedAt < 260) return // let the seek land
+  const target = clock(yt)
+  const at = clock(sb)
+  const drift = at - target
+  if (s.seekedAt) {
+    // Learn how far behind a seek lands, and aim that much further ahead next time.
+    s.lead = Math.max(0, Math.min(1.5, s.lead - drift))
+    s.seekedAt = 0
+  }
+  s.best = Math.min(s.best, Math.abs(drift))
+  const longer = (sb.getDuration?.() ?? 0) > 0 && target > sb.getDuration() - 2
+  if (Math.abs(drift) <= SWAP_TOLERANCE || s.tries >= 5 || longer) { lastSwap = { drift: Math.round(drift * 1000), tries: s.tries, ms: Math.round(now - s.started) }; blendSwap(s); return }
+  // Ahead by a little: wait for the song to catch up rather than seeking (seeks can stall).
+  if (drift > 0 && drift < 0.5 && s.tries > 0) {
+    s.tries++
+    try { sb.pauseVideo() } catch { /* ignore */ }
+    s.seekedAt = now
+    setTimeout(() => { if (swap === s) { try { sb.playVideo() } catch { /* ignore */ } } }, Math.round((drift / usePlayer.getState().rate) * 1000))
+    return
+  }
+  s.tries++
+  s.seekedAt = now
+  s.seekTarget = target + s.lead
+  try { sb.seekTo(s.seekTarget, true) } catch { /* ignore */ }
+}
+
+function blendSwap(s: Swap) {
+  if (s.poll) clearInterval(s.poll)
+  swap = null
+  const incoming = decks[s.deck]
+  const outgoing = yt
+  if (!incoming || !outgoing) { player().replaceCurrent(s.track); player().patch({ resolvingMode: false }); return }
+  const fadeMs = settings().motion === 'off' ? 120 : SWAP_FADE_MS
+  try { incoming.setVolume(0); incoming.unMute() } catch { /* ignore */ }
+  activeDeck = s.deck
+  yt = incoming
+  currentId = s.track.id
+  if (session) session.track = s.track
+  updateMediaSession(s.track)
+  swapFading = true
+  blendOut = outgoing
+  // YouTube's overlay restarts with every seek of the line-up: count from the hand-over.
+  veilRef = s.track.playbackRef
+  videoStartedAt = performance.now()
+  player().replaceCurrent(s.track)
+  player().patch({ resolvingMode: false, isPlaying: true, isBuffering: false })
+  const t0 = performance.now()
+  const token = ++blendToken
+  const step = () => {
+    if (token !== blendToken) return
+    const t = Math.min(1, (performance.now() - t0) / fadeMs)
+    const vol = targetVolume()
+    try {
+      incoming.setVolume(Math.round(vol * Math.sin((t * Math.PI) / 2)))
+      outgoing.setVolume(Math.round(vol * Math.cos((t * Math.PI) / 2)))
+    } catch { /* deck went away */ }
+    setDeckView(activeDeck, t < 1 ? t : null)
+    if (t < 1) { setTimeout(step, 25); return }
+    settleSwap()
+  }
+  step()
+}
+
+/** Finishes a running Song/Video blend at once. */
+function settleSwap() {
+  if (!swapFading) return
+  blendToken++
+  swapFading = false
+  try { blendOut?.mute(); blendOut?.pauseVideo(); yt?.setVolume(targetVolume()) } catch { /* ignore */ }
+  blendOut = null
+  setDeckView(activeDeck, null)
+}
+
+/** Finds the other upload ahead of time (Now Playing open, quota healthy) so the switch is instant. */
+const prefetched = new Set<string>()
+function prefetchCounterpart(t: Track | null | undefined, mode: MediaVariant) {
+  if (!t || t.variant === mode || prefetched.has(`${t.id}|${mode}`) || noVideo.has(t.id) || ytQuotaState() !== 'NORMAL') return
+  if (mode === 'SONG' && t.variant == null) return
+  if (mode === 'VIDEO' && t.variant == null && !/- Topic$/i.test(t.channelTitle ?? '')) return
+  prefetched.add(`${t.id}|${mode}`)
+  void counterpart(t, mode, true).then((alt) => { if (!alt && mode === 'VIDEO') noVideo.add(t.id) })
+}
+
+/** Now Playing (or the docked player) is on screen, so a video would be seen. */
+const videoVisible = () => player().expanded || (settings().dockedPlayer && matchMedia('(min-width: 1024px)').matches)
+
+/** In Video mode, a song's music video when it's already known (so it can start on it). */
+function videoFirst(t: Track): Track | null {
+  if (player().mode !== 'VIDEO' || t.variant === 'VIDEO' || noVideo.has(t.id) || !videoVisible()) return null
+  return altPairs.get(`${t.id}|VIDEO`) ?? null
+}
+
+/** Warms the other upload of what's playing (pointer on the Song/Video switch). */
+export function warmMode(mode: MediaVariant) { prefetchCounterpart(currentTrack(), mode) }
+
 /** Songs known to have no music video (Video mode shows their artwork instead of asking again). */
 const noVideo = new Set<string>()
 export const hasNoVideo = (id: string) => noVideo.has(id)
 
-async function counterpart(t: Track, mode: MediaVariant): Promise<Track | null> {
+async function counterpart(t: Track, mode: MediaVariant, background = false): Promise<Track | null> {
   const paired = altPairs.get(`${t.id}|${mode}`)
   if (paired) return paired
   const key = `alt|v2|${t.id}|${mode}`
@@ -464,7 +698,7 @@ async function counterpart(t: Track, mode: MediaVariant): Promise<Track | null> 
     if (saved.alt) { remember(saved.alt); altPairs.set(`${t.id}|${mode}`, saved.alt); altPairs.set(`${saved.alt.id}|${t.variant ?? (mode === 'VIDEO' ? 'SONG' : 'VIDEO')}`, t) }
     return saved.alt
   }
-  player().patch({ resolvingMode: true })
+  if (!background) player().patch({ resolvingMode: true })
   try {
     const alt = await alternativeUpload(t, mode, failedRefs).catch(() => null)
     const ok = alt && alt.variant === mode ? alt : alt && mode === 'VIDEO' && alt.variant == null && !/- Topic$/i.test(alt.channelTitle ?? '') ? { ...alt, variant: 'VIDEO' as const } : null
@@ -476,7 +710,7 @@ async function counterpart(t: Track, mode: MediaVariant): Promise<Track | null> 
     if (alt !== undefined && ytQuotaState() !== 'EXHAUSTED') void idbSet(key, { alt: ok, at: Date.now() }, 'cache')
     return ok
   } finally {
-    player().patch({ resolvingMode: false })
+    if (!background && !swap) player().patch({ resolvingMode: false })
   }
 }
 
@@ -488,7 +722,7 @@ function autoVideo() {
     const p = player()
     const t = currentTrack()
     if (p.mode !== 'VIDEO' || !t || t.variant === 'VIDEO' || noVideo.has(t.id)) return
-    if (!p.expanded && !(settings().dockedPlayer && matchMedia('(min-width: 1024px)').matches)) return
+    if (!videoVisible()) return
     void setMode('VIDEO', true)
   }, 700)
 }
@@ -514,6 +748,7 @@ async function maybeRadio() {
 
 function tick() {
   if (!yt || preview) return
+  updateVeil()
   const p = player()
   const now = performance.now()
   const dt = Math.min(1000, now - lastTick)
@@ -536,6 +771,8 @@ function tick() {
   const d = yd || p.duration
   if (p.isPlaying && d > 0 && pos > d * 0.5) void maybeRadio()
   if (p.isPlaying && !p.isBuffering && d > 0) planAutomix(pos, d)
+  // Watching videos: find the next song's music video early, so it starts on it.
+  if (p.isPlaying && pos > 20_000 && p.mode === 'VIDEO' && videoVisible()) prefetchCounterpart(upcoming()?.track, 'VIDEO')
   // Sleep timer: the music fades slowly over its last 30 seconds instead of stopping short.
   const sleepLeft = p.sleep?.mode === 'time' ? p.sleep.endsAt - Date.now() : Infinity
   if (sleepLeft > 0 && sleepLeft < SLEEP_FADE_MS && p.isPlaying && !mix) { sleepFading = true; yt?.setVolume(Math.round(targetVolume() * (sleepLeft / SLEEP_FADE_MS))) }
@@ -645,7 +882,7 @@ export async function startController(hostA: HTMLElement, hostB: HTMLElement) {
 
   usePlayer.subscribe((st, prev) => {
     if (st.queue !== prev.queue || st.index !== prev.index) {
-      if (st.queue[st.index]?.key !== prev.queue[prev.index]?.key) { radioTried = new Set([...radioTried].slice(-50)); autoVideo() }
+      if (st.queue[st.index]?.key !== prev.queue[prev.index]?.key) { cancelSwap(); settleSwap(); radioTried = new Set([...radioTried].slice(-50)); autoVideo() }
       syncTrack(prev.isPlaying)
     }
     if (st.expanded && !prev.expanded) autoVideo()
@@ -653,16 +890,18 @@ export async function startController(hostA: HTMLElement, hostB: HTMLElement) {
       if (st.wantPlaying) {
         if (!currentKey && st.queue[st.index]) syncTrack(false)
         yt.playVideo()
-      } else { settleMix(); yt.pauseVideo() }
+      } else { loadingSince = 0; settleMix(); settleSwap(); cancelSwap(true); yt.pauseVideo() }
     }
     if (st.seekRequest && st.seekRequest !== prev.seekRequest && yt) {
       if (session && st.seekRequest.ms < lastPos - 3000) recordRewind(session.track.id, lastPos, st.seekRequest.ms, st.duration || session.track.durationMs || 0)
       settleMix()
+      settleSwap()
+      cancelSwap(true)
       yt.seekTo(st.seekRequest.ms / 1000, true)
       useProgress.getState().set(st.seekRequest.ms)
       if (st.wantPlaying) yt.playVideo()
     }
-    if ((st.volume !== prev.volume || st.muted !== prev.muted) && yt && mix?.phase !== 'mixing') {
+    if ((st.volume !== prev.volume || st.muted !== prev.muted) && yt && mix?.phase !== 'mixing' && !swapFading) {
       fadeToken++
       yt.setVolume(targetVolume())
     }
@@ -672,8 +911,9 @@ export async function startController(hostA: HTMLElement, hostB: HTMLElement) {
   setInterval(tick, 250)
   // Read-only engine state for support/debugging (window.__arnavEngine()).
   ;(window as unknown as { __arnavEngine: () => unknown }).__arnavEngine = () => ({
-    activeDeck, mix: mix && { phase: mix.phase, key: mix.key, fadeMs: mix.fadeMs, startAt: mix.startAt, deck: mix.deck }, style: automixStyle(), singleDeck,
+    activeDeck, lastSwap, swapping: !!swap, mix: mix && { phase: mix.phase, key: mix.key, fadeMs: mix.fadeMs, startAt: mix.startAt, deck: mix.deck }, style: automixStyle(), singleDeck,
     decks: decks.map((d) => { try { return d ? { state: d.getPlayerState(), t: Math.round(d.getCurrentTime()), vol: d.getVolume(), muted: d.isMuted(), id: d.getVideoData?.().video_id } : null } catch { return 'n/a' } }),
   })
+  if (import.meta.env.DEV) (window as unknown as { __arnavDecks: unknown }).__arnavDecks = decks
   window.addEventListener('pagehide', () => finishSession(true))
 }
