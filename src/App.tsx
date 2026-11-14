@@ -124,7 +124,7 @@ export default function App() {
       <div className={`app ${desktop ? 'desktop' : 'mobile'} ${hasTrack ? 'has-track' : ''} ${onboarding ? 'onboarding' : ''} ${docked && !onboarding ? 'docked' : ''} ${expanded && !desktop ? 'np-open' : ''} ${/^\/(wrapped|wall)(\/|$)/.test(loc.pathname) ? 'immersive' : ''}`}>
         <a className="skip-link" href="#main" onClick={(e) => { e.preventDefault(); scroller.current?.focus() }}>Skip to content</a>
         <div className="sr-only" aria-live="polite" aria-atomic="true">{announce}</div>
-        <div className="ambient" aria-hidden><div className="ambient-glow" /></div>
+        <div className="ambient" aria-hidden><div className="ambient-glow" /><div className="aurora a" /><div className="aurora b" /><div className="aurora c" /><div className="grain" /></div>
         {desktop && !onboarding && <Sidebar />}
         <main className="main-scroll" ref={scroller} id="main" tabIndex={-1}>
           <PageBoundary resetKey={loc.pathname}>

@@ -230,7 +230,11 @@ export function Sheet({ open, onClose, children, title, width = 520, className =
 export function Empty({ icon = 'note', title, body, action }: { icon?: IconName; title: string; body?: ReactNode; action?: ReactNode }) {
   return (
     <motion.div className="empty" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={softSpring}>
-      <div className="empty-icon"><Icon name={icon} size={28} /></div>
+      <div className="empty-orb">
+        <span className="empty-ring" />
+        <span className="empty-orbit"><i /><i /><i /></span>
+        <div className="empty-icon"><Icon name={icon} size={28} /></div>
+      </div>
       <div className="t-title">{title}</div>
       {body && <div className="t-sub" style={{ maxWidth: 420, textAlign: 'center' }}>{body}</div>}
       {action && <div style={{ marginTop: 8 }}>{action}</div>}

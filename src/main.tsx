@@ -29,6 +29,7 @@ import './styles/home.css'
 import './styles/polish.css'
 import './styles/liquid-glass.css'
 import './styles/ai.css'
+import './styles/flair.css'
 
 // A newer deploy replaced the code chunks this tab was using: reload once to pick them up.
 window.addEventListener('vite:preloadError', (e) => {
@@ -65,6 +66,7 @@ async function boot() {
   void fetchKnownNames().then((r) => { if (r) mergeSharedNames(r) })
   startSync()
   startPwa()
+  void import('./lib/spotlight').then((m) => m.startSpotlight())
   void import('./services/jumpBack').then((m) => m.startJumpBack())
   void import('./services/skipUndo').then((m) => m.startSkipUndo())
   startErrorReports()

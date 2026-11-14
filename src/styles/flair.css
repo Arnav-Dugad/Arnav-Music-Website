@@ -1,0 +1,107 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Flair — the finishing layer: a living canvas, light that follows the pointer, illustrated empty
+   states, scroll reveals and small moments of craft. Loaded last. Everything here respects the
+   Animations setting (data-motion) and the system's reduced-motion preference.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* ── Living canvas: slow aurora tinted by what's playing, and a whisper of film grain ── */
+.aurora { position: absolute; border-radius: 50%; pointer-events: none; will-change: transform; }
+.aurora.a { width: 70vw; height: 70vw; left: -20vw; top: 20vh; background: radial-gradient(closest-side, color-mix(in oklab, var(--np-vivid) 20%, transparent), transparent); animation: aurora-a 46s ease-in-out infinite alternate; }
+.aurora.b { width: 55vw; height: 55vw; right: -18vw; top: -18vh; background: radial-gradient(closest-side, color-mix(in oklab, var(--brand-a) 13%, transparent), transparent); animation: aurora-b 58s ease-in-out infinite alternate; }
+.aurora.c { width: 60vw; height: 60vw; left: 30vw; bottom: -40vh; background: radial-gradient(closest-side, color-mix(in oklab, var(--brand-b) 12%, transparent), transparent); animation: aurora-c 64s ease-in-out infinite alternate; }
+@keyframes aurora-a { 0% { transform: translate(0, 0) scale(1); } 50% { transform: translate(14vw, -8vh) scale(1.12); } 100% { transform: translate(28vw, 6vh) scale(0.94); } }
+@keyframes aurora-b { 0% { transform: translate(0, 0) scale(1); } 50% { transform: translate(-12vw, 14vh) scale(1.08); } 100% { transform: translate(-22vw, 4vh) scale(1.16); } }
+@keyframes aurora-c { 0% { transform: translate(0, 0) scale(1.05); } 50% { transform: translate(-16vw, -10vh) scale(0.92); } 100% { transform: translate(8vw, -18vh) scale(1.1); } }
+.grain {
+  position: absolute; inset: -50%; opacity: 0.045; mix-blend-mode: overlay; pointer-events: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.9 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+:root[data-theme='light'] .aurora { opacity: 0.7; }
+:root[data-theme='light'] .grain { opacity: 0.03; mix-blend-mode: multiply; }
+:root[data-motion='off'] .aurora, :root[data-motion='reduced'] .aurora { animation: none; }
+@media (prefers-reduced-motion: reduce) { .aurora { animation: none; } }
+
+/* ── Spotlight: light that follows the pointer across cards, tiles and rows (lib/spotlight) ── */
+.spotlight {
+  position: fixed; left: 0; top: 0; z-index: 2; pointer-events: none; opacity: 0;
+  transition: opacity .3s var(--ease);
+  background: radial-gradient(240px circle at var(--mx, 50%) var(--my, 50%), rgba(255, 255, 255, 0.5), transparent 62%);
+  mix-blend-mode: soft-light;
+}
+.spotlight.on { opacity: 1; }
+.spotlight[data-kind='soft'] { mix-blend-mode: normal; background: radial-gradient(320px circle at var(--mx, 50%) var(--my, 50%), color-mix(in oklab, var(--accent) 11%, transparent), transparent 70%); }
+/* …and the edge nearest the pointer lights up, like the rim of a glass. */
+.spotlight::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 1px;
+  background: radial-gradient(180px circle at var(--mx, 50%) var(--my, 50%), rgba(255, 255, 255, 0.7), transparent 70%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  mix-blend-mode: plus-lighter; opacity: 0.55;
+}
+.spotlight[data-kind='soft']::after { opacity: 0.25; }
+:root[data-theme='light'] .spotlight { mix-blend-mode: normal; background: radial-gradient(240px circle at var(--mx, 50%) var(--my, 50%), rgba(255, 255, 255, 0.28), transparent 62%); }
+:root[data-theme='light'] .spotlight::after { mix-blend-mode: normal; opacity: 0.35; }
+
+/* Cards lift with a shadow tinted by the accent. */
+.card:hover .card-art-wrap, .card:focus-visible .card-art-wrap { box-shadow: 0 22px 44px -14px color-mix(in oklab, var(--accent) 42%, rgba(0,0,0,0.6)), 0 6px 16px rgba(0,0,0,0.3); }
+
+/* ── Illustrated empty states: an orb with a slowly turning halo and notes in orbit ── */
+.empty-orb { position: relative; width: 112px; height: 112px; display: grid; place-items: center; margin-bottom: 10px; }
+.empty-orb::before { content: ''; position: absolute; inset: 6px; border-radius: 50%; background: radial-gradient(closest-side, color-mix(in oklab, var(--accent) 38%, transparent), transparent); filter: blur(14px); animation: orb-breathe 5s ease-in-out infinite; }
+.empty-ring { position: absolute; inset: 10px; border-radius: 50%; padding: 1.5px; background: conic-gradient(from 0deg, var(--accent), var(--brand-a), var(--brand-b), transparent 70%, var(--accent)); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); animation: orb-spin 9s linear infinite; opacity: 0.85; }
+.empty-orbit { position: absolute; inset: 0; animation: orb-spin 16s linear infinite reverse; }
+.empty-orbit i { position: absolute; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 12px var(--accent); }
+.empty-orbit i:nth-child(1) { left: calc(50% - 3.5px); top: -2px; }
+.empty-orbit i:nth-child(2) { left: 6px; bottom: 16px; width: 5px; height: 5px; background: var(--brand-a); box-shadow: 0 0 10px var(--brand-a); }
+.empty-orbit i:nth-child(3) { right: 4px; bottom: 26px; width: 4px; height: 4px; background: var(--brand-b); box-shadow: 0 0 10px var(--brand-b); }
+.empty-orb .empty-icon { position: relative; margin: 0; width: 66px; height: 66px; border-radius: 50%; color: var(--text); background: radial-gradient(circle at 30% 25%, rgba(255,255,255,0.16), rgba(255,255,255,0.04) 60%), var(--surface-2); box-shadow: inset 0 1px 0 rgba(255,255,255,0.14), 0 14px 30px rgba(0,0,0,0.35); animation: orb-float 6s ease-in-out infinite; }
+@keyframes orb-spin { to { transform: rotate(360deg); } }
+@keyframes orb-breathe { 50% { transform: scale(1.12); opacity: 0.75; } }
+@keyframes orb-float { 50% { transform: translateY(-5px); } }
+.empty .t-title { font-size: clamp(20px, 2vw, 24px); letter-spacing: -0.02em; }
+:root[data-motion='off'] .empty-orb *, :root[data-motion='off'] .empty-orb::before, :root[data-motion='reduced'] .empty-orb *, :root[data-motion='reduced'] .empty-orb::before { animation: none !important; }
+
+/* ── Scroll reveals: sections and rows rise into place as they come into view ── */
+@supports (animation-timeline: view()) {
+  :root:not([data-motion='off']):not([data-motion='reduced']) .main-scroll .section,
+  :root:not([data-motion='off']):not([data-motion='reduced']) .main-scroll .track-row,
+  :root:not([data-motion='off']):not([data-motion='reduced']) .main-scroll .set-group {
+    animation: flair-rise linear both; animation-timeline: view(); animation-range: entry 0% entry 55%;
+  }
+  @media (prefers-reduced-motion: reduce) { .main-scroll .section, .main-scroll .track-row, .main-scroll .set-group { animation: none !important; } }
+}
+/* `translate`, not `transform`: rows keep their own transforms (swipe actions, drag). */
+@keyframes flair-rise { from { opacity: 0; translate: 0 26px; } to { opacity: 1; translate: 0 0; } }
+
+/* ── Type: page titles with a quiet gradient, a brand that shimmers ── */
+.page-header h1.t-large {
+  background: linear-gradient(180deg, var(--text) 35%, color-mix(in oklab, var(--text) 70%, var(--accent)) 125%);
+  -webkit-background-clip: text; background-clip: text; color: transparent; padding-bottom: 0.06em;
+}
+.sb-brand .t-brand {
+  background: linear-gradient(110deg, var(--text) 40%, color-mix(in oklab, var(--brand-b) 80%, white) 50%, var(--text) 60%);
+  background-size: 280% 100%; background-position: 100% 0; -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.sb-brand:hover .t-brand { animation: brand-shine 1.4s var(--ease) both; }
+@keyframes brand-shine { from { background-position: 100% 0; } to { background-position: 0% 0; } }
+:root[data-motion='off'] .sb-brand:hover .t-brand { animation: none; }
+
+/* ── Sidebar: the active item carries a lit accent edge ── */
+.sb-pill::before { content: ''; position: absolute; left: 5px; top: 28%; bottom: 28%; width: 3px; border-radius: 3px; background: var(--accent); box-shadow: 0 0 10px var(--accent), 0 0 2px var(--accent); }
+
+/* ── Player bar: an accent progress with a glowing playhead; the play button breathes while playing ── */
+.pbar .prog-fill { background: linear-gradient(90deg, color-mix(in oklab, var(--accent) 55%, white), var(--accent)); }
+.pbar .prog-thumb { background: #fff; box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 35%, transparent), 0 0 14px color-mix(in oklab, var(--accent) 80%, transparent); }
+.pbar .pb-play { position: relative; }
+.pbar .pb-play[aria-label='Pause']::before { content: ''; position: absolute; inset: -5px; border-radius: 50%; border: 1.5px solid color-mix(in oklab, var(--accent) 70%, transparent); animation: play-breathe 2.6s ease-in-out infinite; pointer-events: none; }
+@keyframes play-breathe { 0%, 100% { transform: scale(0.94); opacity: 0.15; } 50% { transform: scale(1.06); opacity: 0.8; } }
+:root[data-motion='off'] .pbar .pb-play::before, :root[data-motion='reduced'] .pbar .pb-play::before { animation: none; opacity: 0.4; transform: none; }
+
+/* ── Buttons: primary buttons catch a sweep of light on hover ── */
+.btn-primary { background-image: linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.32) 48%, transparent 66%); background-size: 260% 100%; background-position: 130% 0; background-repeat: no-repeat; transition: background-position .9s var(--ease), box-shadow .3s var(--ease), filter .2s; }
+.btn-primary:hover:not(:disabled) { background-position: -30% 0; }
+
+/* ── Tiles: a soft inner highlight so colour tiles read as lit glass, not flat fills ── */
+.genre-tile, .mood-tile { box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), inset 0 -24px 40px -24px rgba(0,0,0,0.35), 0 10px 26px -14px rgba(0,0,0,0.55); }
+.genre-tile:hover, .mood-tile:hover { box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -24px 40px -24px rgba(0,0,0,0.3), 0 18px 36px -14px hsl(var(--h, 260) 70% 45% / 0.6); }
+
