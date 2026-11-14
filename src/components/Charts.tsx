@@ -2,6 +2,7 @@ import { useMemo, useRef, useState, useEffect, type ReactNode } from 'react'
 import { motion } from 'motion/react'
 import { energyAt, type SessionConstraints } from '../lib/intent'
 import type { Track } from '../lib/types'
+import { cssVars, loopWhileVisible } from '../lib/frames'
 import { hourLabel } from '../lib/taste'
 
 /** Shared hover tooltip positioned inside a relative container. */
@@ -187,9 +188,8 @@ export function Constellation({ nodes, links, onPick }: { nodes: { key: string; 
   useEffect(() => {
     const cv = ref.current
     if (!cv) return
-    let raf = 0
+    const vars = cssVars(cv, ['--accent', '--text'])
     const draw = (t: number) => {
-      raf = requestAnimationFrame(draw)
       const dpr = devicePixelRatio || 1
       const w = cv.clientWidth
       const h = cv.clientHeight
@@ -200,8 +200,8 @@ export function Constellation({ nodes, links, onPick }: { nodes: { key: string; 
       const v = view.current
       const tx = (x: number) => w / 2 + (x + v.x) * v.k
       const ty = (y: number) => h / 2 + (y + v.y) * v.k
-      const accent = getComputedStyle(cv).getPropertyValue('--accent').trim() || '#8c7cff'
-      const text = getComputedStyle(cv).getPropertyValue('--text').trim() || '#fff'
+      const accent = vars()['--accent'] || '#8c7cff'
+      const text = vars()['--text'] || '#fff'
       for (const l of links) {
         const a = layout.get(l.a)
         const b = layout.get(l.b)
@@ -235,8 +235,8 @@ export function Constellation({ nodes, links, onPick }: { nodes: { key: string; 
       }
       ctx.globalAlpha = 1
     }
-    raf = requestAnimationFrame(draw)
-    return () => cancelAnimationFrame(raf)
+    // Stars twinkle, so it animates — but only while the constellation is on screen.
+    return loopWhileVisible(cv, draw)
   }, [layout, links, hover])
   const pick = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const cv = ref.current!

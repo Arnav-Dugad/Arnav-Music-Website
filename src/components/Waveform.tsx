@@ -6,6 +6,7 @@ import type { Lyrics } from '../lib/lyrics'
 import type { Track } from '../lib/types'
 import { useSections } from '../state/sections'
 import { loadReplay, type ReplayMap } from '../lib/replayMap'
+import { cssVars, loopWhileVisible } from '../lib/frames'
 import type { Section } from '../lib/sections'
 
 const NO_SECTIONS: Section[] = []
@@ -75,9 +76,10 @@ export function Waveform({ track, bars = 140 }: { track: Track; bars?: number })
   useEffect(() => { void loadReplay(track.id).then(setReplay) }, [track.id])
 
   useEffect(() => {
-    let raf = 0
+    const host = box.current
+    if (!host) return
+    const vars = cssVars(host, ['--accent', '--wave-dim', '--wave-buf'])
     const draw = () => {
-      raf = requestAnimationFrame(draw)
       const c = ref.current
       const el = box.current
       if (!c || !el) return
@@ -91,10 +93,10 @@ export function Waveform({ track, bars = 140 }: { track: Track; bars?: number })
       g.clearRect(0, 0, w, h)
       const { position, buffered } = useProgress.getState()
       const played = durationMs ? position / durationMs : 0
-      const styles = getComputedStyle(el)
-      const accent = styles.getPropertyValue('--accent').trim() || '#fff'
-      const dim = styles.getPropertyValue('--wave-dim').trim() || 'rgba(255,255,255,0.22)'
-      const buf = styles.getPropertyValue('--wave-buf').trim() || 'rgba(255,255,255,0.36)'
+      const v = vars()
+      const accent = v['--accent'] || '#fff'
+      const dim = v['--wave-dim'] || 'rgba(255,255,255,0.22)'
+      const buf = v['--wave-buf'] || 'rgba(255,255,255,0.36)'
       const gap = 2
       const bw = Math.max(1.5, w / shape.length - gap)
       const now = performance.now() / 1000
@@ -127,8 +129,14 @@ export function Waveform({ track, bars = 140 }: { track: Track; bars?: number })
         g.fill()
       }
     }
-    raf = requestAnimationFrame(draw)
-    return () => cancelAnimationFrame(raf)
+    // Playing: bars near the playhead breathe, so it animates (only while on screen).
+    if (playing) return loopWhileVisible(host, draw)
+    // Paused: nothing moves; draw now and again only when the position or size changes.
+    draw()
+    const off = useProgress.subscribe(draw)
+    const ro = new ResizeObserver(draw)
+    ro.observe(host)
+    return () => { off(); ro.disconnect() }
   }, [shape, durationMs, playing, hover, sections, replay])
 
   const at = (clientX: number) => {

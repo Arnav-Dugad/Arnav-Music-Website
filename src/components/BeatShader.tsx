@@ -5,6 +5,7 @@ import { useMotionLevel, useSettings } from '../state/settings'
 import { fetchCredits } from '../lib/meta'
 import { songShape } from './Waveform'
 import type { Palette } from '../lib/color'
+import { loopWhileVisible } from '../lib/frames'
 import type { Track } from '../lib/types'
 
 const VERT = `attribute vec2 p; void main() { gl_Position = vec4(p, 0.0, 1.0); }`
@@ -87,12 +88,14 @@ export function BeatShader({ track, palette }: { track: Track; palette: Palette 
     gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0)
     const u = (n: string) => gl.getUniformLocation(prog, n)
     const U = { res: u('res'), time: u('time'), kick: u('kick'), energy: u('energy'), level: u('level'), c1: u('c1'), c2: u('c2'), c3: u('c3'), cv: u('cv') }
-    let raf = 0
     let level = 0.5
+    let last = 0
     const t0 = performance.now()
-    const frame = () => {
-      raf = requestAnimationFrame(frame)
+    const frame = (now: number) => {
       if (document.hidden) return
+      // Paused, it only drifts: about 15 frames a second is plenty and saves most of the GPU work.
+      if (!usePlayer.getState().isPlaying && now - last < 66) return
+      last = now
       const scale = 0.5 // render at half resolution: it's a soft background
       const w = Math.max(2, Math.round(canvas.clientWidth * scale))
       const h = Math.max(2, Math.round(canvas.clientHeight * scale))
@@ -116,8 +119,8 @@ export function BeatShader({ track, palette }: { track: Track; palette: Palette 
       gl.uniform3fv(U.cv, rgb(L.palette.vivid))
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
     }
-    raf = requestAnimationFrame(frame)
-    return () => { cancelAnimationFrame(raf); gl.getExtension('WEBGL_lose_context')?.loseContext() }
+    const stop = loopWhileVisible(canvas, frame)
+    return () => { stop(); gl.getExtension('WEBGL_lose_context')?.loseContext() }
   }, [enabled])
 
   if (!enabled || failed) return null

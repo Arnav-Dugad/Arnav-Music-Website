@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import type { Moment } from '../lib/moments'
 import { usePlayer } from '../state/player'
 import { useMotionLevel } from '../state/settings'
+import { loopWhileVisible } from '../lib/frames'
 import { parseHex } from '../lib/color'
 
 interface P { x: number; y: number; vx: number; vy: number; r: number; a: number; life: number }
@@ -38,10 +39,8 @@ export function MomentCanvas({ m }: { m: Moment }) {
       }
     }
     for (let i = 0; i < count; i++) ps.push(spawn(true))
-    let raf = 0
     let t0 = performance.now()
     const frame = (now: number) => {
-      raf = requestAnimationFrame(frame)
       const dt = Math.min(50, now - t0) / 16.67 * speed
       t0 = now
       const t = now / 1000
@@ -125,8 +124,9 @@ export function MomentCanvas({ m }: { m: Moment }) {
       vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.55)')
       ctx.fillStyle = vg; ctx.fillRect(0, 0, w, h)
     }
-    raf = requestAnimationFrame(frame)
-    return () => { cancelAnimationFrame(raf); ro.disconnect() }
+    // Only while on screen: Moments cards scrolled away (or a page in the background) stop.
+    const stop = loopWhileVisible(cv, frame)
+    return () => { stop(); ro.disconnect() }
   }, [m, motion])
   return <canvas ref={ref} className="moment-canvas" aria-hidden />
 }

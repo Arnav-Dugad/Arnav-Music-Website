@@ -7,6 +7,7 @@ import { Icon } from './Icon'
 import { Spinner } from './ui'
 import { aiAvailability } from '../lib/ai'
 import { useMotionLevel } from '../state/settings'
+import { loopWhileVisible } from '../lib/frames'
 import { songNotes } from '../lib/aiFeatures'
 
 const LEAD_MS = 140
@@ -78,11 +79,13 @@ export function SyncedLyrics({ lines, translation, romanized, size, dual = false
   }, [lines, translation, size])
 
   useEffect(() => {
-    let raf = 0
     let lastWordLine = -1
+    let lastPos = NaN
     const frame = () => {
-      raf = requestAnimationFrame(frame)
       const pos = clock() + LEAD_MS
+      // Paused (or between ticks): nothing can have changed, so skip the per-word work.
+      if (pos === lastPos) return
+      lastPos = pos
       const a = activeIndex(lines, pos)
       if (a !== state.current.active) {
         state.current.active = a
@@ -127,7 +130,11 @@ export function SyncedLyrics({ lines, translation, romanized, size, dual = false
         lastWordLine = a
       }
     }
-    raf = requestAnimationFrame(frame)
+    const el = box.current
+    if (el) return loopWhileVisible(el, frame)
+    let raf = 0
+    const tick = () => { raf = requestAnimationFrame(tick); frame() }
+    raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
   }, [lines])
 
