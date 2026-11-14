@@ -21,6 +21,8 @@ import { lib, likedIds, useLibrary } from '../state/library'
 import { remember, trackRegistry } from '../state/tracks'
 import { toast } from '../state/ui'
 import { nativeId, sourceOf, type Track } from '../lib/types'
+import { isKnownArtist } from '../lib/knownArtists'
+import { resolveMix } from './pinnedMixes'
 
 export interface YtLink {
   arnavId: string
@@ -45,6 +47,10 @@ interface YtState {
   links: Record<string, YtLink>
   likesSync: boolean
   autoLinkNew: boolean
+  /** Followed artists <-> YouTube subscriptions to their channels (off unless you turn it on). */
+  subsSync: boolean
+  /** Smart playlists and Daily mixes pinned to YouTube Music: refreshed weekly (writes cost quota). */
+  pins: Record<string, { arnavId: string; week: string }>
   /** YouTube playlists that existed at connect time or were seen since (new ones get auto-linked). */
   known: string[]
   likes: { linked: boolean; count: number; firstItem: string | null; syncedAt: number }
@@ -61,14 +67,14 @@ interface YtState {
 }
 
 export const useYtMusic = create<YtState>()(persist((): YtState => ({
-  connected: false, account: null, links: {}, likesSync: true, autoLinkNew: true, known: [],
+  connected: false, account: null, links: {}, likesSync: true, autoLinkNew: true, subsSync: false, pins: {}, known: [],
   likes: { linked: false, count: -1, firstItem: null, syncedAt: 0 }, units: { day: '', used: 0 }, log: [], lastSyncAt: 0,
   status: 'off' as YtStatus, message: null, remote: null, reviewOpen: false, arrivals: {},
 }), {
   name: 'arnav.ytmusic',
   version: 1,
   storage: createJSONStorage(() => localStorage),
-  partialize: (s) => ({ connected: s.connected, account: s.account, links: s.links, likesSync: s.likesSync, autoLinkNew: s.autoLinkNew, known: s.known, likes: s.likes, units: s.units, log: s.log, lastSyncAt: s.lastSyncAt }),
+  partialize: (s) => ({ connected: s.connected, account: s.account, links: s.links, likesSync: s.likesSync, autoLinkNew: s.autoLinkNew, subsSync: s.subsSync, pins: s.pins, known: s.known, likes: s.likes, units: s.units, log: s.log, lastSyncAt: s.lastSyncAt }),
 }))
 const st = () => useYtMusic.getState()
 const patch = (p: Partial<YtState>) => useYtMusic.setState(p)
@@ -327,6 +333,7 @@ async function syncOnce() {
   if (unitsLeft() < 60) { patch({ status: 'quota' }); return }
   patch({ status: 'syncing', message: null })
   try {
+    refreshPins()
     const remote = await myPlaylists()
     patch({ remote })
     const byId = new Map(remote.map((r) => [r.id, r]))
@@ -344,6 +351,7 @@ async function syncOnce() {
       }
     }
     if (st().likesSync) await syncLikes()
+    if (st().subsSync) await syncSubscriptions()
     patch({ status: 'idle', lastSyncAt: Date.now() })
   } catch (e) {
     if (e instanceof NeedsPass) patch({ status: 'needs-pass' })
@@ -429,6 +437,84 @@ export function moveImportedLikes(arnavId: string) {
   return n
 }
 
+// ── Followed artists ↔ YouTube subscriptions ────────────────────────────────
+/** An artist's channel: an official "- Topic" channel or a name Arnav knows as an artist. */
+const artistChannel = (title: string) => /\s-\sTopic$/.test(title) || isKnownArtist(title)
+async function syncSubscriptions(): Promise<void> {
+  const subs: { subId: string; channelId: string; title: string }[] = []
+  let page: string | undefined
+  for (let i = 0; i < 20; i++) {
+    const r = await yt<{ items?: { id: string; snippet?: { title?: string; resourceId?: { channelId?: string } } }[]; nextPageToken?: string }>('GET', 'subscriptions', { part: 'snippet', mine: 'true', maxResults: '50', ...(page ? { pageToken: page } : {}) })
+    for (const it of r.items ?? []) if (it.snippet?.resourceId?.channelId) subs.push({ subId: it.id, channelId: it.snippet.resourceId.channelId, title: decodeEntities(it.snippet.title ?? '') })
+    page = r.nextPageToken
+    if (!page) break
+  }
+  // Only artists take part; other channels you subscribe to are never touched.
+  const remote = subs.filter((x) => artistChannel(x.title))
+  const follows = useLibrary.getState().followedArtists.filter((a) => a.channelId)
+  const base = await idbGet<string[]>('ytbase|subs') ?? null
+  const m = mergeLikes(base, follows.map((a) => a.channelId!), remote.map((x) => x.channelId))
+  applying = true
+  try {
+    for (const c of m.likeHere) { const x = remote.find((r) => r.channelId === c); if (x) lib().setFollow(x.title.replace(/\s-\sTopic$/, ''), true, c) }
+    for (const c of m.unlikeHere) { const a = follows.find((f) => f.channelId === c); if (a) lib().setFollow(a.name, false, c) }
+  } finally { applying = false }
+  for (const c of m.likeOnYouTube) await yt('POST', 'subscriptions', { part: 'snippet' }, { snippet: { resourceId: { kind: 'youtube#channel', channelId: c } } }, 50)
+  for (const c of m.unlikeOnYouTube) { const x = remote.find((r) => r.channelId === c); if (x) await yt('DELETE', 'subscriptions', { id: x.subId }, undefined, 50) }
+  const words: string[] = []
+  if (m.likeHere.length) words.push(`following ${m.likeHere.length} artist${m.likeHere.length === 1 ? '' : 's'} you subscribe to`)
+  if (m.likeOnYouTube.length) words.push(`subscribed to ${m.likeOnYouTube.length} on YouTube`)
+  if (m.unlikeOnYouTube.length) words.push(`unsubscribed from ${m.unlikeOnYouTube.length}`)
+  if (words.length) note(`Artists: ${words.join(', ')}`)
+  await idbSet('ytbase|subs', m.liked)
+}
+
+// ── Mixes pinned to YouTube Music ───────────────────────────────────────────
+const isoWeek = () => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d.toISOString().slice(0, 10) }
+export const MAX_PINS = 3
+
+/** A smart playlist or Daily mix as a YouTube Music playlist that refreshes every week. */
+export async function pinToYouTube(source: string): Promise<boolean> {
+  if (st().pins[source]) return true
+  if (Object.keys(st().pins).length >= MAX_PINS) { toast(`Up to ${MAX_PINS} mixes can be pinned — each weekly refresh uses YouTube quota`); return false }
+  const mix = resolveMix(source)
+  if (!mix || !mix.tracks.length) { toast('This mix has no songs yet'); return false }
+  const arnavId = lib().createPlaylist(mix.title, mix.tracks.slice(0, 50), 'Pinned from Arnav — refreshes every week')
+  const ok = await addToYouTube(arnavId)
+  if (!ok) { lib().deletePlaylist(arnavId); return false }
+  setLink(arnavId, { mode: 'to-youtube' })
+  patch({ pins: { ...st().pins, [source]: { arnavId, week: isoWeek() } } })
+  note(`“${mix.title}” pinned to YouTube Music`)
+  return true
+}
+export function unpin(source: string) {
+  const pins = { ...st().pins }
+  delete pins[source]
+  patch({ pins })
+}
+/** Once a week, pinned mixes take their current songs (the next sync sends the changes). */
+function refreshPins() {
+  const week = isoWeek()
+  for (const [source, pin] of Object.entries(st().pins)) {
+    if (pin.week === week) continue
+    const pl = lib().playlists[pin.arnavId]
+    if (!pl || pl.deleted || !st().links[pin.arnavId]) { unpin(source); continue }
+    const mix = resolveMix(source)
+    if (mix?.tracks.length) { lib().reorderPlaylist(pin.arnavId, mix.tracks.slice(0, 50).map((t) => t.id)); setLink(pin.arnavId, { pending: true }) }
+    patch({ pins: { ...st().pins, [source]: { ...pin, week } } })
+  }
+}
+
+/** Every linked playlist with both ids and its songs, so your library never depends on one app. */
+export function exportLinks(): string {
+  const pls = lib().playlists
+  return JSON.stringify({
+    exportedAt: new Date().toISOString(),
+    account: st().account,
+    playlists: Object.values(st().links).map((l) => ({ name: pls[l.arnavId]?.name ?? l.title, arnavId: l.arnavId, youtubePlaylistId: l.ytId, youtubeMusicUrl: `https://music.youtube.com/playlist?list=${l.ytId}`, mode: l.mode, videoIds: ytVideoIds(pls[l.arnavId]?.trackIds ?? []) })),
+  }, null, 2)
+}
+
 // ── Running while the app is open ───────────────────────────────────────────
 let timer: ReturnType<typeof setTimeout> | null = null
 const soon = (ms = 5000) => { if (timer) clearTimeout(timer); timer = setTimeout(() => { void syncNow() }, ms) }
@@ -440,7 +526,7 @@ export function startYtMusic() {
     if (applying || !st().connected) return
     const links = st().links
     const touched = Object.keys(links).some((id) => s.playlists[id] !== p.playlists[id])
-    if (touched || (st().likesSync && s.likes !== p.likes)) {
+    if (touched || (st().likesSync && s.likes !== p.likes) || (st().subsSync && s.followedArtists !== p.followedArtists)) {
       for (const id of Object.keys(links)) if (s.playlists[id] !== p.playlists[id]) setLink(id, { pending: true })
       if (passValid()) soon(5000); else patch({ status: 'needs-pass' })
     }

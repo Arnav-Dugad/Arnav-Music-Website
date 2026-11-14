@@ -606,3 +606,9 @@ button.heat-cell:hover { outline: 2px solid var(--text); outline-offset: 1px; }
 .track-row.arrived { animation: yt-arrive 2.4s var(--ease) both; }
 @keyframes yt-arrive { 0% { background: color-mix(in oklab, var(--accent) 26%, transparent); transform: translateX(-6px); } 30% { transform: none; } 100% { background: transparent; } }
 :root[data-motion='off'] .track-row.arrived { animation: none; }
+
+.yt-health { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+.yt-health-item { display: flex; flex-direction: column; gap: 4px; padding: 14px; border-radius: 16px; background: var(--surface); border: 1px solid var(--hairline); }
+.yt-health-item b { font-size: 24px; letter-spacing: -0.02em; }
+.yt-health-item.warn b { color: var(--warning); }
+.yt-health-item .btn { align-self: flex-start; margin-top: 4px; margin-left: -10px; }

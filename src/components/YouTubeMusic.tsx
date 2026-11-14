@@ -8,8 +8,10 @@ import type { FirstLink, SyncMode } from '../lib/ytsync'
 import { useLibrary, visiblePlaylists } from '../state/library'
 import { toast } from '../state/ui'
 import {
-  addToYouTube, connect, disconnect, hasPass, importedYtId, link, moveImportedLikes, reconnect, setMode, syncNow, unitsLeft, unlink, useYtMusic, type YtLink,
+  addToYouTube, connect, disconnect, exportLinks, hasPass, importedYtId, link, MAX_PINS, moveImportedLikes, pinToYouTube, reconnect, setMode, syncNow, unitsLeft, unlink, unpin, useYtMusic, type YtLink,
 } from '../services/youtubeMusic'
+import { findDuplicates } from '../services/importer'
+import { trackRegistry } from '../state/tracks'
 
 const MODES: { value: SyncMode; label: string }[] = [
   { value: 'two-way', label: 'Both ways' },
@@ -84,6 +86,7 @@ export function YouTubeMusicSettings() {
 
       <div className="set-group"><div className="set-card">
         <div className="set-row"><div className="grow"><div className="set-title">Liked Songs</div><div className="t-caption set-sub">Your likes here and YouTube Music’s Liked Songs stay the same (songs only — not other videos you liked).</div></div><Toggle on={s.likesSync} label="Sync Liked Songs" onChange={(v) => { useYtMusic.setState({ likesSync: v }); if (v) void syncNow() }} /></div>
+        <div className="set-row"><div className="grow"><div className="set-title">Followed artists</div><div className="t-caption set-sub">Following an artist here subscribes to their channel on YouTube, and artists you subscribe to there are followed here. Other channels are never touched.</div></div><Toggle on={s.subsSync} label="Sync followed artists with YouTube subscriptions" onChange={(v) => { useYtMusic.setState({ subsSync: v }); if (v) void syncNow() }} /></div>
         <div className="set-row"><div className="grow"><div className="set-title">New YouTube Music playlists</div><div className="t-caption set-sub">Playlists you create there appear here and stay linked.</div></div><Toggle on={s.autoLinkNew} label="Link new playlists" onChange={(v) => useYtMusic.setState({ autoLinkNew: v })} /></div>
       </div></div>
 
@@ -96,6 +99,8 @@ export function YouTubeMusicSettings() {
         )}
       </div>
 
+      <LibraryHealth />
+
       {s.log.length > 0 && (
         <div>
           <h3 className="t-eyebrow" style={{ margin: '6px 0 10px' }}>Recent sync activity</h3>
@@ -105,7 +110,10 @@ export function YouTubeMusicSettings() {
         </div>
       )}
 
-      <button className="btn btn-ghost" style={{ alignSelf: 'flex-start' }} onClick={() => { void disconnect(); toast('YouTube Music disconnected — your playlists stay here') }}><Icon name="logout" size={15} /> Disconnect</button>
+      <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+        <button className="btn btn-secondary" onClick={() => download('arnav-youtube-music-links.json', exportLinks())} disabled={!links.length}><Icon name="download" size={15} /> Export linked playlists</button>
+        <button className="btn btn-ghost" onClick={() => { void disconnect(); toast('YouTube Music disconnected — your playlists stay here') }}><Icon name="logout" size={15} /> Disconnect</button>
+      </div>
     </div>
   )
 }
@@ -238,3 +246,66 @@ export function useArrived(playlistId: string | undefined, trackId: string): boo
   })
 }
 
+
+function download(name: string, text: string) {
+  const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }))
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(url), 2000)
+}
+
+/** How tidy the synced library is, with the fix for each finding. */
+function LibraryHealth() {
+  const nav = useNavigate()
+  const links = useYtMusic((s) => s.links)
+  const playlists = useLibrary((s) => s.playlists)
+  const h = useMemo(() => {
+    const ids = Object.keys(links).flatMap((id) => playlists[id]?.trackIds ?? [])
+    const unique = [...new Set(ids)]
+    const tracks = trackRegistry.many(unique)
+    return {
+      songs: unique.length,
+      waiting: Object.values(links).filter((l) => l.pending).length,
+      problems: Object.values(links).filter((l) => l.error).length,
+      unofficial: tracks.filter((t) => t.trust != null && t.trust <= 0).length,
+      duplicates: findDuplicates().length,
+    }
+  }, [links, playlists])
+  const items: { label: string; value: string; tone: 'ok' | 'warn'; action?: { label: string; run: () => void } }[] = [
+    { label: 'Songs in linked playlists', value: String(h.songs), tone: 'ok' },
+    { label: 'Playlists waiting to sync', value: String(h.waiting), tone: h.waiting ? 'warn' : 'ok' },
+    { label: 'Playlists that need attention', value: String(h.problems), tone: h.problems ? 'warn' : 'ok' },
+    { label: 'Songs saved as more than one upload', value: String(h.duplicates), tone: h.duplicates ? 'warn' : 'ok', action: h.duplicates ? { label: 'Tidy up', run: () => nav('/library?tidy=duplicates') } : undefined },
+    { label: 'Unofficial uploads (covers, fan edits)', value: String(h.unofficial), tone: h.unofficial ? 'warn' : 'ok' },
+  ]
+  return (
+    <div>
+      <h3 className="t-eyebrow" style={{ margin: '6px 0 10px' }}>Library health</h3>
+      <div className="yt-health">
+        {items.map((it) => (
+          <div key={it.label} className={`yt-health-item ${it.tone}`}>
+            <b className="tabular">{it.value}</b>
+            <span className="t-caption">{it.label}</span>
+            {it.action && <button className="btn btn-ghost btn-sm" onClick={it.action.run}>{it.action.label}</button>}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/** On a smart playlist or Daily mix: keep it on YouTube Music too (refreshed weekly). */
+export function PinMixButton({ source }: { source: string }) {
+  const pinned = useYtMusic((s) => !!s.pins[source])
+  const count = useYtMusic((s) => Object.keys(s.pins).length)
+  const [busy, setBusy] = useState(false)
+  if (pinned) return <button className="btn btn-secondary btn-sm" onClick={() => { unpin(source); toast('Unpinned — the YouTube Music copy stays but won’t refresh') }}><Icon name="check" size={14} /> On YouTube Music · weekly</button>
+  return (
+    <button className="btn btn-secondary btn-sm" disabled={busy || count >= MAX_PINS} title={count >= MAX_PINS ? `Up to ${MAX_PINS} mixes can be pinned` : 'A YouTube Music playlist that refreshes every week'}
+      onClick={async () => { setBusy(true); const ok = await pinToYouTube(source); setBusy(false); if (ok) toast('Pinned to YouTube Music — it refreshes every week') }}>
+      {busy ? <Spinner size={13} /> : <Icon name="youtube" size={14} />} Pin to YouTube Music
+    </button>
+  )
+}

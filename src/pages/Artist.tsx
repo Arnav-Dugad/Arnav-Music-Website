@@ -139,7 +139,7 @@ export default function ArtistPage() {
               <button className="btn btn-primary btn-lg" disabled={!playable.length} onClick={() => player().play(playable, 0, { context: displayName, shuffle: false })}><Icon name="play" size={16} /> Play</button>
               <button className="btn btn-secondary btn-lg" disabled={!playable.length} onClick={() => player().play(playable, 0, { context: displayName, shuffle: true })}><Icon name="shuffle" size={16} /> Shuffle</button>
               <button className="btn btn-secondary btn-lg" disabled={!playable.length} onClick={() => playable[0] && void startRadio(playable[0])}><Icon name="radio" size={16} /> Radio</button>
-              <FollowButton name={name} />
+              <FollowButton name={name} channelId={channel.data?.id} />
               {channel.data && <a className="icon-btn" href={`https://www.youtube.com/channel/${channel.data.id}`} target="_blank" rel="noreferrer" aria-label="Open on YouTube"><Icon name="youtube" size={20} /></a>}
             </div>
           </div>
@@ -226,11 +226,11 @@ export default function ArtistPage() {
 }
 
 /** Follow an artist: their new releases appear on Home (synced with your other browsers). */
-function FollowButton({ name }: { name: string }) {
+function FollowButton({ name, channelId }: { name: string; channelId?: string }) {
   const following = useLibrary((s) => s.followedArtists.some((a) => a.name.toLowerCase() === name.trim().toLowerCase()))
   return (
     <button className={`btn btn-lg ${following ? 'btn-secondary' : 'btn-ghost'}`} aria-pressed={following}
-      onClick={() => { const on = useLibrary.getState().toggleFollow(name); toast(on ? `Following ${name} — new releases show on Home` : `Unfollowed ${name}`) }}>
+      onClick={() => { const on = useLibrary.getState().toggleFollow(name, channelId); toast(on ? `Following ${name} — new releases show on Home` : `Unfollowed ${name}`) }}>
       <Icon name={following ? 'check' : 'plus'} size={16} /> {following ? 'Following' : 'Follow'}
     </button>
   )

@@ -92,7 +92,7 @@ const FAMILIES: Family[] = [
         ...(strs(x.notInterested) ? { notInterested: strs(x.notInterested) } : {}),
         ...(strs(x.blockedArtists) ? { blockedArtists: strs(x.blockedArtists) } : {}),
         ...(strs(x.recentSearches) ? { recentSearches: strs(x.recentSearches) } : {}),
-        ...(arr(x.followedArtists) ? { followedArtists: (arr(x.followedArtists) as { name?: unknown; at?: unknown }[]).filter((a) => typeof a?.name === 'string').slice(0, 300).map((a) => ({ name: String(a.name).slice(0, 120), at: Number(a.at) || 0 })) } : {}),
+        ...(arr(x.followedArtists) ? { followedArtists: (arr(x.followedArtists) as { name?: unknown; at?: unknown }[]).filter((a) => typeof a?.name === 'string').slice(0, 300).map((a) => ({ name: String(a.name).slice(0, 120), at: Number(a.at) || 0, ...(typeof (a as { channelId?: unknown }).channelId === 'string' ? { channelId: String((a as { channelId: string }).channelId).slice(0, 40) } : {}) })) } : {}),
         ...(arr(x.savedRemote) ? { savedRemote: (arr(x.savedRemote) as { id?: unknown; name?: unknown }[]).filter((r) => typeof r?.id === 'string' && typeof r?.name === 'string') as never } : {}),
       })
     },

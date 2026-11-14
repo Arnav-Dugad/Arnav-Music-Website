@@ -27,7 +27,7 @@ interface LibraryData {
   /** Saved remote YouTube playlists (bookmarks, not copies). */
   savedRemote: { id: string; name: string; owner: string; artworkUrl?: string | null; savedAt: number }[]
   /** Artists you follow (their new releases show on Home). */
-  followedArtists: { name: string; at: number }[]
+  followedArtists: { name: string; at: number; channelId?: string }[]
 }
 
 interface LibraryStore extends LibraryData {
@@ -46,7 +46,9 @@ interface LibraryStore extends LibraryData {
   deletePlaylist: (id: string) => void
   /** Undo for deletePlaylist. */
   restorePlaylist: (id: string) => void
-  toggleFollow: (name: string) => boolean
+  toggleFollow: (name: string, channelId?: string) => boolean
+  /** Follow or unfollow explicitly (YouTube subscription sync). */
+  setFollow: (name: string, on: boolean, channelId?: string) => void
   recordPlay: (e: Omit<LocalEvent, 'localId'>) => void
   clearHistory: () => void
   removeEvent: (localId: string) => void
@@ -136,11 +138,17 @@ export const useLibrary = create<LibraryStore>()((set, get) => {
       if (!p) return
       commit({ playlists: { ...get().playlists, [id]: { ...p, deleted: false, updatedAt: Date.now(), dirty: true } } })
     },
-    toggleFollow(name) {
+    toggleFollow(name, channelId) {
       const k = name.trim().toLowerCase()
       const has = get().followedArtists.some((a) => a.name.toLowerCase() === k)
-      commit({ followedArtists: has ? get().followedArtists.filter((a) => a.name.toLowerCase() !== k) : [{ name: name.trim(), at: Date.now() }, ...get().followedArtists].slice(0, 300) })
+      get().setFollow(name, !has, channelId)
       return !has
+    },
+    setFollow(name, on, channelId) {
+      const k = name.trim().toLowerCase()
+      const rest = get().followedArtists.filter((a) => a.name.toLowerCase() !== k && (!channelId || a.channelId !== channelId))
+      const prev = get().followedArtists.find((a) => a.name.toLowerCase() === k)
+      commit({ followedArtists: on ? [{ name: name.trim(), at: prev?.at ?? Date.now(), ...(channelId ?? prev?.channelId ? { channelId: channelId ?? prev?.channelId } : {}) }, ...rest].slice(0, 300) : rest })
     },
     recordPlay(e) {
       if (e.listenedMs < 5000) return

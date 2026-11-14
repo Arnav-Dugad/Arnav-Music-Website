@@ -33,7 +33,7 @@ export default function Library() {
   const [sort, setSort] = useState<'recent' | 'name' | 'count'>('recent')
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [fileImportOpen, setFileImportOpen] = useState(false)
-  const [dupesOpen, setDupesOpen] = useState(false)
+  const [dupesOpen, setDupesOpen] = useState(() => new URLSearchParams(location.search).get('tidy') === 'duplicates')
   const layout = useSettings((s) => s.libraryLayout)
   const playlists = useLibrary((s) => s.playlists)
   const likes = useLibrary((s) => s.likes)

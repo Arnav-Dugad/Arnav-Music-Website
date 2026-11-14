@@ -25,7 +25,7 @@ import { useMusicVideos, videosReady } from '../services/musicVideos'
 import { setMode } from '../player/controller'
 import { useSettings } from '../state/settings'
 import { useAuth } from '../state/auth'
-import { PlaylistYtChip } from '../components/YouTubeMusic'
+import { PinMixButton, PlaylistYtChip } from '../components/YouTubeMusic'
 import { deleteOnYouTube, unlink as unlinkYt, useYtMusic } from '../services/youtubeMusic'
 import { PLAYLIST_CLOUD_MAX } from '../services/sync'
 
@@ -160,6 +160,7 @@ export default function PlaylistPage() {
           {(view.kind === 'local' || view.kind === 'liked') && view.tracks.length > 0 && <VideosLine tracks={view.tracks} title={view.title} id={id} />}
           {lyricsJob && <div className="t-caption" style={{ marginTop: 8 }}>Fetching lyrics {lyricsJob.done}/{lyricsJob.total}…</div>}
           {p && <div style={{ marginTop: 10 }}><PlaylistYtChip id={id} local={view.kind === 'local'} /></div>}
+          {(view.kind === 'smart' || view.kind === 'daily') && view.tracks.length > 0 && <div style={{ marginTop: 10 }}><PinMixButton source={id} /></div>}
           {p && signedIn && p.trackIds.length > PLAYLIST_CLOUD_MAX && (
             <div style={{ marginTop: 12 }}><Notice tone="warn">Only the first {PLAYLIST_CLOUD_MAX} songs sync to your phone and other devices. The other {p.trackIds.length - PLAYLIST_CLOUD_MAX} stay on this browser.</Notice></div>
           )}
