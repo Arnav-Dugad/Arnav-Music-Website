@@ -19,7 +19,6 @@ import { useLyrics } from '../state/lyrics'
 import { activeIndex } from '../lib/lyrics'
 import { artworkFor } from '../lib/classify'
 import { matchScore } from '../lib/query'
-import { MOMENTS } from '../lib/moments'
 import { authMessage, linkGoogle, resetPassword, signInEmail, signInWithGoogle, signUpEmail } from '../lib/firebase'
 import { refreshAuthUser, warmSync } from '../services/sync'
 import type { Track } from '../lib/types'
@@ -224,7 +223,6 @@ export function CommandPalette() {
       { id: 'home', group: 'Go to', icon: 'home', label: 'Home', run: go('/') },
       { id: 'exp', group: 'Go to', icon: 'compass', label: 'Explore', run: go('/explore') },
       { id: 'ai', group: 'Go to', icon: 'sparkles', label: 'Arnav AI', run: go('/ai') },
-      { id: 'mom', group: 'Go to', icon: 'moments', label: 'Moments', run: go('/moments') },
       { id: 'lib', group: 'Go to', icon: 'library', label: 'Library', run: go('/library') },
       { id: 'liked', group: 'Go to', icon: 'heartFill', label: 'Liked Songs', run: go('/playlist/liked') },
       { id: 'dna', group: 'Go to', icon: 'chart', label: 'Taste DNA', run: go('/insights') },
@@ -237,13 +235,12 @@ export function CommandPalette() {
       { id: 'set', group: 'Go to', icon: 'gear', label: 'Settings', run: go('/settings') },
       { id: 'theme', group: 'Settings', icon: s.themeMode === 'light' ? 'moon' : 'sun', label: s.themeMode === 'light' ? 'Switch to dark appearance' : 'Switch to light appearance', run: () => setThemeWithReveal(s.themeMode === 'light' ? 'dark' : 'light') },
       { id: 'keys', group: 'Settings', icon: 'keyboard', label: 'Keyboard shortcuts', hint: '?', run: () => ui().set({ shortcutsOpen: true }) },
-      ...MOMENTS.map((m) => ({ id: `m-${m.id}`, group: 'Moments', icon: 'moments' as IconName, label: m.title, hint: m.subtitle, run: go(`/moment/${m.id}`) })),
     ]
     return base
   }, [open, playlists]) // eslint-disable-line react-hooks/exhaustive-deps
   const results = useMemo<PaletteItem[]>(() => {
     const query = q.trim()
-    if (!query) return items.filter((i) => i.group !== 'Moments').slice(0, 14)
+    if (!query) return items.slice(0, 14)
     const scored = items.map((i) => ({ i, s: Math.max(matchScore(query, i.label), i.hint ? matchScore(query, i.hint) * 0.7 : 0) })).filter((x) => x.s > 0.4)
     const pls = visiblePlaylists(playlists).map((p) => ({ i: { id: `pl-${p.id}`, group: 'Your library', icon: 'note' as IconName, label: p.name, hint: `${p.trackIds.length} songs`, run: go(`/playlist/${p.id}`) }, s: matchScore(query, p.name) })).filter((x) => x.s > 0.5)
     const known = verified([...likedTracks(), ...trackRegistry.all().slice(-800)])

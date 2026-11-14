@@ -4,14 +4,12 @@ import { AnimatePresence, motion } from 'motion/react'
 import { Card, Shelf, SkeletonRows, Notice, Segmented, Spinner, Artwork, spring } from '../components/ui'
 import { Icon } from '../components/Icon'
 import { TrackList } from '../components/TrackRow'
-import { MomentArt } from '../components/Mix'
 import { useAsync, useDebounced, useRegistryVersion } from '../hooks'
 import { cachedSearch, search, trending, video, type SearchFilter, type SearchResults } from '../lib/youtube'
 import { artworkFor, rankForListening } from '../lib/classify'
 import { isRemoteWorthy, matchScore, SEARCH_IDLE_MS, SUGGEST_MS } from '../lib/query'
 import { itunesSongSearch, type ItunesItem } from '../lib/meta'
 import { relative } from '../lib/format'
-import { MOMENTS } from '../lib/moments'
 import { MOODS, MOOD_KEYS, MusicError, type Track } from '../lib/types'
 import { likedTracks, useLibrary, visiblePlaylists } from '../state/library'
 import { trackRegistry } from '../state/tracks'
@@ -78,9 +76,6 @@ function Browse() {
           ))}
         </div>
       </section>
-      <Shelf title="Moments" action={<button className="btn btn-ghost btn-sm" onClick={() => nav('/moments')}>See all</button>}>
-        {MOMENTS.map((m) => <Card key={m.id} title={m.title} subtitle={m.subtitle} custom={<MomentArt m={m} />} onOpen={() => nav(`/moment/${m.id}`)} />)}
-      </Shelf>
       {yt.ready && (
         <section className="section">
           <div className="section-head">

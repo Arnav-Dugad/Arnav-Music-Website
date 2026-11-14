@@ -237,7 +237,7 @@ function Ai() {
         <Bool k="aiEnabled" title="Arnav AI cloud" sub="Uses Gemini through Firebase AI Logic. When off or unavailable, the on-device engine answers." />
         <Bool k="aiPersonalization" title="Personalise with my taste" sub="Sends your top artists and genres (never history) with each request" />
         <Bool k="aiDj" title="AI DJ" sub="A short spoken intro as each new song starts. The voice is generated on this device; the music dips under it." />
-        <Row title="Weather moods" sub="Uses your approximate location (only with your permission) to match Home and Moments to the weather. Weather from Open-Meteo.">
+        <Row title="Weather moods" sub="Uses your approximate location (only with your permission) to match Home's moods to the weather. Weather from Open-Meteo.">
           <Toggle on={useSettings((s) => s.weatherMoods)} label="Weather moods" onChange={(on) => { if (on) void useWeather.getState().refresh(true); else useSettings.getState().update({ weatherMoods: false }) }} />
         </Row>
         <Row title="Daily request limit" sub={`${u.aiRequests} used today`}>

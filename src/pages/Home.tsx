@@ -8,14 +8,13 @@ import { useNavigate } from 'react-router-dom'
 import { motion } from 'motion/react'
 import { Card, Eq, Shelf, SkeletonCards, Notice, spring, Artwork } from '../components/ui'
 import { Icon, Logo } from '../components/Icon'
-import { MixArt, MomentArt } from '../components/Mix'
+import { MixArt } from '../components/Mix'
 import { PlaylistThumb } from '../components/Shell'
 import { albumHref, openTrackMenu } from '../components/TrackRow'
 import { useMoreMenu } from '../components/MobileMenu'
 import { useAsync, useIsDesktop, useRecentTracks, useRegistryVersion } from '../hooks'
 import { trending } from '../lib/youtube'
 import { compactCount, duration } from '../lib/format'
-import { MOMENTS } from '../lib/moments'
 import { SMART, SMART_KINDS, smartPlaylist, timeMachine } from '../lib/taste'
 import { MOODS, type Mood, type Track } from '../lib/types'
 import { artworkFor } from '../lib/classify'
@@ -379,10 +378,6 @@ export default function Home() {
           {data.tm.tracks.map((t, i) => <Card key={t.id} title={t.title} subtitle={t.artist} art={artworkFor(t)} preview={t} onOpen={() => player().play(data.tm!.tracks, i, { context: data.tm!.title })} />)}
         </Shelf>
       )}
-
-      <Shelf title="Moments" subtitle="Immersive scenes with music to match" action={<button className="btn btn-ghost btn-sm" onClick={() => nav('/moments')}>See all</button>}>
-        {MOMENTS.map((mo) => <Card key={mo.id} title={mo.title} subtitle={mo.subtitle} custom={<MomentArt m={mo} />} onOpen={() => nav(`/moment/${mo.id}`)} />)}
-      </Shelf>
 
       {data.liked.length > 0 && (
         <Shelf title="From your likes" action={<button className="btn btn-ghost btn-sm" onClick={() => nav('/playlist/liked')}>See all</button>}>

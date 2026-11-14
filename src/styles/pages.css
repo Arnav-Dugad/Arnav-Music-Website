@@ -39,24 +39,6 @@
 .mix-title { font-family: var(--font-display); font-size: clamp(17px, 1.5vw, 22px); font-weight: 800; letter-spacing: -0.03em; line-height: 1.05; margin-top: 4px; text-shadow: 0 2px 12px rgba(0,0,0,.25); }
 .liked-art { aspect-ratio: 1; border-radius: 14px; display: grid; place-items: center; color: #fff; background: radial-gradient(120% 100% at 20% 0%, #a894ff, #5b3fe0 50%, #241a6b); box-shadow: var(--shadow-1); }
 .hero-cover-inner { width: 100%; height: 100%; }
-.moment-art { position: relative; aspect-ratio: 1; border-radius: 14px; overflow: hidden; background: linear-gradient(160deg, var(--m1), var(--m2)); isolation: isolate; }
-.moment-art.large { aspect-ratio: 16 / 10; border-radius: 26px; }
-.ma-orb { position: absolute; border-radius: 50%; filter: blur(28px); opacity: 0.85; mix-blend-mode: screen; }
-.ma-orb.o1 { width: 70%; height: 70%; left: -10%; top: -15%; background: var(--m3); animation: orb1 14s ease-in-out infinite alternate; }
-.ma-orb.o2 { width: 60%; height: 60%; right: -15%; bottom: -20%; background: var(--m2); animation: orb2 18s ease-in-out infinite alternate; }
-.ma-orb.o3 { width: 40%; height: 40%; left: 35%; top: 35%; background: color-mix(in oklab, var(--m3) 60%, white); opacity: 0.35; animation: orb1 11s ease-in-out infinite alternate-reverse; }
-.motion-still .ma-orb { animation-duration: 40s; }
-.motion-surge .ma-orb { animation-duration: 5s; }
-.motion-pulse .ma-orb.o3 { animation: pulse 1.6s ease-in-out infinite; }
-@keyframes orb1 { to { transform: translate(20%, 15%) scale(1.15); } }
-@keyframes orb2 { to { transform: translate(-18%, -12%) scale(1.1); } }
-@keyframes pulse { 50% { transform: scale(1.35); opacity: 0.6; } }
-.ma-rain { position: absolute; inset: -20%; background-image: repeating-linear-gradient(105deg, transparent 0 14px, rgba(255,255,255,0.12) 14px 15px); animation: rain 1.4s linear infinite; }
-@keyframes rain { to { transform: translate(-30px, 60px); } }
-.ma-text { position: absolute; left: 16px; bottom: 14px; right: 16px; display: flex; flex-direction: column; text-align: left; align-items: flex-start; color: #fff; z-index: 2; text-shadow: 0 2px 16px rgba(0,0,0,.35); }
-.ma-title { font-family: var(--font-display); font-size: clamp(18px, 1.6vw, 22px); font-weight: 800; letter-spacing: -0.03em; line-height: 1.05; }
-.moment-art.large .ma-title { font-size: clamp(30px, 3.4vw, 48px); }
-.ma-sub { opacity: 0.85; font-size: 14px; margin-top: 4px; }
 .type-serif { font-family: 'Iowan Old Style', 'Palatino Linotype', Georgia, serif !important; font-weight: 600 !important; letter-spacing: -0.01em !important; font-style: italic; }
 .type-mono { font-family: var(--font-mono) !important; font-weight: 600 !important; letter-spacing: -0.04em !important; text-transform: lowercase; }
 
@@ -251,24 +233,6 @@ button.heat-cell:hover { outline: 2px solid var(--text); outline-offset: 1px; }
   .set-nav-item { flex: none; }
   .set-nav-icon { display: none; }
 }
-
-/* ── Moments ──────────────────────────────────────────────────────────── */
-.moments-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 18px; }
-.moment-tile.featured { grid-column: span 2; }
-.moment-btn { position: relative; display: block; width: 100%; border-radius: 26px; overflow: hidden; box-shadow: var(--shadow-2); }
-.moment-meta { position: absolute; left: 16px; top: 14px; display: flex; gap: 8px; align-items: center; }
-@media (max-width: 700px) { .moment-tile.featured { grid-column: auto; } }
-.moment-page { position: relative; min-height: 100%; }
-.moment-stage { position: relative; height: min(78vh, 760px); min-height: 440px; overflow: hidden; color: #fff; display: flex; align-items: flex-end; }
-.moment-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-.moment-back { position: absolute; top: 18px; left: 18px; color: #fff; background: rgba(0,0,0,.25); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); z-index: 2; }
-.moment-copy { position: relative; z-index: 1; padding: 0 var(--gutter) clamp(32px, 7vh, 72px); max-width: 900px; }
-.moment-title { font-family: var(--font-display); font-weight: 850; font-size: clamp(48px, 9vw, 120px); line-height: 0.95; letter-spacing: -0.05em; margin-top: 10px; text-shadow: 0 6px 40px rgba(0,0,0,.3); }
-.moment-sub { font-size: clamp(17px, 2vw, 22px); opacity: 0.85; margin-top: 12px; }
-.moment-play { background: #fff; color: #111; }
-.moment-play:hover { box-shadow: 0 10px 40px color-mix(in oklab, var(--m3) 60%, transparent); }
-.moment-ghost { background: rgba(255,255,255,.14); color: #fff; -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
-.moment-list { padding-top: 28px; }
 
 /* ── Onboarding ───────────────────────────────────────────────────────── */
 .onboarding-page { position: relative; min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 48px 24px; overflow: hidden; }

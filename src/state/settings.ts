@@ -54,7 +54,7 @@ export interface Settings {
   aiEnabled: boolean
   /** Spoken AI DJ intros between songs (on-device voice). */
   aiDj: boolean
-  /** Use local weather (with location permission) to suggest moods and moments. */
+  /** Use local weather (with location permission) to suggest moods. */
   weatherMoods: boolean
   aiPersonalization: boolean
   explanations: boolean

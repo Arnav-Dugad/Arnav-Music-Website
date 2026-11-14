@@ -1,7 +1,7 @@
 {
   "name": "Arnav Music",
   "short_name": "Arnav Music",
-  "description": "Music, alive. Lyrics, Arnav AI sessions, Moments and Taste DNA — synced with the Android app.",
+  "description": "Music, alive. Lyrics, Arnav AI sessions, Listen together and Taste DNA — synced with the Android app.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

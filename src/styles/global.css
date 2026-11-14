@@ -297,7 +297,7 @@ input[type='range'].range::-moz-range-thumb { width: 14px; height: 14px; border:
 .eq.paused i { animation-play-state: paused; transform: scaleY(0.35); }
 @keyframes eq { 0%, 100% { transform: scaleY(0.3); } 50% { transform: scaleY(1); } }
 
-/* Living gradient blobs (Now Playing + Moments) */
+/* Living gradient blobs (Now Playing) */
 .living { position: absolute; inset: 0; overflow: hidden; background: var(--np-3); transition: --np-1 1.2s var(--ease), --np-2 1.2s var(--ease), --np-3 1.2s var(--ease), --np-vivid 1.2s var(--ease); }
 .living .blob { position: absolute; width: 70vmax; height: 70vmax; border-radius: 50%; opacity: 0.9; will-change: transform; }
 .living .b1 { background: radial-gradient(circle at 30% 30%, var(--np-1), transparent 65%); top: -25vmax; left: -15vmax; animation: drift1 26s ease-in-out infinite alternate; }
@@ -311,7 +311,7 @@ input[type='range'].range::-moz-range-thumb { width: 14px; height: 14px; border:
 :root[data-motion='off'] *, :root[data-motion='off'] *::before, :root[data-motion='off'] *::after { animation: none !important; transition-duration: 0.01ms !important; }
 /* Reduced motion (the in-app setting, or the device asking for it): no large ambient loops.
    Small status signals (spinners, live dots, recording) keep moving: they carry meaning. */
-:root[data-motion='reduced'] :is(.living .blob, .ai-aura i, .ai-shimmer, .ai-rim, .ai-orb *, .ma-orb, .ma-rain, .np-cover-glow.on, .h-blend-art span, .vinyl-spin, .pf-hero-glow) { animation: none !important; }
+:root[data-motion='reduced'] :is(.living .blob, .ai-aura i, .ai-shimmer, .ai-rim, .ai-orb *, .np-cover-glow.on, .h-blend-art span, .vinyl-spin, .pf-hero-glow) { animation: none !important; }
 :root[data-motion='reduced'] .ai-rim::after { animation: none !important; }
 @media (prefers-reduced-motion: reduce) {
   .living .blob, .eq i { animation: none; }

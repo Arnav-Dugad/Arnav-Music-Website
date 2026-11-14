@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { Route, Routes, useLocation, useNavigate, useNavigationType } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation, useNavigate, useNavigationType } from 'react-router-dom'
 import { AnimatePresence, motion, MotionConfig } from 'motion/react'
 import { Sidebar, TabBar } from './components/Shell'
 import { PlayerBar, MiniPlayer, PreviewPill } from './components/PlayerBar'
@@ -35,8 +35,6 @@ const TogetherPage = lazy(() => import('./pages/Together'))
 const FriendsPage = lazy(() => import('./pages/Friends'))
 const ProfilePage = lazy(() => import('./pages/Profile'))
 const AiPage = lazy(() => import('./pages/Ai'))
-const MomentsPage = lazy(() => import('./pages/Moments'))
-const MomentPage = lazy(() => import('./pages/Moment'))
 const Insights = lazy(() => import('./pages/Insights'))
 const SettingsPage = lazy(() => import('./pages/Settings'))
 const Onboarding = lazy(() => import('./pages/Onboarding'))
@@ -151,8 +149,9 @@ export default function App() {
                 <Route path="/add/:code" element={<Page><FriendsPage /></Page>} />
                 <Route path="/u/:handle" element={<Page><ProfilePage /></Page>} />
                 <Route path="/ai" element={<Page><AiPage /></Page>} />
-                <Route path="/moments" element={<Page><MomentsPage /></Page>} />
-                <Route path="/moment/:id" element={<MomentPage />} />
+                {/* Moments were retired: old links land on Home. */}
+                <Route path="/moments" element={<Navigate to="/" replace />} />
+                <Route path="/moment/:id" element={<Navigate to="/" replace />} />
                 <Route path="/insights" element={<Page><Insights /></Page>} />
                 <Route path="/settings" element={<Page><SettingsPage /></Page>} />
                 <Route path="/settings/:section" element={<Page><SettingsPage /></Page>} />

@@ -1,5 +1,5 @@
 /**
- * Phones: everything that lives in the desktop sidebar (Settings, Taste DNA, Moments, Listen
+ * Phones: everything that lives in the desktop sidebar (Settings, Taste DNA, Listen
  * together, Wrapped, the album wall…) behind one profile button, top-right on the main tabs.
  */
 import { useEffect, useState } from 'react'
@@ -20,7 +20,6 @@ export const useMoreMenu = create<{ open: boolean; set: (open: boolean) => void 
 
 const PLACES: { to: string; label: string; sub: string; icon: IconName; tint: string }[] = [
   { to: '/insights', label: 'Taste DNA', sub: 'Your listening, understood', icon: 'chart', tint: '#4cc9f0' },
-  { to: '/moments', label: 'Moments', sub: 'Immersive scenes + music', icon: 'moments', tint: '#ffa62b' },
   { to: '/together', label: 'Listen together', sub: 'Same song, same second', icon: 'radio', tint: '#3ddc97' },
   { to: '/friends', label: 'Friends', sub: 'Listening now, inbox', icon: 'users', tint: '#f72585' },
   { to: '/replay', label: 'Replay', sub: 'Your top artists & songs', icon: 'story', tint: '#7b2ff7' },

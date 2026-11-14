@@ -149,23 +149,23 @@ At most 6 works per composer and 6 similar soundtracks. No markdown.`
 }
 
 // ── Weather & time moods (Open-Meteo, no key; location only with consent) ─────
-export interface Weather { code: number; temp: number; isDay: boolean; label: string; mood: Mood; moment: string; at: number }
+export interface Weather { code: number; temp: number; isDay: boolean; label: string; mood: Mood; at: number }
 
-export function weatherMood(code: number, temp: number, isDay: boolean, hour = new Date().getHours()): Pick<Weather, 'label' | 'mood' | 'moment'> {
+export function weatherMood(code: number, temp: number, isDay: boolean, hour = new Date().getHours()): Pick<Weather, 'label' | 'mood'> {
   const rain = (code >= 51 && code <= 67) || (code >= 80 && code <= 82)
   const storm = code >= 95
   const snow = (code >= 71 && code <= 77) || code === 85 || code === 86
   const fog = code === 45 || code === 48
   const clear = code <= 1
-  if (storm) return { label: 'Stormy', mood: 'CINEMATIC', moment: 'night_drive' }
-  if (rain) return { label: 'Rainy', mood: 'MELANCHOLY', moment: 'rain' }
-  if (snow) return { label: 'Snowy', mood: 'CALM', moment: 'calm' }
-  if (fog) return { label: 'Foggy', mood: 'CHILL', moment: 'late_night' }
-  if (!isDay || hour >= 22 || hour < 5) return { label: clear ? 'Clear night' : 'Night', mood: 'NIGHT', moment: hour >= 22 || hour < 5 ? 'late_night' : 'night_drive' }
-  if (clear && hour >= 17) return { label: 'Golden hour', mood: 'UPBEAT', moment: 'golden_hour' }
-  if (temp >= 30) return { label: 'Hot', mood: 'PARTY', moment: 'high_energy' }
-  if (clear) return { label: 'Sunny', mood: 'UPBEAT', moment: 'golden_hour' }
-  return { label: 'Cloudy', mood: 'CHILL', moment: 'deep_focus' }
+  if (storm) return { label: 'Stormy', mood: 'CINEMATIC' }
+  if (rain) return { label: 'Rainy', mood: 'MELANCHOLY' }
+  if (snow) return { label: 'Snowy', mood: 'CALM' }
+  if (fog) return { label: 'Foggy', mood: 'CHILL' }
+  if (!isDay || hour >= 22 || hour < 5) return { label: clear ? 'Clear night' : 'Night', mood: 'NIGHT' }
+  if (clear && hour >= 17) return { label: 'Golden hour', mood: 'UPBEAT' }
+  if (temp >= 30) return { label: 'Hot', mood: 'PARTY' }
+  if (clear) return { label: 'Sunny', mood: 'UPBEAT' }
+  return { label: 'Cloudy', mood: 'CHILL' }
 }
 
 export async function fetchWeather(lat: number, lon: number): Promise<Weather> {

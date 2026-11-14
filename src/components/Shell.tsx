@@ -15,7 +15,6 @@ export const NAV: { to: string; label: string; icon: IconName; end?: boolean }[]
   { to: '/', label: 'Home', icon: 'home', end: true },
   { to: '/explore', label: 'Explore', icon: 'compass' },
   { to: '/ai', label: 'Arnav AI', icon: 'sparkles' },
-  { to: '/moments', label: 'Moments', icon: 'moments' },
   { to: '/library', label: 'Library', icon: 'library' },
 ]
 
@@ -114,8 +113,9 @@ function FriendsBadge() {
   return null
 }
 
-/** Phones: Friends takes the Moments slot (Moments stays in Home and ⌘K). */
-export const TABS: typeof NAV = [NAV[0], NAV[1], { to: '/friends', label: 'Friends', icon: 'users' }, NAV[2], NAV[4]]
+/** Phones: Home, Explore, Friends, Arnav AI, Library. */
+const navTo = (to: string) => NAV.find((n) => n.to === to)!
+export const TABS: typeof NAV = [navTo('/'), navTo('/explore'), { to: '/friends', label: 'Friends', icon: 'users' }, navTo('/ai'), navTo('/library')]
 
 export function syncLabel(s: string) {
   switch (s) {

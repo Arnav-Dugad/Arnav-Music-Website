@@ -6,7 +6,6 @@ import { LikeButton, openTrackMenu, useNowPlaying } from './TrackRow'
 import { artworkFor } from '../lib/classify'
 import type { Track } from '../lib/types'
 import { player } from '../state/player'
-import type { Moment } from '../lib/moments'
 
 /** Generated mix cover: a deep gradient in the mix's hue, a typographic title and a mosaic. */
 export function MixArt({ title, hue, tracks, eyebrow = 'Arnav' }: { title: string; hue: number; tracks: Track[]; eyebrow?: string }) {
@@ -25,20 +24,6 @@ export function MixArt({ title, hue, tracks, eyebrow = 'Arnav' }: { title: strin
   )
 }
 
-/** Procedural moment cover (no images): the moment's palette as a slow aurora. */
-export function MomentArt({ m, large = false }: { m: Moment; large?: boolean }) {
-  const [a, b, c] = m.palette
-  return (
-    <div className={`moment-art card-art ${large ? 'large' : ''} motion-${m.motion.toLowerCase()}`} style={{ ['--m1' as string]: a, ['--m2' as string]: b, ['--m3' as string]: c }}>
-      <i className="ma-orb o1" /><i className="ma-orb o2" /><i className="ma-orb o3" />
-      {m.motion === 'RAIN' && <span className="ma-rain" />}
-      <div className="ma-text">
-        <span className={`ma-title type-${m.type}`}>{m.title}</span>
-        {large && <span className="ma-sub">{m.subtitle}</span>}
-      </div>
-    </div>
-  )
-}
 
 /** YouTube Music–style "Quick picks": compact rows in columns that scroll sideways. */
 export function QuickPicks({ tracks, context, captions }: { tracks: Track[]; context: string; captions?: Record<string, string> }) {
