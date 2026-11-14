@@ -1,4 +1,4 @@
-import { memo, useEffect, useState, type MouseEvent, type ReactNode } from 'react'
+import { memo, useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useNavigate } from 'react-router-dom'
 import { Artwork, Eq } from './ui'
@@ -165,10 +165,20 @@ export const TrackRow = memo(function TrackRow({ track, index, list, context, nu
 })
 
 const FIRST_ROWS = 40
+/** From this many songs, only the rows on screen (and a margin) are mounted. */
+const VIRTUAL_FROM = 150
+const OVERSCAN = 14
 
-export function TrackList({ tracks, context, number = true, showAlbum = true, captions, playlistId }: { tracks: Track[]; context?: string; number?: boolean; showAlbum?: boolean; captions?: Record<string, ReactNode>; playlistId?: string }) {
-  // Long lists paint the first rows straight away and add the rest in idle time, so a 200-song
-  // playlist opens instantly instead of building every row up front.
+type ListProps = { tracks: Track[]; context?: string; number?: boolean; showAlbum?: boolean; captions?: Record<string, ReactNode>; playlistId?: string }
+
+export function TrackList(props: ListProps) {
+  // Captioned rows differ in height, and those lists are short: they render in full.
+  return props.tracks.length >= VIRTUAL_FROM && !props.captions ? <WindowedTrackList {...props} /> : <ProgressiveTrackList {...props} />
+}
+
+function ProgressiveTrackList({ tracks, context, number = true, showAlbum = true, captions, playlistId }: ListProps) {
+  // Lists paint the first rows straight away and add the rest in idle time, so a long list opens
+  // instantly instead of building every row up front.
   const [limit, setLimit] = useState(FIRST_ROWS)
   useEffect(() => {
     if (limit >= tracks.length) return
@@ -185,6 +195,63 @@ export function TrackList({ tracks, context, number = true, showAlbum = true, ca
       {tracks.slice(0, limit).map((t, i) => (
         <TrackRow key={`${t.id}-${i}`} track={t} index={i} list={tracks} context={context} number={number} showAlbum={showAlbum} caption={captions?.[t.id]} playlistId={playlistId} />
       ))}
+    </div>
+  )
+}
+
+/** The nearest ancestor that scrolls (the page's `.main-scroll`, or a sheet). */
+function scrollParent(el: HTMLElement): HTMLElement | Window {
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    const o = getComputedStyle(p).overflowY
+    if (o === 'auto' || o === 'scroll') return p
+  }
+  return window
+}
+
+/**
+ * Long lists (a 5,000-song playlist, years of Liked Songs) mount only the rows in view plus a
+ * margin; spacers above and below keep the scroll height, so the scrollbar and position are true.
+ */
+function WindowedTrackList({ tracks, context, number = true, showAlbum = true, playlistId }: ListProps) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [rowH, setRowH] = useState(60)
+  const [range, setRange] = useState({ start: 0, end: FIRST_ROWS })
+  const n = tracks.length
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const scroller = scrollParent(el)
+    let raf = 0
+    const update = () => {
+      raf = 0
+      // Row pitch from two neighbouring rows (includes any gap), else one row's height.
+      const rows = el.querySelectorAll<HTMLElement>(':scope > .track-row')
+      const h = rows.length > 1 ? rows[1].offsetTop - rows[0].offsetTop : rows[0]?.offsetHeight || rowH
+      if (h > 0 && Math.abs(h - rowH) > 0.5) setRowH(h)
+      const pitch = h > 0 ? h : rowH
+      const listTop = el.getBoundingClientRect().top
+      const viewTop = scroller === window ? 0 : (scroller as HTMLElement).getBoundingClientRect().top
+      const viewH = scroller === window ? window.innerHeight : (scroller as HTMLElement).clientHeight
+      const start = Math.max(0, Math.min(n, Math.floor((viewTop - listTop) / pitch) - OVERSCAN))
+      const end = Math.max(start, Math.min(n, Math.ceil((viewTop + viewH - listTop) / pitch) + OVERSCAN))
+      setRange((r) => (r.start === start && r.end === end ? r : { start, end }))
+    }
+    const schedule = () => { if (!raf) raf = requestAnimationFrame(update) }
+    update()
+    scroller.addEventListener('scroll', schedule, { passive: true })
+    window.addEventListener('resize', schedule)
+    const ro = new ResizeObserver(schedule)
+    ro.observe(el)
+    return () => { cancelAnimationFrame(raf); scroller.removeEventListener('scroll', schedule); window.removeEventListener('resize', schedule); ro.disconnect() }
+  }, [n, rowH])
+  const start = Math.min(range.start, n)
+  const end = Math.min(Math.max(range.end, start), n)
+  return (
+    <div className="track-list" ref={ref} style={{ paddingTop: start * rowH, paddingBottom: (n - end) * rowH }}>
+      {tracks.slice(start, end).map((t, j) => {
+        const i = start + j
+        return <TrackRow key={`${t.id}-${i}`} track={t} index={i} list={tracks} context={context} number={number} showAlbum={showAlbum} playlistId={playlistId} />
+      })}
     </div>
   )
 }
