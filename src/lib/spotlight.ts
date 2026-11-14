@@ -4,7 +4,7 @@
  * so no component needs to know about it. It lives inside the scrolling page, so it never covers
  * the sidebar, the player or anything opened on top.
  */
-const TARGETS = '.card-art-wrap, .genre-tile, .mood-tile, .track-row, .h-blend, .home-hero, .daylist-art, .set-group, .notice, .np-watch-thumb, [data-spot]'
+const TARGETS = '.card-art-wrap, .genre-tile, .mood-tile, .track-row, .h-song, .q-row, .h-blend, .home-hero, .daylist-art, .set-group, .notice, .np-watch-thumb, [data-spot]'
 
 let started = false
 export function startSpotlight() {
@@ -37,7 +37,7 @@ export function startSpotlight() {
       target = el
       const cs = getComputedStyle(el)
       layer.style.borderRadius = cs.borderRadius
-      layer.dataset.kind = el.matches('.track-row, .set-group, .notice') ? 'soft' : 'bright'
+      layer.dataset.kind = el.matches('.track-row, .h-song, .q-row, .set-group, .notice') ? 'soft' : 'bright'
     }
     layer.style.transform = `translate(${r.left}px, ${r.top}px)`
     layer.style.width = `${r.width}px`
