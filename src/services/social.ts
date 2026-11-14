@@ -232,6 +232,20 @@ export async function deleteProfile() {
 /** Swaps your invite code: links and QR codes you shared before stop working. */
 export async function resetInvite() { applyMe(await api<MePayload>('code', { method: 'POST' })) }
 
+/**
+ * Signing out: a Friends profile linked to the account leaves this device too (signing in again
+ * brings it back), so the next person on a shared computer doesn't post as you. A guest profile
+ * that was never linked stays — it isn't tied to the account.
+ */
+export function forgetLinkedProfile() {
+  if (!st().me?.linked) return
+  ls.del(ID_KEY)
+  const s = ws
+  ws = null
+  try { s?.close() } catch { /* closed */ }
+  useSocial.setState({ status: 'none', me: null, friends: [], incoming: [], outgoing: [], unread: 0, presence: {}, connected: false, following: null, listeners: [], inbox: null, sent: [] })
+}
+
 export const inviteLink = (code: string) => `${location.origin}/add/${code}`
 export const profileLink = (handle: string) => `${location.origin}/u/${handle}`
 

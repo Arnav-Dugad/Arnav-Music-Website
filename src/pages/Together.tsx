@@ -8,7 +8,7 @@ import { ArtistLinks } from '../components/TrackRow'
 import { usePlayer } from '../state/player'
 import { toast } from '../state/ui'
 import { artworkFor } from '../lib/classify'
-import { dismissSuggestion, joinRoom, leaveRoom, listenerName, makeHost, newRoomCode, react, REACTIONS, resync, roomLink, setListenerName, toTrack, useTogether, validCode } from '../services/together'
+import { dismissSuggestion, joinRoom, leaveRoom, listenerName, lockRoom, makeHost, removeFromRoom, newRoomCode, react, REACTIONS, resync, roomLink, setListenerName, toTrack, useTogether, validCode } from '../services/together'
 import { player } from '../state/player'
 import { InviteFriends } from '../components/Social'
 
@@ -16,7 +16,7 @@ import { InviteFriends } from '../components/Social'
 export default function TogetherPage() {
   const { code: param } = useParams()
   const nav = useNavigate()
-  const { code, status, error, members, hostId, you, following, room, suggestions } = useTogether()
+  const { code, status, error, members, hostId, you, following, room, suggestions, hostAway, locked } = useTogether()
   const track = usePlayer((s) => s.queue[s.index]?.track ?? null)
   const playingHere = usePlayer((s) => s.isPlaying)
   const [joinCode, setJoinCode] = useState('')
@@ -107,14 +107,31 @@ export default function TogetherPage() {
         </div>
         <aside className="together-side">
           <div className="together-panel glass">
-            <div className="row" style={{ justifyContent: 'space-between' }}><div className="t-title">In the room</div><span className="t-caption">{members.length}</span></div>
+            <div className="row" style={{ justifyContent: 'space-between' }}>
+              <div className="t-title">In the room</div>
+              <span className="row" style={{ gap: 8 }}>
+                <span className="t-caption">{members.length}</span>
+                {host && (
+                  <button className={`chip ${locked ? 'on' : ''}`} aria-pressed={locked} onClick={() => lockRoom(!locked)} title={locked ? 'Only people already here can come back' : 'Anyone with the link can join'}>
+                    <Icon name={locked ? 'pin' : 'link'} size={13} /> {locked ? 'Locked' : 'Open'}
+                  </button>
+                )}
+              </span>
+            </div>
+            {hostAway && <div className="t-caption" style={{ marginTop: 6 }}>The host’s connection dropped — waiting a few seconds for them to come back.</div>}
+            {!host && locked && <div className="t-caption" style={{ marginTop: 6 }}>The host locked the room: new people can’t join.</div>}
             <ul className="together-members">
               <AnimatePresence initial={false}>
                 {members.map((m) => (
                   <motion.li key={m.id} layout initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 8 }}>
                     <span className="together-avatar" style={{ ['--h' as string]: (m.name.charCodeAt(0) * 37) % 360 }}>{m.name.slice(0, 1).toUpperCase()}</span>
                     <span className="grow ellipsis">{m.name}{m.id === you ? ' (you)' : ''}</span>
-                    {m.id === hostId ? <span className="badge">Host</span> : host ? <button className="link t-caption" onClick={() => makeHost(m.id)}>Make host</button> : null}
+                    {m.id === hostId ? <span className="badge">{hostAway ? 'Host · reconnecting' : 'Host'}</span> : host ? (
+                      <span className="row" style={{ gap: 10 }}>
+                        <button className="link t-caption" onClick={() => makeHost(m.id)}>Make host</button>
+                        <button className="link t-caption" aria-label={`Remove ${m.name} from the room`} onClick={() => removeFromRoom(m.id)}>Remove</button>
+                      </span>
+                    ) : null}
                   </motion.li>
                 ))}
               </AnimatePresence>

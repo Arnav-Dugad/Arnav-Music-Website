@@ -1,6 +1,7 @@
 import { handleApi, type ApiEnv } from '../server/handlers'
 export { ListeningRoom } from './room'
 export { SocialHub } from './social'
+import { previewFor, withPreview } from './preview'
 
 interface Env extends ApiEnv {
   ASSETS: Fetcher
@@ -33,6 +34,12 @@ export default {
       try { return await env.SOCIAL.get(env.SOCIAL.idFromName('hub')).fetch(request) } catch (e) { return unavailable('social', e) }
     }
     if (url.pathname.startsWith('/api/')) return handleApi(request, env, (p) => ctx.waitUntil(p))
-    return env.ASSETS.fetch(request)
+    const page = await env.ASSETS.fetch(request)
+    // Shared links (a song, a public playlist, a room, an invite) preview with their own title and art.
+    if (request.method === 'GET' && (page.headers.get('content-type') ?? '').includes('text/html')) {
+      const p = await previewFor(url, env.SOCIAL).catch(() => null)
+      if (p) return withPreview(page, p, url.href)
+    }
+    return page
   },
 } satisfies ExportedHandler<Env>

@@ -30,13 +30,28 @@ interface TogetherStore {
   /** Guests: following the host (off once you use your own controls). */
   following: boolean
   room: RoomState | null
+  /** The host's connection dropped; they have a few seconds to come back before the room moves on. */
+  hostAway: boolean
+  /** Only people already in the room can join. */
+  locked: boolean
   reactions: Reaction[]
   suggestions: Suggestion[]
 }
 
 export const useTogether = create<TogetherStore>()(() => ({
-  code: null, status: 'idle', error: null, you: null, hostId: null, members: [], following: true, room: null, reactions: [], suggestions: [],
+  code: null, status: 'idle', error: null, you: null, hostId: null, members: [], following: true, room: null, hostAway: false, locked: false, reactions: [], suggestions: [],
 }))
+
+/** Your seat in a room (this tab): a reload or a dropped connection takes it back, host role included. */
+const seatKey = (code: string) => `arnav.roomSeat.${code}`
+function savedSeat(code: string): { seat: string; key: string } | null {
+  try { const v = JSON.parse(sessionStorage.getItem(seatKey(code)) ?? 'null'); return v && typeof v.seat === 'string' && typeof v.key === 'string' ? v : null } catch { return null }
+}
+function saveSeat(code: string, seat: string | null, key?: string) {
+  try { if (seat && key) sessionStorage.setItem(seatKey(code), JSON.stringify({ seat, key })); else sessionStorage.removeItem(seatKey(code)) } catch { /* storage blocked */ }
+}
+/** Whether this connection ever got into the room (a refused join retries only briefly). */
+let welcomed = false
 const st = () => useTogether.getState()
 export const isHost = () => { const s = st(); return !!s.you && s.you === s.hostId }
 
@@ -98,8 +113,11 @@ export function joinRoom(code: string) {
 function connect() {
   if (!wantCode) return
   const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-  const sock = new WebSocket(`${proto}://${location.host}/api/room/${wantCode}?name=${encodeURIComponent(listenerName())}`)
+  const seat = savedSeat(wantCode)
+  const seatQs = seat ? `&seat=${encodeURIComponent(seat.seat)}&key=${encodeURIComponent(seat.key)}` : ''
+  const sock = new WebSocket(`${proto}://${location.host}/api/room/${wantCode}?name=${encodeURIComponent(listenerName())}${seatQs}`)
   ws = sock
+  welcomed = false
   sock.onopen = () => {
     retry = 0
     bestRtt = Infinity
@@ -119,6 +137,12 @@ function connect() {
     if (pingTimer) { clearInterval(pingTimer); pingTimer = null }
     if (!wantCode) return
     if (e.code === 1008) { useTogether.setState({ status: 'error', error: 'Lost the room. Try joining again.' }); return }
+    // The host removed you: don't come back.
+    if (e.code === 4003) return
+    // Another tab took this seat (a duplicated tab): join as yourself instead.
+    if (e.code === 4001) { saveSeat(wantCode, null); retry = 0; setTimeout(connect, 300); return }
+    // Never got in (locked or full): a couple of tries, then say so.
+    if (!welcomed && retry >= 2) { useTogether.setState({ status: 'error', error: 'Couldn’t join — the room may be locked or full.' }); return }
     useTogether.setState({ status: 'reconnecting' })
     // Offline: wait for the network instead of burning retries.
     if (!navigator.onLine) return
@@ -140,7 +164,10 @@ function ping() { send({ t: 'ping', c: Date.now() }) }
 
 export function leaveRoom(announce = true) {
   wantCode = null
-  if (announce) { try { sessionStorage.removeItem('arnav.room') } catch { /* storage blocked */ } }
+  if (announce) {
+    try { sessionStorage.removeItem('arnav.room') } catch { /* storage blocked */ }
+    if (wantCode ?? st().code) saveSeat((wantCode ?? st().code)!, null)
+  }
   const s = ws
   ws = null
   try { s?.close(1000) } catch { /* ignore */ }
@@ -149,7 +176,7 @@ export function leaveRoom(announce = true) {
   unsubs.forEach((u) => u())
   unsubs = []
   if (st().code && announce) toast('You left the room')
-  useTogether.setState({ code: null, status: 'idle', you: null, hostId: null, members: [], room: null, reactions: [], suggestions: [], following: true })
+  useTogether.setState({ code: null, status: 'idle', you: null, hostId: null, members: [], room: null, hostAway: false, locked: false, reactions: [], suggestions: [], following: true })
 }
 
 // ── Messages ────────────────────────────────────────────────────────────────
@@ -157,7 +184,9 @@ function onMessage(m: Record<string, unknown>) {
   switch (m.t) {
     case 'welcome': {
       offset = Number(m.serverNow) - Date.now()
-      useTogether.setState({ status: 'live', you: String(m.you), hostId: (m.hostId as string) ?? null, members: (m.members as RoomMember[]) ?? [] })
+      welcomed = true
+      if (wantCode && typeof m.seatKey === 'string') saveSeat(wantCode, String(m.you), m.seatKey)
+      useTogether.setState({ status: 'live', you: String(m.you), hostId: (m.hostId as string) ?? null, members: (m.members as RoomMember[]) ?? [], hostAway: m.hostAway === true, locked: m.locked === true })
       const room = m.state as RoomState
       useTogether.setState({ room })
       if (isHost()) { if (room.track && !currentTrack()) followHost(room); else broadcast() }
@@ -171,8 +200,14 @@ function onMessage(m: Record<string, unknown>) {
     }
     case 'members': {
       const wasHost = isHost()
-      useTogether.setState({ members: (m.members as RoomMember[]) ?? [], hostId: (m.hostId as string) ?? null })
+      useTogether.setState({ members: (m.members as RoomMember[]) ?? [], hostId: (m.hostId as string) ?? null, hostAway: m.hostAway === true, locked: m.locked === true })
       if (!wasHost && isHost()) { toast('You’re the host now — everyone follows your music'); broadcast() }
+      return
+    }
+    case 'kicked': {
+      if (wantCode) { saveSeat(wantCode, null); try { sessionStorage.removeItem('arnav.room') } catch { /* storage blocked */ } }
+      leaveRoom(false)
+      toast('The host removed you from the room')
       return
     }
     case 'host': {
@@ -299,6 +334,10 @@ export function suggest(t: Track) {
   toast(`Suggested “${t.title}” to the host`)
 }
 export function makeHost(id: string) { send({ t: 'makeHost', id }) }
+/** Host only: lock the room (only people already in it can come back) or open it again. */
+export function lockRoom(on: boolean) { send({ t: 'lock', on }) }
+/** Host only: remove someone from the room. */
+export function removeFromRoom(id: string) { send({ t: 'kick', id }) }
 export function dismissSuggestion(key: string) { useTogether.setState({ suggestions: st().suggestions.filter((s) => s.key !== key) }) }
 export const roomLink = (code: string) => `${location.origin}/together/${code}`
 

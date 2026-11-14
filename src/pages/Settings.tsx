@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { deleteProfile, updateProfile, useSocial } from '../services/social'
+import { deleteProfile, forgetLinkedProfile, updateProfile, useSocial } from '../services/social'
 import { glassFor, usePrefs, type GlassPref } from '../state/prefs'
 import { importPhoneBackup, latestPhoneBackup, type ImportResult, type PhoneBackup } from '../services/phoneBackup'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -89,7 +89,7 @@ function Account() {
             <div className="t-sub ellipsis">{user.email}</div>
             <div className="t-caption">{syncLabel(status)} · {user.providers.includes('google.com') ? 'Google' : 'Email'} account</div>
           </div>
-          <button className="btn btn-secondary" onClick={() => void signOutUser().then(() => toast('Signed out'))}><Icon name="logout" size={15} /> Sign out</button>
+          <button className="btn btn-secondary" onClick={() => { forgetLinkedProfile(); void signOutUser().then(() => toast('Signed out')) }}><Icon name="logout" size={15} /> Sign out</button>
         </div>
       </Group>
       <LinkedAccounts />
