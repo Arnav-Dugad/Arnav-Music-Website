@@ -5,10 +5,11 @@
  */
 import type { PlayEvent, Track } from './types'
 import { buildWrapped, rangeOf, wrappedMonths, wrappedYears, type Wrapped } from './wrapped'
+import { countsAsPlay } from './metrics'
 import type { DeviceInfo, FormFactor, ReplaySnapshot, SnapTrack } from '../state/prefs'
 
 /** Events Replay counts (the same rule as Wrapped: at least 15 seconds). */
-const counts = (e: PlayEvent) => e.listenedMs >= 15_000
+const counts = (e: PlayEvent) => countsAsPlay(e)
 
 /** What kind of device this browser is. */
 export function formFactor(): FormFactor {

@@ -127,9 +127,10 @@ export default function Insights() {
           <Bars values={d.pProfile.dayHistogram} labels={weekLabels} height={200} />
         </div>
         <div className="card-surface dna-card gauges">
-          <Gauge value={d.profile.discoveryRatio} label="Discovery" sub="Songs heard only once" />
-          <Gauge value={d.profile.repeatTendency} label="Repeat" sub="Songs on heavy rotation" />
-          <Gauge value={d.profile.skipRate} label="Skips" sub="Skipped early" />
+          {/* For the period you picked (they used to show all time whatever the picker said). */}
+          <Gauge value={d.pProfile.discoveryRatio} label="Variety" sub="Songs you played just once" />
+          <Gauge value={d.pProfile.repeatTendency} label="Repeat" sub="Songs on heavy rotation" />
+          <Gauge value={d.pProfile.skipRate} label="Skips" sub="Skipped early" />
           {d.discovery != null && <Gauge value={d.discovery} label="This week" sub="Listening that was new" />}
         </div>
       </section>

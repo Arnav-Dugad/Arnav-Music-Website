@@ -1,6 +1,7 @@
 /** "Wrapped", monthly: your month in music, computed on this device from your listening history. */
 import type { PlayEvent, Track, TrackId } from './types'
 import { MOODS, type Mood } from './types'
+import { countsAsPlay, dayStart, leadArtist, nextDay } from './metrics'
 import { hourLabel } from './taste'
 
 export interface WrappedSong { track: Track; plays: number; minutes: number }
@@ -77,7 +78,7 @@ function moodOf(energy: number): Mood {
 /** `top`: how many songs, artists and albums to rank (the story shows 5; Replay shows more). */
 export function buildWrapped(key: string, events: PlayEvent[], track: (id: TrackId) => Track | undefined, top = 5): Wrapped | null {
   const { start, end, label, kind } = rangeOf(key)
-  const inMonth = events.filter((e) => e.startedAt >= start && e.startedAt < end && e.listenedMs >= 15_000)
+  const inMonth = events.filter((e) => e.startedAt >= start && e.startedAt < end && countsAsPlay(e))
   if (!inMonth.length) return null
   const ms = inMonth.reduce((a, e) => a + e.listenedMs, 0)
   // Songs
@@ -89,8 +90,9 @@ export function buildWrapped(key: string, events: PlayEvent[], track: (id: Track
   const byArtist = new Map<string, { name: string; plays: number; ms: number; art: string | null }>()
   for (const e of inMonth) {
     const t = track(e.trackId)
-    const name = t?.artist.split(/,|&/)[0].trim() || e.artistKey
-    const k = name.toLowerCase()
+    // Grouped by the same key Taste DNA uses, so both pages name the same top artist.
+    const name = t ? leadArtist(t.artist) : e.artistKey
+    const k = e.artistKey
     const a = byArtist.get(k) ?? { name, plays: 0, ms: 0, art: t?.artworkUrl ?? null }
     a.plays++; a.ms += e.listenedMs
     byArtist.set(k, a)
@@ -110,7 +112,7 @@ export function buildWrapped(key: string, events: PlayEvent[], track: (id: Track
   // New artists: first ever played this month.
   const before = new Set(events.filter((e) => e.startedAt < start).map((e) => e.artistKey))
   const newKeys = [...new Set(inMonth.map((e) => e.artistKey))].filter((k) => !before.has(k))
-  const newArtists = newKeys.map((k) => { const e = inMonth.find((x) => x.artistKey === k); const t = e ? track(e.trackId) : undefined; return t?.artist.split(/,|&/)[0].trim() ?? k }).slice(0, 12)
+  const newArtists = newKeys.map((k) => { const e = inMonth.find((x) => x.artistKey === k); const t = e ? track(e.trackId) : undefined; return t ? leadArtist(t.artist) : k }).slice(0, 12)
   // Rhythm
   const hours = new Array(24).fill(0)
   const days = new Map<number, number>()
@@ -124,8 +126,8 @@ export function buildWrapped(key: string, events: PlayEvent[], track: (id: Track
   const busiest = [...days.entries()].sort((a, b) => b[1] - a[1])[0]
   let streak = 0
   let run = 0
-  for (let d = start; d < end; d += 86_400_000) {
-    const day = new Date(d); const k = new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime()
+  // Calendar days (a fixed 24 h step drifts across daylight-saving changes).
+  for (let k = dayStart(start); k < end; k = nextDay(k)) {
     if (days.has(k)) { run++; streak = Math.max(streak, run) } else run = 0
   }
   // Mood from the energy of what you played (weighted by time).
@@ -133,14 +135,17 @@ export function buildWrapped(key: string, events: PlayEvent[], track: (id: Track
   let wSum = 0
   for (const e of inMonth) { const t = track(e.trackId); if (t?.energy != null) { eSum += t.energy * e.listenedMs; wSum += e.listenedMs } }
   const prev = kind === 'year' ? rangeOf(String(Number(key) - 1)) : monthRange(monthKey(start - 86_400_000))
-  const prevEvents = events.filter((e) => e.startedAt >= prev.start && e.startedAt < prev.end && e.listenedMs >= 15_000)
+  // A period still in progress is compared with the same stretch of the previous one ("+12% vs this
+  // point last month"), not with a whole finished month.
+  const paceSpan = Math.max(0, Math.min(end, Date.now()) - start)
+  const prevEvents = events.filter((e) => e.startedAt >= prev.start && e.startedAt < Math.min(prev.end, prev.start + paceSpan) && countsAsPlay(e))
   const prevMs = prevEvents.reduce((a, e) => a + e.listenedMs, 0)
   const topOf = (list: PlayEvent[], by: (e: PlayEvent) => string | null) => {
     const m = new Map<string, number>()
     for (const e of list) { const k = by(e); if (k) m.set(k, (m.get(k) ?? 0) + e.listenedMs) }
     return [...m.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
   }
-  const artistName = (e: PlayEvent) => track(e.trackId)?.artist.split(/,|&/)[0].trim() || null
+  const artistName = (e: PlayEvent) => { const t = track(e.trackId); return t ? leadArtist(t.artist) : null }
   const months = kind === 'year' ? Array.from({ length: 12 }, (_, i) => {
     const mk = `${key}-${String(i + 1).padStart(2, '0')}`
     const r = monthRange(mk)

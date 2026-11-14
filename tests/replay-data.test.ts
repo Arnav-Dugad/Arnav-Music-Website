@@ -77,3 +77,13 @@ describe('glass history', () => {
     expect(g().history).toEqual([])
   })
 })
+
+describe('one play rule for every page', async () => {
+  const { countsAsPlay } = await import('../src/lib/metrics')
+  it('counts 30 s or more, and short songs heard to the end', () => {
+    expect(countsAsPlay({ listenedMs: 30_000, completed: false, durationMs: 200_000 })).toBe(true)
+    expect(countsAsPlay({ listenedMs: 29_000, completed: false, durationMs: 200_000 })).toBe(false)
+    expect(countsAsPlay({ listenedMs: 5_000, completed: true, durationMs: 200_000 })).toBe(false) // seeked to the end
+    expect(countsAsPlay({ listenedMs: 20_000, completed: true, durationMs: 25_000 })).toBe(true) // a 25 s interlude
+  })
+})

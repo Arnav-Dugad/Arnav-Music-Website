@@ -1,5 +1,6 @@
 import type { PlayEvent, Track, TrackId } from './types'
 import { artistKey } from './types'
+import { countsAsPlay, dayStart } from './metrics'
 import { isSingle } from './classify'
 
 /** The listener's taste vector, computed entirely on device (port of TasteProfileBuilder). */
@@ -270,7 +271,7 @@ export function topArtists(events: PlayEvent[], tracks: (id: TrackId) => Track |
     const t = tracks(e.trackId)
     const name = t?.artist ?? e.artistKey
     const s = m.get(e.artistKey) ?? { key: e.artistKey, name, plays: 0, ms: 0, artwork: t?.artworkUrl, lastAt: 0 }
-    s.plays += 1
+    if (countsAsPlay(e)) s.plays += 1
     s.ms += e.listenedMs
     s.lastAt = Math.max(s.lastAt, e.startedAt)
     if (!s.artwork && t?.artworkUrl) s.artwork = t.artworkUrl
@@ -285,7 +286,7 @@ export function topTracks(events: PlayEvent[], since = 0): TrackStat[] {
   for (const e of events) {
     if (e.startedAt < since) continue
     const s = m.get(e.trackId) ?? { id: e.trackId, plays: 0, ms: 0, firstAt: e.startedAt, lastAt: e.startedAt }
-    s.plays += 1
+    if (countsAsPlay(e)) s.plays += 1
     s.ms += e.listenedMs
     s.firstAt = Math.min(s.firstAt, e.startedAt)
     s.lastAt = Math.max(s.lastAt, e.startedAt)
@@ -294,7 +295,6 @@ export function topTracks(events: PlayEvent[], since = 0): TrackStat[] {
   return [...m.values()].sort((a, b) => b.ms - a.ms)
 }
 
-const dayStart = (ts: number) => { const d = new Date(ts); d.setHours(0, 0, 0, 0); return d.getTime() }
 
 /** Minutes per local day for the last [days] days (oldest first). */
 export function dailyMinutes(events: PlayEvent[], days = 371, now = Date.now()): { day: number; minutes: number }[] {
@@ -315,7 +315,7 @@ export function dailyMinutes(events: PlayEvent[], days = 371, now = Date.now()):
 }
 
 export function streaks(events: PlayEvent[], now = Date.now()): { current: number; longest: number } {
-  const days = new Set(events.filter((e) => e.listenedMs >= 60_000 || e.completed).map((e) => dayStart(e.startedAt)))
+  const days = new Set(events.filter(countsAsPlay).map((e) => dayStart(e.startedAt)))
   if (!days.size) return { current: 0, longest: 0 }
   const sorted = [...days].sort((a, b) => a - b)
   let longest = 1
