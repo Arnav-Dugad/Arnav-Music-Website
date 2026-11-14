@@ -41,6 +41,7 @@ const SettingsPage = lazy(() => import('./pages/Settings'))
 const Onboarding = lazy(() => import('./pages/Onboarding'))
 const TrackLink = lazy(() => import('./pages/TrackLink'))
 const NotFound = lazy(() => import('./pages/NotFound'))
+const Share = lazy(() => import('./pages/Share'))
 
 function Page({ children }: { children: React.ReactNode }) {
   return (
@@ -77,7 +78,7 @@ export default function App() {
 
   useEffect(() => {
     // Shared links (a song, a listening room) open straight away, even on a first visit.
-    if (!onboardingDone && !/^\/(welcome|track\/|together|add\/|u\/|friends|p\/)/.test(loc.pathname)) nav('/welcome', { replace: true })
+    if (!onboardingDone && !/^\/(welcome|track\/|together|add\/|u\/|friends|p\/|share)/.test(loc.pathname)) nav('/welcome', { replace: true })
   }, [onboardingDone, loc.pathname, nav])
   useEffect(() => { scroller.current?.scrollTo({ top: 0 }) }, [loc.pathname])
   useEffect(() => { if (expanded) usePlayer.getState().setExpanded(false) }, [loc.pathname]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -121,6 +122,7 @@ export default function App() {
                 <Route path="/settings/:section" element={<Page><SettingsPage /></Page>} />
                 <Route path="/welcome" element={<Onboarding />} />
                 <Route path="/track/:videoId" element={<TrackLink />} />
+                <Route path="/share" element={<Share />} />
                 <Route path="*" element={<Page><NotFound /></Page>} />
               </Routes>
             </AnimatePresence>

@@ -8,6 +8,7 @@ import { usePlayer } from './state/player'
 import { reloadForNewVersion } from './components/ErrorBoundary'
 import { useLibrary } from './state/library'
 import { startSync } from './services/sync'
+import { setAppBadge, startPwa } from './lib/pwa'
 import { startReplaySnapshots } from './services/replay'
 import { startMusicVideos } from './services/musicVideos'
 import { startDj } from './services/dj'
@@ -52,12 +53,17 @@ async function boot() {
   installLiquidGlass()
   // Back in your listening room after a reload.
   void import('./services/together').then((m) => m.rejoinAfterReload())
-  void import('./services/social').then((m) => m.startSocial())
+  void import('./services/social').then((m) => {
+    m.startSocial()
+    // Unread friend requests and songs on the installed app's icon.
+    m.useSocial.subscribe((s, p) => { const n = s.incoming.length + s.unread; if (n !== p.incoming.length + p.unread) setAppBadge(n) })
+  })
   // Diagnostics (read-only): window.__arnavLyricsProbe({ q: 'Kesariya Arijit Singh' })
   ;(window as unknown as { __arnavLyricsProbe: unknown }).__arnavLyricsProbe = async (i: { q?: string; v?: string }) => (await import('./services/lyricsProbe')).lyricsProbe(i)
   // Names every visitor's YouTube Topic results taught the server (artists, films).
   void fetchKnownNames().then((r) => { if (r) mergeSharedNames(r) })
   startSync()
+  startPwa()
   startReplaySnapshots()
   startMusicVideos()
   for (const a of useSettings.getState().seedArtists) addKnownArtist(a)

@@ -19,6 +19,7 @@ import { regionCode } from '../state/settings'
 import { useYoutubeReady } from '../services/status'
 import { splitByTrust, verified } from '../services/catalog'
 import { useVoice } from '../services/voice'
+import { YT_LINK, YT_PLAYLIST } from '../lib/links'
 import { useSettings } from '../state/settings'
 
 const GENRES: { name: string; q: string; hue: number }[] = [
@@ -35,8 +36,6 @@ const FILTERS: { value: SearchFilter; label: string }[] = [
   { value: 'ALL', label: 'All' }, { value: 'SONGS', label: 'Songs' }, { value: 'VIDEOS', label: 'Videos' }, { value: 'ARTISTS', label: 'Artists' }, { value: 'PLAYLISTS', label: 'Playlists' },
 ]
 
-const YT_LINK = /(?:youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|embed\/)|youtu\.be\/|music\.youtube\.com\/watch\?(?:.*&)?v=)([A-Za-z0-9_-]{11})/
-const YT_PLAYLIST = /[?&]list=([A-Za-z0-9_-]{12,64})/
 
 function Browse() {
   const nav = useNavigate()

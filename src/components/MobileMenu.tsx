@@ -13,6 +13,7 @@ import { ui } from '../state/ui'
 import { useSync } from '../services/sync'
 import { useSocial } from '../services/social'
 import { syncLabel, TABS, TabDot } from './Shell'
+import { installApp, usePwa } from '../lib/pwa'
 import { expandBars } from '../lib/liquidGlass'
 
 export const useMoreMenu = create<{ open: boolean; set: (open: boolean) => void }>()((set) => ({ open: false, set: (open) => set({ open }) }))
@@ -101,6 +102,7 @@ export function MoreSheet() {
   const user = useAuth((s) => s.user)
   const status = useSync((s) => s.status)
   const pending = useSocial((s) => s.incoming.length + s.unread)
+  const canInstall = usePwa((s) => s.canInstall)
   const go = (to: string) => { set(false); nav(to) }
   return (
     <Sheet open={open} onClose={() => set(false)} title="More" width={460} className="m-more">
@@ -128,6 +130,7 @@ export function MoreSheet() {
         <button onClick={() => go('/settings/playback')}><Icon name="play" size={18} /><span className="grow">Playback & automix</span><Icon name="chevronRight" size={16} className="subtle" /></button>
         <button onClick={() => go('/settings/lyrics')}><Icon name="lyrics" size={18} /><span className="grow">Lyrics</span><Icon name="chevronRight" size={16} className="subtle" /></button>
         <button onClick={() => go('/settings/sync')}><Icon name="cloud" size={18} /><span className="grow">Data & sync</span><Icon name="chevronRight" size={16} className="subtle" /></button>
+        {canInstall && <button onClick={() => { set(false); void installApp() }}><Icon name="download" size={18} /><span className="grow">Install the app</span><Icon name="chevronRight" size={16} className="subtle" /></button>}
         <button onClick={() => { set(false); ui().set({ phoneOpen: true }) }}><Icon name="phone" size={18} /><span className="grow">Continue on another device</span><Icon name="chevronRight" size={16} className="subtle" /></button>
       </div>
     </Sheet>

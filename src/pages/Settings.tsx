@@ -22,6 +22,7 @@ import { useSyncExternalStore } from 'react'
 import { adoptAccount, deleteCloudData, deviceId, refreshAuthUser, syncNow, useSync } from '../services/sync'
 import { useApiStatus } from '../services/status'
 import { syncLabel } from '../components/Shell'
+import { applyUpdate, installApp, isIosSafari, usePwa } from '../lib/pwa'
 import { relative } from '../lib/format'
 
 type Section = 'account' | 'appearance' | 'playback' | 'lyrics' | 'ai' | 'sources' | 'sync' | 'usage' | 'privacy' | 'about'
@@ -527,6 +528,16 @@ function Privacy() {
   )
 }
 
+/** Install the app (or how to, on iPhone and iPad), and a waiting update. */
+function AppRow() {
+  const { canInstall, installed, updateReady } = usePwa()
+  if (updateReady) return <Row title="Update ready" sub="A new version has downloaded"><button className="btn btn-primary btn-sm" onClick={applyUpdate}><Icon name="sync" size={14} /> Reload</button></Row>
+  if (installed) return <Row title="Installed" sub="You’re using Arnav Music as an app. It opens offline with your library, lyrics and artwork you’ve seen." />
+  if (canInstall) return <Row title="Install the app" sub="Its own window and icon, opens offline, unread badge on the icon"><button className="btn btn-primary btn-sm" onClick={() => void installApp()}><Icon name="download" size={14} /> Install</button></Row>
+  if (isIosSafari()) return <Row title="Install the app" sub="In Safari, tap Share, then Add to Home Screen." />
+  return null
+}
+
 function About() {
   return (
     <>
@@ -539,6 +550,7 @@ function About() {
           </div>
         </div>
         <Row title="Android app" sub="Background edition with on-device music, widgets and Android Auto"><a className="btn btn-secondary btn-sm" href="https://github.com/Arnav-Dugad/Arnav-Music-Background/releases/latest" target="_blank" rel="noreferrer"><Icon name="download" size={14} /> Get the APK</a></Row>
+        <AppRow />
         <Row title="Source" sub="Open source on GitHub"><a className="btn btn-ghost btn-sm" href="https://github.com/Arnav-Dugad/Arnav-Music-Website" target="_blank" rel="noreferrer"><Icon name="external" size={14} /> GitHub</a></Row>
         <Row title="Keyboard shortcuts"><button className="btn btn-ghost btn-sm" onClick={() => ui().set({ shortcutsOpen: true })}><Icon name="keyboard" size={14} /> Show</button></Row>
       </Group>

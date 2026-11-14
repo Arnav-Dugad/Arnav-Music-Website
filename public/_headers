@@ -9,6 +9,10 @@
 /manifest.webmanifest
   Cache-Control: public, max-age=3600
 
+# The service worker must be re-checked on every visit, or updates are missed.
+/sw.js
+  Cache-Control: no-cache
+
 # No other site may frame the app (stops clickjacking the invite / Accept buttons). Permissions
 # that nothing uses are off; geolocation (weather moods) and the microphone (voice) stay for this
 # site only. Autoplay and encrypted media are left alone: the YouTube player needs them.
