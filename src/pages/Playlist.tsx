@@ -111,6 +111,7 @@ export default function PlaylistPage() {
 
   if (!view) {
     if (remoteId && remote.loading) return <div className="page"><div style={{ height: 320 }} /><SkeletonRows n={10} /></div>
+    if (id === 'daylist') return <div className="page"><h1 className="sr-only">Daylist</h1><Empty icon="sparkles" title="Your Daylist is on its way" body="Play some music — your Daylist names itself after what you listen to at this time of day." action={<button className="btn btn-primary" onClick={() => nav('/samples')}><Icon name="bolt" size={15} /> Try Samples</button>} /></div>
     return <div className="page"><Empty icon="note" title="Playlist not found" body="It may have been deleted on another device." action={<button className="btn btn-secondary" onClick={() => nav('/library')}>Go to Library</button>} /></div>
   }
   const total = view.tracks.reduce((a, t) => a + (t.durationMs ?? 0), 0)

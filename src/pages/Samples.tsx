@@ -68,6 +68,7 @@ export default function Samples() {
   if (!deck.length) {
     return (
       <div className="page">
+        <h1 className="sr-only">Samples</h1>
         <Empty icon="bolt" title="Samples need a little listening first" body="Play or like a few songs and Samples fills with new music picked for you."
           action={<button className="btn btn-primary" onClick={() => nav('/explore')}><Icon name="compass" size={15} /> Explore music</button>} />
       </div>
