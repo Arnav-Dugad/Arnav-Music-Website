@@ -296,7 +296,10 @@ input[type='range'].range::-moz-range-thumb { width: 14px; height: 14px; border:
 @keyframes drift3 { 0% { transform: translate(-10vmax, 5vmax) scale(0.9); } 100% { transform: translate(12vmax, -8vmax) scale(1.2); } }
 
 :root[data-motion='off'] *, :root[data-motion='off'] *::before, :root[data-motion='off'] *::after { animation: none !important; transition-duration: 0.01ms !important; }
-:root[data-motion='reduced'] .living .blob { animation-duration: 90s; }
+/* Reduced motion (the in-app setting, or the device asking for it): no large ambient loops.
+   Small status signals (spinners, live dots, recording) keep moving: they carry meaning. */
+:root[data-motion='reduced'] :is(.living .blob, .ai-aura i, .ai-shimmer, .ai-rim, .ai-orb *, .ma-orb, .ma-rain, .np-cover-glow.on, .h-blend-art span, .vinyl-spin, .pf-hero-glow) { animation: none !important; }
+:root[data-motion='reduced'] .ai-rim::after { animation: none !important; }
 @media (prefers-reduced-motion: reduce) {
   .living .blob, .eq i { animation: none; }
 }

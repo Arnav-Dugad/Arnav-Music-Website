@@ -1,4 +1,4 @@
-import { settings, useSettings, type ThemeMode } from '../state/settings'
+import { effectiveMotion, useSettings, type ThemeMode } from '../state/settings'
 
 /** Where the last press happened — the circle grows from there. */
 let lastX = typeof window !== 'undefined' ? window.innerWidth / 2 : 0
@@ -20,7 +20,7 @@ export function setThemeWithReveal(mode: ThemeMode) {
     document.documentElement.dataset.theme = resolve(mode)
     useSettings.getState().update({ themeMode: mode })
   }
-  if (!doc.startViewTransition || settings().motion !== 'full' || resolve(mode) === document.documentElement.dataset.theme) { apply(); return }
+  if (!doc.startViewTransition || effectiveMotion() !== 'full' || resolve(mode) === document.documentElement.dataset.theme) { apply(); return }
   const r = Math.hypot(Math.max(lastX, innerWidth - lastX), Math.max(lastY, innerHeight - lastY))
   const t = doc.startViewTransition(apply)
   void t.ready.then(() => {
@@ -40,7 +40,7 @@ type VTDoc = Document & { startViewTransition?: (cb: () => void | Promise<void>)
  */
 export function morphTo(from: HTMLElement | null, run: () => void) {
   const doc = document as VTDoc
-  if (!from || !doc.startViewTransition || settings().motion !== 'full') { run(); return }
+  if (!from || !doc.startViewTransition || effectiveMotion() !== 'full') { run(); return }
   const root = document.documentElement
   from.style.setProperty('view-transition-name', 'cover')
   root.classList.add('vt-morph')

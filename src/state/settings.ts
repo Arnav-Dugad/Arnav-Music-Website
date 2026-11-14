@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { useSyncExternalStore } from 'react'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import type { Mood } from '../lib/types'
 
@@ -148,6 +149,26 @@ export const useSettings = create<SettingsStore>()(
 )
 
 export const settings = () => useSettings.getState()
+
+// ── Motion: the in-app setting, capped by the device's "reduce motion" ───────────────────────
+const reduceQuery = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null
+const osReducesMotion = () => !!reduceQuery?.matches
+const subscribeReduce = (cb: () => void) => { reduceQuery?.addEventListener('change', cb); return () => reduceQuery?.removeEventListener('change', cb) }
+
+/**
+ * The motion level to actually use: the setting (which syncs with the phone app), but never more
+ * than the device allows — when the OS asks for reduced motion, "Full" plays as "Reduced".
+ */
+export function effectiveMotion(level: MotionLevel = settings().motion, osReduce = osReducesMotion()): MotionLevel {
+  return osReduce && level === 'full' ? 'reduced' : level
+}
+export function useMotionLevel(): MotionLevel {
+  const level = useSettings((s) => s.motion)
+  const osReduce = useSyncExternalStore(subscribeReduce, osReducesMotion, () => false)
+  return effectiveMotion(level, osReduce)
+}
+/** True when the device itself asks for less motion (Settings explains why Full acts as Reduced). */
+export const useOsReducesMotion = () => useSyncExternalStore(subscribeReduce, osReducesMotion, () => false)
 
 /** The default hand-over style, from the app-compatible fields. */
 export function defaultAutomix(s: Settings = settings()): AutomixStyle {

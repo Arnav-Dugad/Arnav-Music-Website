@@ -19,7 +19,7 @@ import { useCurrentPalette } from '../hooks'
 import { rescue, setMode } from '../player/controller'
 import { errorCopy } from '../player/youtube'
 import { usePlayer, player, useProgress } from '../state/player'
-import { useSettings } from '../state/settings'
+import { useMotionLevel, useSettings } from '../state/settings'
 import { useIsDesktop } from '../hooks'
 import { ui } from '../state/ui'
 import { artworkFor } from '../lib/classify'
@@ -64,7 +64,8 @@ function SleepBadge() {
 
 /** The artwork: breathes while playing, settles when paused; songs swap with a depth transition. */
 function Cover({ track, playing, showVideo, compact = false }: { track: Track; playing: boolean; showVideo: boolean; compact?: boolean }) {
-  const breathing = useSettings((s) => s.coverBreathing && s.motion !== 'off')
+  const motionLevel = useMotionLevel()
+  const breathing = useSettings((s) => s.coverBreathing) && motionLevel === 'full'
   const vinyl = useSettings((s) => s.vinylMode)
   // On a phone the record peeks out less, so the cover stays on screen.
   // On a phone, or beside the lyrics/queue, the record peeks out less so nothing overlaps.

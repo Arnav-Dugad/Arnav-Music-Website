@@ -6,7 +6,7 @@ import { activeIndex, isIndic, isInstrumental, isRtl, progress, type LyricLine }
 import { Icon } from './Icon'
 import { Spinner } from './ui'
 import { aiAvailability } from '../lib/ai'
-import { useSettings } from '../state/settings'
+import { useMotionLevel } from '../state/settings'
 import { songNotes } from '../lib/aiFeatures'
 
 const LEAD_MS = 140
@@ -42,7 +42,7 @@ export function SyncedLyrics({ lines, translation, romanized, size, dual = false
   const state = useRef({ active: -2, manual: 0, free: false, freeTimer: 0 as unknown as ReturnType<typeof setTimeout> })
   const [, force] = useState(0)
   const beat = useRef({ line: -1, word: -1 })
-  const motionLevel = useSettings((s) => s.motion)
+  const motionLevel = useMotionLevel()
   const energy = usePlayer((s) => s.queue[s.index]?.track.energy ?? 0.5)
   const pulse = useRef(0)
   pulse.current = motionLevel === 'full' ? 0.008 + 0.012 * energy : 0

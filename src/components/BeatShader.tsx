@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { usePlayer, useProgress } from '../state/player'
 import { useLyrics } from '../state/lyrics'
-import { useSettings } from '../state/settings'
+import { useMotionLevel, useSettings } from '../state/settings'
 import { fetchCredits } from '../lib/meta'
 import { songShape } from './Waveform'
 import type { Palette } from '../lib/color'
@@ -48,7 +48,8 @@ const guessBpm = (energy: number) => Math.round(72 + energy * 64)
  */
 export function BeatShader({ track, palette }: { track: Track; palette: Palette }) {
   const ref = useRef<HTMLCanvasElement>(null)
-  const enabled = useSettings((s) => s.beatVisuals && s.motion === 'full')
+  const motion = useMotionLevel()
+  const enabled = useSettings((s) => s.beatVisuals) && motion === 'full'
   const lyrics = useLyrics((s) => s.lyrics)
   const duration = usePlayer((s) => s.duration) || track.durationMs || 0
   const [bpm, setBpm] = useState<number | null>(null)

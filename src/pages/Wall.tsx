@@ -7,6 +7,7 @@ import { trackRegistry } from '../state/tracks'
 import { artworkFor, barlessThumbs } from '../lib/classify'
 import { extractPalette } from '../lib/color'
 import type { Track } from '../lib/types'
+import { effectiveMotion } from '../state/settings'
 
 interface Tile { key: string; title: string; sub: string; art: string; href: string }
 interface Pos { x: number; y: number; z: number; r: number }
@@ -152,11 +153,13 @@ export default function WallPage() {
     if (!live.current.length || live.current.length !== tiles.length) live.current = wallPlace.map((p) => ({ ...p }))
     let raf = 0
     const c = cam.current
+    // Reduced motion: the camera goes straight where you scroll, with no glide or tilt.
+    const reduce = effectiveMotion() !== 'full'
     const frame = () => {
       raf = requestAnimationFrame(frame)
-      c.z += (c.target - c.z) * 0.09
-      c.rx += (c.tx - c.rx) * 0.06
-      c.ry += (c.ty - c.ry) * 0.06
+      c.z += (c.target - c.z) * (reduce ? 1 : 0.09)
+      c.rx += (c.tx - c.rx) * (reduce ? 1 : 0.06)
+      c.ry += (c.ty - c.ry) * (reduce ? 1 : 0.06)
       if (world.current) world.current.style.transform = `translateZ(${c.z}px) rotateX(${c.rx}deg) rotateY(${c.ry}deg)`
       const tgt = targetRef.current
       const pos = live.current
@@ -238,7 +241,7 @@ export default function WallPage() {
       if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') c.target = clamp(c.target - DEPTH)
       if (e.key === 'Escape') leave()
     }
-    const onMove = (e: PointerEvent) => { c.ty = ((e.clientX / innerWidth) - 0.5) * 14; c.tx = -((e.clientY / innerHeight) - 0.5) * 10 }
+    const onMove = (e: PointerEvent) => { if (effectiveMotion() !== 'full') return; c.ty = ((e.clientX / innerWidth) - 0.5) * 14; c.tx = -((e.clientY / innerHeight) - 0.5) * 10 }
     let dragY: number | null = null
     const onDown = (e: PointerEvent) => { if ((e.target as HTMLElement).closest('.wall-hud')) return; dragY = e.clientY }
     const onDrag = (e: PointerEvent) => { if (dragY != null) { c.target = clamp(c.target + (dragY - e.clientY) * 4); dragY = e.clientY } }

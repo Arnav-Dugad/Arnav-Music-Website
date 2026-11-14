@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { trackRegistry } from './state/tracks'
 import { useLibrary } from './state/library'
 import { usePlayer } from './state/player'
-import { useSettings } from './state/settings'
+import { useMotionLevel, useSettings } from './state/settings'
+import { useShallow } from 'zustand/react/shallow'
 import { DEFAULT_PALETTE, extractPalette, type Palette } from './lib/color'
 import { artworkFor } from './lib/classify'
 import type { Track } from './lib/types'
@@ -106,7 +107,9 @@ export function usePageTheme(palette: Palette) {
 
 /** Applies theme, glass, motion and accent to the document root. */
 export function useThemeEffects(palette: Palette) {
-  const { themeMode, glass, motion, accentMode, presetAccent, highContrast } = useSettings()
+  // Only these fields: subscribing to the whole store re-rendered the app on every settings change.
+  const { themeMode, glass, accentMode, presetAccent, highContrast } = useSettings(useShallow((s) => ({ themeMode: s.themeMode, glass: s.glass, accentMode: s.accentMode, presetAccent: s.presetAccent, highContrast: s.highContrast })))
+  const motion = useMotionLevel()
   const prefersLight = useMediaQuery('(prefers-color-scheme: light)')
   useEffect(() => {
     const root = document.documentElement

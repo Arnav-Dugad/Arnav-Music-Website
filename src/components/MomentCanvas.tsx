@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import type { Moment } from '../lib/moments'
 import { usePlayer } from '../state/player'
-import { useSettings } from '../state/settings'
+import { useMotionLevel } from '../state/settings'
 import { parseHex } from '../lib/color'
 
 interface P { x: number; y: number; vx: number; vy: number; r: number; a: number; life: number }
@@ -9,7 +9,7 @@ interface P { x: number; y: number; vx: number; vy: number; r: number; a: number
 /** Procedural environment for a Moment — no images, no AI image generation. */
 export function MomentCanvas({ m }: { m: Moment }) {
   const ref = useRef<HTMLCanvasElement>(null)
-  const motion = useSettings((s) => s.motion)
+  const motion = useMotionLevel()
   useEffect(() => {
     const cv = ref.current
     if (!cv) return

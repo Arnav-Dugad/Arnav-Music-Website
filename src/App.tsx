@@ -10,7 +10,7 @@ import { PhoneSheet } from './components/PhoneLink'
 import { CinematicLyrics } from './components/Cinematic'
 import { DockPanel } from './components/Dock'
 import { useCurrentPalette, useIsDesktop, useThemeEffects } from './hooks'
-import { useSettings } from './state/settings'
+import { useMotionLevel, useSettings } from './state/settings'
 import { usePlayer } from './state/player'
 import { Spinner } from './components/ui'
 import { PageBoundary } from './components/ErrorBoundary'
@@ -68,7 +68,7 @@ export default function App() {
   const palette = useCurrentPalette()
   useThemeEffects(palette)
   useShortcuts()
-  const motionLevel = useSettings((s) => s.motion)
+  const motionLevel = useMotionLevel()
   const onboardingDone = useSettings((s) => s.onboardingDone)
   const hasTrack = usePlayer((s) => s.queue.length > 0)
   const expanded = usePlayer((s) => s.expanded)

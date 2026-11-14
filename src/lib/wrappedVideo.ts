@@ -3,6 +3,7 @@
  * with MediaRecorder — MP4 where the browser supports it, else WebM. Silent: YouTube's audio
  * can't be recorded (and shouldn't be redistributed).
  */
+import { effectiveMotion } from '../state/settings'
 import { artworkFor, barlessThumbs } from './classify'
 import { MOODS } from './types'
 import { clockLine, type Wrapped } from './wrapped'
@@ -168,12 +169,14 @@ function burst(g: CanvasRenderingContext2D, a: WrappedAssets, index: number, t: 
     g.fill()
     g.restore()
   }
-  // A soft flash at the very start of the cut.
-  g.save()
-  g.globalAlpha = Math.max(0, 0.35 * (1 - k * 3))
-  g.fillStyle = '#fff'
-  g.fillRect(0, 0, W, H)
-  g.restore()
+  // A soft flash at the very start of the cut (not when motion is reduced: flashes can hurt).
+  if (effectiveMotion() === 'full') {
+    g.save()
+    g.globalAlpha = Math.max(0, 0.35 * (1 - k * 3))
+    g.fillStyle = '#fff'
+    g.fillRect(0, 0, W, H)
+    g.restore()
+  }
 }
 
 /** Draws slide [id] (the [i]th of the story) at progress [t] (0..1). */

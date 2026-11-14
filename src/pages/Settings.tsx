@@ -6,7 +6,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { motion } from 'motion/react'
 import { Icon, Logo, type IconName } from '../components/Icon'
 import { Notice, PageHeader, Segmented, Sheet, Spinner, Toggle } from '../components/ui'
-import { useSettings, regionCode, defaultAutomix, automixPatch, type Settings, type AutomixStyle, type PlayerBarPreset } from '../state/settings'
+import { useOsReducesMotion, useSettings, regionCode, defaultAutomix, automixPatch, type Settings, type AutomixStyle, type PlayerBarPreset } from '../state/settings'
 import { useAuth } from '../state/auth'
 import { ui, toast } from '../state/ui'
 import { useLibrary } from '../state/library'
@@ -122,6 +122,7 @@ function LinkedAccounts() {
 }
 
 function Appearance() {
+  const osReduce = useOsReducesMotion()
   const s = useSettings()
   return (
     <>
@@ -138,7 +139,7 @@ function Appearance() {
         <Bool k="highContrast" title="Increase contrast" />
       </Group>
       <Group title="Motion">
-        <Row title="Animations" sub="Reduced keeps transitions short; Off removes them"><Segmented id="motion" size="sm" value={s.motion} onChange={(v) => s.update({ motion: v })} options={[{ value: 'full', label: 'Full' }, { value: 'reduced', label: 'Reduced' }, { value: 'off', label: 'Off' }]} /></Row>
+        <Row title="Animations" sub={osReduce && s.motion === 'full' ? 'Your device asks for reduced motion, so Full plays as Reduced. Off removes animations.' : 'Reduced keeps transitions short and stops background motion; Off removes them'}><Segmented id="motion" size="sm" value={s.motion} onChange={(v) => s.update({ motion: v })} options={[{ value: 'full', label: 'Full' }, { value: 'reduced', label: 'Reduced' }, { value: 'off', label: 'Off' }]} /></Row>
         <Bool k="movingGradient" title="Living Now Playing" sub="The background drifts through the cover’s colours" />
         <Bool k="coverBreathing" title="Cover breathing" sub="Artwork settles back when paused" />
         <Bool k="ambientIdle" title="Ambient idle" sub="Now Playing fades to just the music after a few seconds" />

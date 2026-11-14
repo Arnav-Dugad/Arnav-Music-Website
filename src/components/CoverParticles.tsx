@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { proxied } from '../lib/color'
-import { useSettings } from '../state/settings'
+import { useMotionLevel, useSettings } from '../state/settings'
 
 interface P { x: number; y: number; vx: number; vy: number; s: number; c: string; d: number }
 
@@ -8,7 +8,8 @@ interface P { x: number; y: number; vx: number; vy: number; s: number; c: string
 export function CoverParticles({ id, art }: { id: string; art: string }) {
   const ref = useRef<HTMLCanvasElement>(null)
   const prev = useRef<{ id: string; art: string } | null>(null)
-  const enabled = useSettings((s) => s.coverParticles && s.motion === 'full')
+  const motion = useMotionLevel()
+  const enabled = useSettings((s) => s.coverParticles) && motion === 'full'
   useEffect(() => {
     const before = prev.current
     prev.current = { id, art }
