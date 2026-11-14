@@ -852,7 +852,7 @@ function bindMediaSession() {
   const set = (a: MediaSessionAction, h: MediaSessionActionHandler | null) => { try { ms.setActionHandler(a, h) } catch { /* unsupported */ } }
   set('play', () => player().setPlaying(true))
   set('pause', () => player().setPlaying(false))
-  set('nexttrack', () => player().next())
+  set('nexttrack', () => player().next({ from: 'media-keys' }))
   set('previoustrack', () => player().prev(useProgress.getState().position))
   set('seekto', (d) => { if (d.seekTime != null) player().seek(d.seekTime * 1000) })
   set('seekforward', (d) => player().seek(useProgress.getState().position + (d.seekOffset ?? 10) * 1000))

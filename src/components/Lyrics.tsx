@@ -24,7 +24,7 @@ function isHeld(ln: LyricLine, j: number): boolean {
 }
 
 /** Smoothly interpolated playback position (the store ticks at 4 Hz; lyrics animate at 60 fps). */
-function usePositionClock() {
+export function usePositionClock() {
   const ref = useRef({ pos: useProgress.getState().position, at: performance.now() })
   useEffect(() => useProgress.subscribe((s) => { ref.current = { pos: s.position, at: performance.now() } }), [])
   return () => {
@@ -224,7 +224,7 @@ export function PlainLyrics({ lines, translation, size }: { lines: string[]; tra
 }
 
 const LANGS = ['English', 'Hindi', 'Spanish', 'French', 'German', 'Japanese', 'Korean', 'Portuguese', 'Arabic', 'Tamil', 'Telugu', 'Bengali', 'Punjabi', 'Italian', 'Chinese']
-function defaultLanguage() {
+export function defaultLanguage() {
   try {
     const name = new Intl.DisplayNames(['en'], { type: 'language' }).of(navigator.language.split('-')[0])
     return name && LANGS.includes(name) ? name : 'English'

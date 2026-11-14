@@ -52,6 +52,8 @@ export interface Settings {
   miniPlayerLyrics: boolean
   /** Synced lyrics as subtitles over music videos. */
   videoCaptions: boolean
+  /** For songs in another language: a translated line under each caption (Arnav AI). */
+  videoCaptionsTranslate: boolean
   // AI
   aiEnabled: boolean
   /** Spoken AI DJ intros between songs (on-device voice). */
@@ -112,6 +114,7 @@ export const DEFAULT_SETTINGS: Settings = {
   onlineLyrics: true,
   miniPlayerLyrics: true,
   videoCaptions: true,
+  videoCaptionsTranslate: true,
   aiEnabled: true,
   aiDj: false,
   weatherMoods: false,

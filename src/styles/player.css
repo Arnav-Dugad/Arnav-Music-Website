@@ -76,7 +76,10 @@
 .np-sleep { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 99px; background: rgba(255,255,255,0.12); font-size: 12px; font-weight: 650; }
 .np-issue { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); width: min(440px, 92vw); padding: 16px; border-radius: 18px; z-index: 5; }
 .np-panel { position: relative; height: 100%; min-width: 0; display: flex; flex-direction: column; }
-.np.idle .np-top, .np.idle .np-controls, .np.idle .np-extras, .np.idle .np-progress, .np.idle .np-foot, .np.idle .lyr-bar, .np.idle .q-head { opacity: 0; transition: opacity 1.2s var(--ease); }
+/* Theatre / ambient idle: the controls dissolve downward with a soft blur, and come back the same way. */
+.np-top, .np-controls, .np-extras, .np-progress, .np-foot, .np-watch, .lyr-bar, .q-head { transition: opacity .45s var(--ease), transform .55s var(--ease), filter .45s var(--ease); }
+.np.idle .np-top, .np.idle .np-controls, .np.idle .np-extras, .np.idle .np-progress, .np.idle .np-foot, .np.idle .np-watch, .np.idle .lyr-bar, .np.idle .q-head { opacity: 0; transform: translateY(16px); filter: blur(8px); transition: opacity 1.2s var(--ease), transform 1.4s var(--ease), filter 1.2s var(--ease); pointer-events: none; }
+:root[data-motion='off'] .np.idle :is(.np-top, .np-controls, .np-extras, .np-progress, .np-foot, .np-watch, .lyr-bar, .q-head), :root[data-motion='reduced'] .np.idle :is(.np-top, .np-controls, .np-extras, .np-progress, .np-foot, .np-watch, .lyr-bar, .q-head) { transform: none; filter: none; }
 .np.idle { cursor: none; }
 .np-panel-mini { display: flex; align-items: center; gap: 12px; padding: 4px 4px 12px; }
 .np-panel-art { width: 48px; height: 48px; border-radius: 8px; flex: none; }
@@ -317,8 +320,6 @@ html.vt-morph::view-transition-new(root) { animation: vt-in .38s .06s ease both;
 
 /* Lyrics over music videos (drawn on the layer above the video). */
 .vcap { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; padding: 0 6% 7%; }
-.vcap-line { max-width: 88%; text-align: center; }
-.vcap-line span { display: inline; padding: 0.18em 0.5em; line-height: 1.55; font-size: clamp(15px, 2.1vw, 26px); font-weight: 700; letter-spacing: -0.01em; color: #fff; background: rgba(0, 0, 0, 0.55); -webkit-box-decoration-break: clone; box-decoration-break: clone; border-radius: 8px; text-shadow: 0 1px 2px rgba(0,0,0,0.5); }
 .vcap-cc { position: absolute; right: 12px; bottom: 12px; pointer-events: auto; height: 26px; padding: 0 8px; border-radius: 7px; font-size: 11.5px; font-weight: 800; letter-spacing: 0.04em; color: rgba(255,255,255,0.75); background: rgba(0,0,0,0.45); box-shadow: inset 0 0 0 1.5px rgba(255,255,255,0.35); transition: opacity 0.3s, background 0.2s, color 0.2s; }
 .vcap-cc.on { color: #0b0b0f; background: rgba(255,255,255,0.9); box-shadow: none; }
 .vcap-cc { opacity: 0.6; }
@@ -330,3 +331,38 @@ html.vt-morph::view-transition-new(root) { animation: vt-in .38s .06s ease both;
 .seg-ready { display: inline-block; width: 6px; height: 6px; margin-left: 5px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); vertical-align: middle; animation: seg-ready-in 0.5s var(--ease) both; }
 @keyframes seg-ready-in { from { transform: scale(0); } 60% { transform: scale(1.5); } to { transform: none; } }
 :root[data-motion='off'] .seg-ready { animation: none; }
+
+/* Captions: words rise into place as they're sung; word-timed songs also fill, karaoke-style. */
+.vcap-line { display: inline-block; max-width: 88%; text-align: center; padding: 0.22em 0.65em 0.28em; border-radius: 10px; background: rgba(0, 0, 0, 0.55); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+.vcap-main { font-size: clamp(15px, 2.1vw, 26px); font-weight: 700; line-height: 1.4; letter-spacing: -0.01em; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.45); }
+.vw { display: inline-block; opacity: 0.22; transform: translateY(0.38em); filter: blur(3px); transition: opacity .32s ease, transform .5s cubic-bezier(0.2, 0.8, 0.2, 1), filter .35s ease; }
+.vw[data-s='on'], .vw[data-s='done'] { opacity: 1; transform: none; filter: none; }
+.vcap-line[data-timed] .vw { opacity: 0.42; transform: translateY(0.16em); filter: none; }
+.vcap-line[data-timed] .vw[data-s='on'] { opacity: 1; transform: translateY(-0.04em); color: transparent; text-shadow: none; background: linear-gradient(90deg, #fff calc(var(--p, 0) * 100% - 0.1em), rgba(255,255,255,0.42) calc(var(--p, 0) * 100% + 0.25em)); -webkit-background-clip: text; background-clip: text; }
+.vcap-line[data-timed] .vw[data-s='done'] { opacity: 1; transform: none; }
+.vcap-tr { margin-top: 0.15em; font-size: clamp(12px, 1.5vw, 18px); font-weight: 560; font-style: italic; color: rgba(255,255,255,0.8); }
+.vcap-status { position: absolute; left: 12px; bottom: 14px; font-size: 11.5px; font-weight: 600; color: rgba(255,255,255,0.7); }
+:root[data-motion='off'] .vw, :root[data-motion='reduced'] .vw { transform: none !important; filter: none !important; transition: opacity .2s ease; }
+
+/* The video's colours light the whole background (brightest in theatre mode). */
+.np-ambient { position: absolute; inset: 0; z-index: 1; pointer-events: none; opacity: 0.5; transition: opacity 1.6s var(--ease); }
+.np.idle .np-ambient { opacity: 1; }
+.np-ambient-frame { position: absolute; inset: -12%; background-size: cover; background-position: center; filter: blur(70px) saturate(1.6) brightness(0.62); transform: scale(1.15); opacity: 0; transition: opacity 2.5s linear; }
+.np-ambient::after { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 35%, transparent 0%, rgba(0,0,0,0.35) 75%); }
+:root[data-motion='off'] .np-ambient-frame { transition: none; }
+
+/* With a video, Now Playing scrolls: Watch next sits under the video. */
+.np-body.video-scroll { overflow-y: auto; overflow-x: hidden; align-items: flex-start; scrollbar-width: none; overscroll-behavior: contain; }
+.np-body.video-scroll::-webkit-scrollbar { display: none; }
+.np-body.video-scroll .np-stage { min-height: 100%; justify-content: safe center; padding-bottom: 28px; }
+.np-watch { width: min(880px, 86vw); margin-top: 26px; align-self: center; }
+.np-watch-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+.np-watch-head .t-eyebrow { color: rgba(255,255,255,0.6); }
+.np-watch-artist { font-weight: 700; font-size: 15px; }
+.np-watch-row { display: flex; gap: 14px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 6px; scrollbar-width: thin; touch-action: pan-x; }
+.np-watch-card { flex: none; width: 200px; scroll-snap-align: start; display: flex; flex-direction: column; gap: 7px; text-align: left; color: #fff; }
+.np-watch-thumb { position: relative; display: block; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; background: rgba(255,255,255,0.08); box-shadow: 0 10px 26px rgba(0,0,0,0.35); }
+.np-watch-thumb img { width: 100%; height: 100%; object-fit: cover; transition: transform .5s var(--ease); }
+.np-watch-card:hover .np-watch-thumb img, .np-watch-card:focus-visible .np-watch-thumb img { transform: scale(1.06); }
+.np-watch-title { font-size: 13px; font-weight: 600; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+@media (max-width: 640px) { .np-watch { width: 100%; } .np-watch-card { width: 160px; } }

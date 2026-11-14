@@ -32,18 +32,21 @@ function place() {
   const visible = slot && slot.isConnected
   const r = visible ? slot.getBoundingClientRect() : null
   const style = visible ? getComputedStyle(slot) : null
+  // Now Playing can scroll (Watch next under the video): clip to what's on screen in there.
+  const box = visible ? slot.closest('.np-body')?.getBoundingClientRect() : null
+  const clip = r && box ? `clip-path:inset(${Math.max(0, box.top - r.top)}px 0 ${Math.max(0, r.bottom - box.bottom)}px 0 round ${style?.borderRadius ?? '0'});` : ''
   hosts.forEach((host, i) => {
     if (!host) return
     const isActive = i === active
     const fading = mix != null && !isActive
     if (r && style && (isActive || fading)) {
       const op = veil ? 0 : Number(style.opacity) * (fading ? 1 - (mix ?? 0) : 1)
-      host.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;z-index:${fading ? 66 : 65};opacity:${op};${mix == null ? 'transition:opacity .6s ease;' : ''}border-radius:${style.borderRadius};overflow:hidden;pointer-events:none;box-shadow:0 30px 80px rgba(0,0,0,.5);background:#000;`
+      host.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;z-index:${fading ? 66 : 65};opacity:${op};${mix == null ? 'transition:opacity .6s ease;' : ''}border-radius:${style.borderRadius};overflow:hidden;pointer-events:none;box-shadow:0 30px 80px rgba(0,0,0,.5);background:#000;${clip}`
     } else host.style.cssText = PARKED
   })
   if (overlay) {
     overlay.style.cssText = r && style
-      ? `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;z-index:67;opacity:${style.opacity};border-radius:${style.borderRadius};overflow:hidden;pointer-events:none;`
+      ? `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;z-index:67;opacity:${style.opacity};border-radius:${style.borderRadius};overflow:hidden;pointer-events:none;${clip}`
       : 'display:none;'
   }
   if (visible || mix != null) raf = requestAnimationFrame(place)

@@ -659,3 +659,10 @@ button.heat-cell:hover { outline: 2px solid var(--text); outline-offset: 1px; }
 .q-smart { animation: q-twinkle 1.2s var(--ease) both; }
 @keyframes q-twinkle { 0% { transform: scale(0) rotate(-40deg); opacity: 0; } 55% { transform: scale(1.35) rotate(10deg); opacity: 1; } 100% { transform: none; } }
 :root[data-motion='off'] .q-smart { animation: none; }
+
+/* Settings → Usage: accidental skips */
+.skip-table { width: 100%; border-collapse: collapse; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.skip-table th { text-align: left; font-size: 11.5px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-3, var(--text-2)); padding: 0 8px 8px 0; }
+.skip-table td { padding: 7px 8px 7px 0; border-top: 1px solid var(--hairline); }
+.skip-table th:not(:first-child), .skip-table td:not(:first-child) { text-align: right; }
+.skip-table tr.hot td { color: var(--warn, #f5a524); font-weight: 650; }

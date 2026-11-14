@@ -215,7 +215,7 @@ export function CommandPalette() {
     const s = useSettings.getState()
     const base: PaletteItem[] = [
       { id: 'pp', group: 'Playback', icon: 'play', label: usePlayer.getState().wantPlaying ? 'Pause' : 'Play', hint: 'Space', run: () => player().toggle() },
-      { id: 'nx', group: 'Playback', icon: 'nextFill', label: 'Next song', hint: '⇧→', run: () => player().next() },
+      { id: 'nx', group: 'Playback', icon: 'nextFill', label: 'Next song', hint: '⇧→', run: () => player().next({ from: 'palette' }) },
       { id: 'pv', group: 'Playback', icon: 'prevFill', label: 'Previous song', hint: '⇧←', run: () => player().prev(useProgress.getState().position) },
       { id: 'sh', group: 'Playback', icon: 'shuffle', label: 'Shuffle / Smart shuffle', hint: 'S', run: cycleShuffle },
       { id: 'rp', group: 'Playback', icon: 'repeat', label: 'Cycle repeat', hint: 'R', run: () => player().cycleRepeat() },
@@ -361,7 +361,7 @@ export function useShortcuts() {
       const pos = useProgress.getState().position
       switch (e.key) {
         case ' ': if (el.closest('button, a, [role="button"]')) return; e.preventDefault(); p.toggle(); break
-        case 'ArrowRight': if (el.closest('[role="slider"]')) return; e.preventDefault(); if (e.shiftKey) p.next(); else p.seek(pos + 5000); break
+        case 'ArrowRight': if (el.closest('[role="slider"]')) return; e.preventDefault(); if (e.shiftKey) p.next({ from: 'keyboard' }); else p.seek(pos + 5000); break
         case 'ArrowLeft': if (el.closest('[role="slider"]')) return; e.preventDefault(); if (e.shiftKey) p.prev(pos); else p.seek(pos - 5000); break
         case 'ArrowUp': if (!usePlayer.getState().expanded) return; e.preventDefault(); p.setVolume(usePlayer.getState().volume + 5); break
         case 'ArrowDown': if (!usePlayer.getState().expanded) return; e.preventDefault(); p.setVolume(usePlayer.getState().volume - 5); break

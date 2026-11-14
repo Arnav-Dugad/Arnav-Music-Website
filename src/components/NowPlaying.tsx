@@ -1,6 +1,5 @@
 import { AnimatePresence, motion, useDragControls, useMotionValue, useTransform, animate as animateValue, type PanInfo } from 'motion/react'
 import { useEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { Icon } from './Icon'
 import { Artwork, Segmented, Sheet, spring, Spinner } from './ui'
@@ -19,8 +18,7 @@ import { useMoodPick } from '../services/moodAutomix'
 import { useCurrentPalette } from '../hooks'
 import { peekVideo, rescue, setMode, usePairs, videoReady, warmMode } from '../player/controller'
 import { useMusicVideos } from '../services/musicVideos'
-import { useLyrics } from '../state/lyrics'
-import { activeIndex } from '../lib/lyrics'
+import { VideoAmbient, VideoCaptions, WatchNext } from './VideoExtras'
 import { errorCopy } from '../player/youtube'
 import { usePlayer, player, useProgress } from '../state/player'
 import { useMotionLevel, useSettings } from '../state/settings'
@@ -44,43 +42,6 @@ function VideoSlot({ track }: { track: Track }) {
         <img src={src} alt="" onLoad={(e) => { if (poster && e.currentTarget.naturalWidth <= 120) setSrc(art) }} onError={() => setSrc(art)} />
       </div>
     </div>
-  )
-}
-
-/**
- * Lyrics as subtitles over a music video (synced lyrics only), drawn on the layer that sits above
- * the video. The CC button turns them on and off.
- */
-function VideoCaptions() {
-  const on = useSettings((s) => s.videoCaptions)
-  const found = useLyrics((s) => (s.status === 'found' ? s.lyrics : null))
-  const lyrics = found && found.kind === 'synced' ? found : null
-  const [line, setLine] = useState<string | null>(null)
-  const [host, setHost] = useState<HTMLElement | null>(null)
-  useEffect(() => { setHost(document.getElementById('yt-overlay')) }, [])
-  useEffect(() => {
-    if (!on || !lyrics) { setLine(null); return }
-    const lines = lyrics.lines
-    return useProgress.subscribe((p) => {
-      const i = activeIndex(lines, p.position + 150)
-      const text = i >= 0 ? lines[i].text || null : null
-      setLine((prev) => (prev === text ? prev : text))
-    })
-  }, [lyrics, on])
-  if (!host || !lyrics) return null
-  return createPortal(
-    <div className="vcap">
-      <AnimatePresence mode="wait" initial={false}>
-        {on && line && (
-          <motion.div key={line} className="vcap-line" initial={{ opacity: 0, y: 8, filter: 'blur(4px)' }} animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }} exit={{ opacity: 0, y: -6, filter: 'blur(4px)' }} transition={{ duration: 0.28 }}>
-            <span>{line}</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-      <button className={`vcap-cc ${on ? 'on' : ''}`} aria-pressed={on} aria-label={on ? 'Hide lyrics on the video' : 'Show lyrics on the video'} title="Lyrics on the video"
-        onClick={() => useSettings.getState().update({ videoCaptions: !on })}>CC</button>
-    </div>,
-    host,
   )
 }
 
@@ -143,7 +104,7 @@ function Cover({ track, playing, showVideo, compact = false }: { track: Track; p
     }
   }
   const onDragEnd = (_: unknown, info: PanInfo) => {
-    if (info.offset.x < -90 || info.velocity.x < -500) player().next()
+    if (info.offset.x < -90 || info.velocity.x < -500) player().next({ from: 'swipe' })
     else if (info.offset.x > 90 || info.velocity.x > 500) player().prev(0)
     void animateValue(x, 0, spring)
   }
@@ -240,7 +201,7 @@ function IssueCard() {
       <div className="row" style={{ marginTop: 10, flexWrap: 'wrap', gap: 8 }}>
         <button className="btn btn-primary btn-sm" disabled={issue.resolving} onClick={() => void rescue()}>{issue.resolving ? <Spinner size={14} /> : <Icon name="search" size={15} />} Find another upload</button>
         <a className="btn btn-secondary btn-sm" href={`https://music.youtube.com/watch?v=${track.playbackRef}`} target="_blank" rel="noreferrer"><Icon name="external" size={15} /> YouTube Music</a>
-        <button className="btn btn-ghost btn-sm" onClick={() => player().next()}>Skip</button>
+        <button className="btn btn-ghost btn-sm" onClick={() => player().next({ from: 'issue' })}>Skip</button>
       </div>
     </motion.div>
   )
@@ -353,6 +314,7 @@ function NowPlayingView({ track }: { track: Track }) {
         <div className="grain" />
         <div className="np-vignette" />
       </div>
+      {showVideo && <VideoAmbient track={track} />}
       <div className="np-edge" aria-hidden />
 
       {/* Phones: pull down from the header (even over its buttons — a tap is still a tap) to close. */}
@@ -373,10 +335,10 @@ function NowPlayingView({ track }: { track: Track }) {
         </div>
       </header>
 
-      <div className="np-body" onPointerDown={(e) => {
+      <div className={`np-body ${showVideo && !split ? 'video-scroll' : ''}`} onPointerDown={(e) => {
         // …or from anywhere around the cover that isn't a control, the cover itself (swipe to skip) or the lyrics.
         if (desktop || panel) return
-        if ((e.target as HTMLElement).closest('button, a, input, [role="slider"], .np-cover-drag, .np-video, .prog, .vol, .sec-strip, .np-panel')) return
+        if ((e.target as HTMLElement).closest('button, a, input, [role="slider"], .np-cover-drag, .np-video, .prog, .vol, .sec-strip, .np-panel, .np-watch')) return
         dragControls.start(e)
       }}>
         <section className="np-stage">
@@ -408,7 +370,7 @@ function NowPlayingView({ track }: { track: Track }) {
             <motion.button whileTap={{ scale: 0.88 }} className="np-play" aria-label={playing ? 'Pause' : 'Play'} onClick={() => player().toggle()}>
               {buffering ? <Spinner size={30} /> : <PlayPauseIcon playing={playing} size={40} />}
             </motion.button>
-            <motion.button whileTap={{ scale: 0.85 }} className="np-skip" aria-label="Next" onClick={() => player().next()}><Icon name="nextFill" size={34} /></motion.button>
+            <motion.button whileTap={{ scale: 0.85 }} className="np-skip" aria-label="Next" onClick={() => player().next({ from: 'nowplaying' })}><Icon name="nextFill" size={34} /></motion.button>
             <button className={`icon-btn ${repeat !== 'off' ? 'on' : ''}`} aria-label={`Repeat ${repeat}`} onClick={() => player().cycleRepeat()}>
               <Icon name="repeat" size={21} />{repeat === 'one' && <span className="rep1">1</span>}
             </button>
@@ -437,6 +399,7 @@ function NowPlayingView({ track }: { track: Track }) {
             )}
           </div>
           <IssueCard />
+          {showVideo && !split && <WatchNext track={track} />}
         </section>
 
         <AnimatePresence>

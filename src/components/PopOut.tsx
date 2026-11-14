@@ -35,7 +35,7 @@ function MiniWindow() {
         <div className="pip-controls">
           <button className="icon-btn" aria-label="Previous" onClick={() => player().prev(useProgress.getState().position)}><Icon name="prevFill" size={22} /></button>
           <button className="pip-play" aria-label={playing ? 'Pause' : 'Play'} onClick={() => player().toggle()}><PlayPauseIcon playing={playing} size={28} /></button>
-          <button className="icon-btn" aria-label="Next" onClick={() => player().next()}><Icon name="nextFill" size={22} /></button>
+          <button className="icon-btn" aria-label="Next" onClick={() => player().next({ from: 'popout' })}><Icon name="nextFill" size={22} /></button>
         </div>
       </div>
     </div>

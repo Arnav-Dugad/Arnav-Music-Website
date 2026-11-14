@@ -24,6 +24,7 @@ import { useApiStatus } from '../services/status'
 import { syncLabel } from '../components/Shell'
 import { applyUpdate, installApp, isIosSafari, usePwa } from '../lib/pwa'
 import { YouTubeMusicSettings } from '../components/YouTubeMusic'
+import { resetSkipStats, useSkipStats } from '../services/skipUndo'
 import { relative } from '../lib/format'
 
 type Section = 'account' | 'youtube' | 'appearance' | 'playback' | 'lyrics' | 'ai' | 'sources' | 'sync' | 'usage' | 'privacy' | 'about'
@@ -206,6 +207,7 @@ function Lyrics() {
       <LyricsScript />
       <Bool k="miniPlayerLyrics" title="Lyrics in the player bar" sub="The line being sung, under the song title" />
       <Bool k="videoCaptions" title="Lyrics over music videos" sub="Subtitles while a video plays (CC on the video turns them off)" />
+      <Bool k="videoCaptionsTranslate" title="Translate lyrics on videos" sub="For songs in another language, a translated line under each one (Arnav AI, saved per song)" />
     </Group>
   )
 }
@@ -412,7 +414,35 @@ function Usage() {
         <Row title="Lyrics lookups" sub={`${u.lyricsLookups} LRCLIB lookups`} />
       </Group>
       <Notice tone="info">Search results are cached and reused for a day (a week when conserving). Edge caching on the server shares results between visitors, saving quota for everyone.</Notice>
+      <SkipStats />
     </>
+  )
+}
+
+const SKIP_LABEL: Record<string, string> = { bar: 'Player bar ⏭', nowplaying: 'Now Playing ⏭', swipe: 'Swipe on the cover', mini: 'Phone mini player ⏭', popout: 'Pop-out player', cinematic: 'Cinematic lyrics', keyboard: 'Keyboard ⇧→', palette: 'Command palette', 'media-keys': 'Media keys / headphones', issue: 'Skip on an error', other: 'Other' }
+
+/** Accidental skips: which controls get an Undo right after skipping — the ones people mis-tap. */
+function SkipStats() {
+  const { by, since } = useSkipStats()
+  const rows = Object.entries(by).filter(([, c]) => c && c.skips > 0).sort((a, b) => (b[1]!.undos / Math.max(1, b[1]!.late)) - (a[1]!.undos / Math.max(1, a[1]!.late)) || b[1]!.skips - a[1]!.skips)
+  return (
+    <Group title={`Accidental skips · since ${new Date(since).toLocaleDateString()}`}>
+      {rows.length === 0 ? <Row title="Nothing yet" sub="Each skip is counted by the control it came from, with how often you pressed Undo after it." /> : (
+        <div className="set-row col" style={{ alignItems: 'stretch' }}>
+          <table className="skip-table">
+            <thead><tr><th>Control</th><th>Skips</th><th title="Skips after 20 s or more (these offer Undo)">After 20 s</th><th>Undone</th></tr></thead>
+            <tbody>
+              {rows.map(([k, c]) => {
+                const rate = c!.late ? c!.undos / c!.late : 0
+                return <tr key={k} className={rate >= 0.25 && c!.undos >= 2 ? 'hot' : ''}><td>{SKIP_LABEL[k] ?? k}</td><td>{c!.skips}</td><td>{c!.late}</td><td>{c!.undos}{c!.late ? <span className="t-caption"> · {Math.round(rate * 100)}%</span> : null}</td></tr>
+              })}
+            </tbody>
+          </table>
+          <div className="t-caption">A high Undo rate means that control is easy to hit by mistake. Undos are also reported anonymously (just the control and how far into the song) so those spots get fixed.</div>
+          <div><button className="btn btn-ghost btn-sm" onClick={resetSkipStats}>Reset</button></div>
+        </div>
+      )}
+    </Group>
   )
 }
 

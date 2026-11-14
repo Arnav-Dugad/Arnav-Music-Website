@@ -122,7 +122,7 @@ export function PlayerBar() {
           <button className="pb-play" aria-label={playing ? 'Pause' : 'Play'} onClick={() => player().toggle()}>
             {buffering ? <span className="spinner" style={{ width: 20, height: 20, borderTopColor: 'var(--bg)' }} /> : <PlayPauseIcon playing={playing} size={20} />}
           </button>
-          <button className="icon-btn" aria-label="Next" onClick={() => player().next()}><Icon name="nextFill" size={20} /></button>
+          <button className="icon-btn" aria-label="Next" onClick={() => player().next({ from: 'bar' })}><Icon name="nextFill" size={20} /></button>
           <button className={`icon-btn sm ${repeat !== 'off' ? 'on' : ''}`} aria-label={`Repeat ${repeat}`} onClick={() => player().cycleRepeat()}>
             <Icon name="repeat" size={17} />
             {repeat === 'one' && <span className="rep1">1</span>}
@@ -178,7 +178,7 @@ export function MiniPlayer() {
       <button className="icon-btn" aria-label={playing ? 'Pause' : 'Play'} onClick={(e) => { e.stopPropagation(); player().toggle() }}>
         <PlayPauseIcon playing={playing} size={24} />
       </button>
-      <button className="icon-btn" aria-label="Next" onClick={(e) => { e.stopPropagation(); player().next() }}><Icon name="nextFill" size={22} /></button>
+      <button className="icon-btn" aria-label="Next" onClick={(e) => { e.stopPropagation(); player().next({ from: 'mini' }) }}><Icon name="nextFill" size={22} /></button>
       <div className="mini-prog"><Progress variant="line" /></div>
     </motion.div>
   )

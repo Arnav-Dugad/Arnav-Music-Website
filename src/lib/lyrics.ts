@@ -241,3 +241,43 @@ const noise = /\s*[([](?:[^)\]]*(?:feat|ft\.|with |official|lyric|audio|video|vi
 /** "Song - feat. X", "Song ft. X", "Levitating Featuring DaBaby": the guests aren't part of the title. */
 const dashFeat = /\s+(?:-\s+)?(?:feat\.?|ft\.|featuring)\s.*$/i
 export const cleanTitle = (raw: string) => raw.replace(noise, '').replace(dashFeat, '').trim()
+
+// ── What language are these lyrics in? (cheap, offline; for "translate captions") ──────────
+const SCRIPTS: [RegExp, string][] = [
+  [/[\u0900-\u097F]/g, 'Hindi'], [/[\u0A00-\u0A7F]/g, 'Punjabi'], [/[\u0980-\u09FF]/g, 'Bengali'], [/[\u0B80-\u0BFF]/g, 'Tamil'],
+  [/[\u0C00-\u0C7F]/g, 'Telugu'], [/[\uAC00-\uD7AF\u1100-\u11FF]/g, 'Korean'], [/[\u3040-\u30FF]/g, 'Japanese'], [/[\u4E00-\u9FFF]/g, 'Chinese'],
+  [/[\u0600-\u06FF]/g, 'Arabic'], [/[\u0400-\u04FF]/g, 'Russian'],
+]
+const STOPWORDS: Record<string, string[]> = {
+  English: ['the', 'you', 'and', 'i', 'to', 'me', 'my', 'it', 'a', 'in', 'is', 'of', 'that', 'on', 'your', 'be', "i'm", 'all', 'love', 'so', 'we', 'when', 'just', 'what', 'oh', 'baby', 'like', 'know', 'with', 'for', 'this', 'do', "don't", 'can', 'now'],
+  Spanish: ['que', 'de', 'el', 'la', 'y', 'en', 'tu', 'te', 'mi', 'no', 'me', 'lo', 'es', 'por', 'un', 'una', 'los', 'se', 'yo', 'con', 'como', 'pero', 'si', 'más', 'quiero', 'amor', 'tú', 'eres', 'cuando', 'para'],
+  Portuguese: ['que', 'de', 'o', 'a', 'e', 'eu', 'você', 'não', 'meu', 'minha', 'com', 'um', 'uma', 'do', 'da', 'em', 'te', 'se', 'é', 'mais', 'pra', 'quando', 'amor', 'só', 'tá'],
+  French: ['je', 'tu', 'le', 'la', 'les', 'et', 'de', 'des', 'un', 'une', 'que', 'qui', 'est', 'pas', 'ne', 'moi', 'toi', 'mon', 'ma', 'dans', 'pour', 'sur', "c'est", "j'ai", 'on', 'nous', 'vous', 'mais', 'avec', 'plus'],
+  German: ['ich', 'du', 'und', 'die', 'der', 'das', 'nicht', 'ist', 'mich', 'dich', 'mir', 'dir', 'ein', 'eine', 'zu', 'es', 'wir', 'sie', 'auf', 'mit', 'wie', 'was', 'noch', 'nur', 'auch', 'so', 'wenn', 'bin'],
+  Italian: ['che', 'di', 'e', 'il', 'la', 'non', 'mi', 'ti', 'io', 'tu', 'un', 'una', 'per', 'con', 'sei', 'come', 'ma', 'più', 'sono', 'del', 'della', 'amore', 'cosa', 'questo', 'anche'],
+  // Hindi/Urdu songs are very often written in Latin letters.
+  Hindi: ['hai', 'main', 'mein', 'tu', 'tum', 'ki', 'ka', 'ke', 'na', 'ho', 'se', 'ko', 'yeh', 'dil', 'mera', 'meri', 'tera', 'teri', 'hum', 'hai', 'nahi', 'kya', 'jo', 'bhi', 'pyaar', 'kar', 'hoon', 'tujhe', 'mujhe', 'aur', 'kyun'],
+}
+
+/** The language lyrics are most likely in (by script, then by common words), or null when unsure. */
+export function guessLanguage(lines: string[]): string | null {
+  const text = lines.join(' ')
+  // Vowel signs in Indic scripts are "marks", not letters: count them too.
+  const letters = text.replace(/[^\p{L}\p{M}]/gu, '').length
+  if (letters < 20) return null
+  let best: [string, number] | null = null
+  for (const [re, lang] of SCRIPTS) {
+    const n = text.match(re)?.length ?? 0
+    if (n / letters > 0.3 && (!best || n > best[1])) best = [lang, n]
+  }
+  if (best) return best[0] === 'Chinese' && /[\u3040-\u30FF]/.test(text) ? 'Japanese' : best[0]
+  const words = text.toLowerCase().replace(/[^\p{L}'\s]/gu, ' ').split(/\s+/).filter(Boolean)
+  if (words.length < 8) return null
+  const scores = Object.entries(STOPWORDS).map(([lang, list]) => {
+    const set = new Set(list)
+    return [lang, words.filter((w) => set.has(w)).length / words.length] as const
+  }).sort((a, b) => b[1] - a[1])
+  const [top, second] = scores
+  // Confident only when one language clearly leads (Spanish and Portuguese share many words).
+  return top[1] >= 0.12 && top[1] >= second[1] * 1.3 ? top[0] : null
+}

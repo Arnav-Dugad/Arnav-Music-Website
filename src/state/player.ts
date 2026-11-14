@@ -46,10 +46,13 @@ interface PlayerState {
   previewing: Track | null
   engineReady: boolean
   /** The last skip you made yourself (for Undo): the song you left and where you were in it. */
-  lastSkip: { key: string; posMs: number; title: string; at: number } | null
+  lastSkip: { key: string; posMs: number; title: string; at: number; from: SkipSource } | null
   /** Where the next song to load should start (read once by the engine). */
   startMs: number | null
 }
+
+/** Where a skip came from. */
+export type SkipSource = 'bar' | 'nowplaying' | 'swipe' | 'mini' | 'popout' | 'cinematic' | 'keyboard' | 'palette' | 'media-keys' | 'issue' | 'other'
 
 interface PlayerActions {
   play: (tracks: Track[], startIndex?: number, opts?: { context?: string; contextId?: string; shuffle?: boolean; startMs?: number }) => void
@@ -59,7 +62,8 @@ interface PlayerActions {
   addAutoplay: (tracks: Track[]) => void
   /** [startMs]: start that song there (Undo skip, Jump back in) rather than at the top. */
   jumpTo: (i: number, startMs?: number) => void
-  next: (opts?: { auto?: boolean }) => void
+  /** [from]: which control skipped (Undo counts per control find accidental-skip spots). */
+  next: (opts?: { auto?: boolean; from?: SkipSource }) => void
   prev: (positionMs: number) => void
   toggle: () => void
   setPlaying: (p: boolean) => void
@@ -178,7 +182,7 @@ export const usePlayer = create<PlayerState & PlayerActions>()((set, get) => ({
     const s = get()
     if (!s.queue.length) return
     const cur = s.queue[s.index]
-    if (!opts.auto && cur) set({ lastSkip: { key: cur.key, posMs: useProgress.getState().position, title: cur.track.title, at: Date.now() } })
+    if (!opts.auto && cur) set({ lastSkip: { key: cur.key, posMs: useProgress.getState().position, title: cur.track.title, at: Date.now(), from: opts.from ?? 'other' } })
     if (opts.auto && s.repeat === 'one') {
       set({ seekRequest: { ms: 0, n: (s.seekRequest?.n ?? 0) + 1 }, wantPlaying: true })
       return
