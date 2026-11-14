@@ -1,8 +1,9 @@
 import { create } from 'zustand'
 import { idbGet, idbSet } from '../lib/idb'
 import { artistKey, sourceOf, type Like, type PlayEvent, type Playlist, type Track, type TrackId } from '../lib/types'
-import { remember, trackRegistry } from './tracks'
+import { loadTracks, remember, trackRegistry } from './tracks'
 import { usePrefs } from './prefs'
+import { announce, onAnnounce } from '../lib/tabs'
 
 export interface LocalEvent extends PlayEvent {
   /** Local identity (web) used to derive the cloud record id. */
@@ -70,7 +71,8 @@ export const useLibrary = create<LibraryStore>()((set, get) => {
     if (saveTimer) clearTimeout(saveTimer)
     saveTimer = setTimeout(() => {
       const { likes, playlists, events, recentSearches, notInterested, blockedArtists, savedRemote, followedArtists } = get()
-      void idbSet('library', { likes, playlists, events, recentSearches, notInterested, blockedArtists, savedRemote, followedArtists })
+      void idbSet('library', { likes, playlists, events, recentSearches, notInterested, blockedArtists, savedRemote, followedArtists }).then(() => announce('library'))
+      saveTimer = null
     }, 400)
   }
   const touchPlaylist = (id: string, fn: (p: SyncedPlaylist) => SyncedPlaylist) => {
@@ -220,3 +222,15 @@ export function allows(t: Track, s = lib()): boolean {
 }
 
 export const isYouTube = (id: TrackId) => sourceOf(id) === 'YOUTUBE'
+
+// Another tab saved the library: take its copy (unless this tab is about to save its own edit,
+// which then wins and is announced the same way). New songs it learned come along too.
+onAnnounce('library', () => {
+  if (saveTimer) return
+  void (async () => {
+    const saved = await idbGet<Partial<LibraryData>>('library')
+    if (!saved || saveTimer) return
+    await loadTracks()
+    useLibrary.setState((s) => ({ ...EMPTY, ...saved, ready: true, revision: s.revision + 1 }))
+  })()
+})

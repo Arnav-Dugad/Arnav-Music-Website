@@ -1,4 +1,5 @@
 import { Component, type ReactNode } from 'react'
+import { reportError } from '../lib/report'
 import { Icon } from './Icon'
 
 const RELOAD_KEY = 'arnav.chunkReload'
@@ -25,7 +26,7 @@ export class PageBoundary extends Component<{ children: ReactNode; resetKey: str
   static getDerivedStateFromError(error: unknown) { return { error } }
   componentDidCatch(error: unknown) {
     if (isStaleChunk(error)) reloadForNewVersion()
-    else console.error('[Arnav Music] page error', error)
+    else { console.error('[Arnav Music] page error', error); reportError('page', error) }
   }
   componentDidUpdate(prev: { resetKey: string }) {
     if (prev.resetKey !== this.props.resetKey && this.state.error) this.setState({ error: null })
@@ -58,7 +59,7 @@ export class QuietBoundary extends Component<{ children: ReactNode; name: string
   static getDerivedStateFromError(error: unknown) { return { error } }
   componentDidCatch(error: unknown) {
     if (isStaleChunk(error)) reloadForNewVersion()
-    else console.error(`[Arnav Music] ${this.props.name} error`, error)
+    else { console.error(`[Arnav Music] ${this.props.name} error`, error); reportError(this.props.name, error) }
   }
   componentDidUpdate(prev: { resetKey?: string }) {
     if (prev.resetKey !== this.props.resetKey && this.state.error) this.setState({ error: null })
@@ -72,7 +73,7 @@ export class RootBoundary extends Component<{ children: ReactNode }, { error: un
   static getDerivedStateFromError(error: unknown) { return { error } }
   componentDidCatch(error: unknown) {
     if (isStaleChunk(error)) reloadForNewVersion()
-    else console.error('[Arnav Music] app error', error)
+    else { console.error('[Arnav Music] app error', error); reportError('app', error) }
   }
   render() {
     if (!this.state.error) return this.props.children

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { ls } from '../lib/idb'
 import { hadSession, loadFirebase } from '../lib/firebase'
+import { whenLeader } from '../lib/tabs'
 import type { Track } from '../lib/types'
 
 /**
@@ -49,7 +50,8 @@ let started = false
 export function startSync() {
   if (started) return
   started = true
-  const go = () => { void engine().then((m) => m.startSync(), () => { started = false }) }
+  // Every tab follows sign-in; only the leader tab syncs (so tabs don't push over each other).
+  const go = () => { void engine().then((m) => { m.startSync(); whenLeader(() => m.becomeLeader()) }, () => { started = false }) }
   if (hadSession()) { go(); return }
   // Signed out (or never signed in): the SDK comes in when the page is idle, so it's ready
   // by the time someone opens the sign-in sheet.

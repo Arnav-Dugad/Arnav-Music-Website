@@ -325,6 +325,7 @@ let unsubLive: (() => void) | null = null
 let liveUid: string | null = null
 
 export function requestSync(delayMs = 4000) {
+  if (!leader) return
   if (debounce) clearTimeout(debounce)
   debounce = setTimeout(() => { void syncNow() }, delayMs)
 }
@@ -475,6 +476,13 @@ export function refreshAuthUser() {
 }
 
 let started = false
+/** Only one tab runs automatic sync (see lib/tabs.ts); the others still follow sign-in. */
+let leader = false
+export function becomeLeader() {
+  if (leader) return
+  leader = true
+  requestSync(300)
+}
 export function startSync() {
   if (started) return
   started = true

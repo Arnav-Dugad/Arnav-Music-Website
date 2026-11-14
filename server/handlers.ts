@@ -59,9 +59,9 @@ export async function handleApi(request: Request, env: ApiEnv, waitUntil?: WaitU
   const route = url.pathname.replace(/\/+$/, '')
   // Friends and rooms need Durable Objects (the Cloudflare Workers host); other hosts say so clearly.
   if (route.startsWith('/api/social') || route.startsWith('/api/room')) return json({ error: 'social_unavailable', message: 'Friends and listening rooms need the Cloudflare Workers host.' }, 501)
-  if (request.method !== 'GET' && !(request.method === 'POST' && route === '/api/community')) return json({ error: 'method_not_allowed' }, 405)
-  // The YouTube proxy, music-video lookups and lyric votes are for this app only, not other websites.
-  if ((route === '/api/yt' || route === '/api/mv' || (route === '/api/community' && request.method === 'POST')) && !originAllowed(request, env)) {
+  if (request.method !== 'GET' && !(request.method === 'POST' && (route === '/api/community' || route === '/api/log'))) return json({ error: 'method_not_allowed' }, 405)
+  // The YouTube proxy, music-video lookups, lyric votes and crash reports are for this app only.
+  if ((route === '/api/yt' || route === '/api/mv' || route === '/api/log' || (route === '/api/community' && request.method === 'POST')) && !originAllowed(request, env)) {
     return json({ error: 'forbidden_origin', message: 'This API is only for Arnav Music.' }, 403)
   }
 
@@ -85,6 +85,8 @@ export async function handleApi(request: Request, env: ApiEnv, waitUntil?: WaitU
           if (overLimit(`cm:${ip}`, 30, 600_000)) return json({ error: 'slow_down' }, 429, { 'retry-after': '60' })
         }
         return await communityApi(request, url, env)
+      case '/api/log':
+        return await clientLog(request)
       case '/api/mv':
         return await musicVideosApi(request, url, env, waitUntil)
       case '/api/known':
@@ -98,6 +100,22 @@ export async function handleApi(request: Request, env: ApiEnv, waitUntil?: WaitU
   } finally {
     flushKnown(env, waitUntil)
   }
+}
+
+/**
+ * Crash reports from the app (src/lib/report.ts): checked, trimmed and written to the Workers logs
+ * (Cloudflare dashboard → Observability). No storage, no personal data.
+ */
+async function clientLog(request: Request): Promise<Response> {
+  const ip = request.headers.get('cf-connecting-ip') ?? 'x'
+  if (overLimit(`log:${ip}`, 20, 600_000)) return new Response(null, { status: 204 })
+  const text = await request.text()
+  if (text.length > 4000) return new Response(null, { status: 413 })
+  let d: Record<string, unknown>
+  try { d = JSON.parse(text) } catch { return new Response(null, { status: 400 }) }
+  const str = (v: unknown, n: number) => (typeof v === 'string' ? v.slice(0, n) : '')
+  console.error('[client]', JSON.stringify({ where: str(d.where, 40), message: str(d.message, 300), stack: str(d.stack, 1500), path: str(d.path, 120), ua: str(d.ua, 160), country: request.headers.get('cf-ipcountry') ?? null }))
+  return new Response(null, { status: 204 })
 }
 
 /** Health for monitors and the app's status check: configuration plus a live KV round trip. */

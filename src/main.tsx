@@ -9,6 +9,7 @@ import { reloadForNewVersion, RootBoundary } from './components/ErrorBoundary'
 import { useLibrary } from './state/library'
 import { startSync } from './services/sync'
 import { setAppBadge, startPwa } from './lib/pwa'
+import { startErrorReports } from './lib/report'
 import { startReplaySnapshots } from './services/replay'
 import { startMusicVideos } from './services/musicVideos'
 import { startDj } from './services/dj'
@@ -64,6 +65,7 @@ async function boot() {
   void fetchKnownNames().then((r) => { if (r) mergeSharedNames(r) })
   startSync()
   startPwa()
+  startErrorReports()
   startReplaySnapshots()
   startMusicVideos()
   for (const a of useSettings.getState().seedArtists) addKnownArtist(a)

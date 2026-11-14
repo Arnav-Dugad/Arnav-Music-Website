@@ -196,3 +196,6 @@ export function regionCode(): string {
   } catch { /* ignore */ }
   return 'US'
 }
+
+// A change made in another tab arrives here too.
+if (typeof window !== 'undefined') window.addEventListener('storage', (e) => { if (e.key === 'arnav.settings') void useSettings.persist.rehydrate() })

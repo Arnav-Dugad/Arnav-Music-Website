@@ -225,3 +225,6 @@ export function betterReplay(a: ReplaySnapshot, b: ReplaySnapshot | undefined): 
   if (a.minutes !== b.minutes) return a.minutes > b.minutes
   return a.at > b.at && JSON.stringify({ ...a, at: 0 }) !== JSON.stringify({ ...b, at: 0 })
 }
+
+// A change made in another tab arrives here too.
+if (typeof window !== 'undefined') window.addEventListener('storage', (e) => { if (e.key === 'arnav.prefs') void usePrefs.persist.rehydrate() })
