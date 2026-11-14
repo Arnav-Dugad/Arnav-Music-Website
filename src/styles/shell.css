@@ -140,7 +140,7 @@
 .dock .badge { background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.8); }
 @media (max-width: 1279px) { :root { --dock: 340px; } }
 
-.preview-pill { position: fixed; z-index: 121; left: 50%; transform: translateX(-50%); top: 18px; display: flex; align-items: center; gap: 10px; max-width: min(92vw, 460px); padding: 10px 16px; border-radius: 99px; font-size: 13.5px; }
+.preview-pill { position: fixed; z-index: var(--z-preview); left: 50%; transform: translateX(-50%); top: 18px; display: flex; align-items: center; gap: 10px; max-width: min(92vw, 460px); padding: 10px 16px; border-radius: 99px; font-size: 13.5px; }
 .preview-pill b { font-weight: 650; max-width: 200px; }
 
 /* ── Player bar presets ───────────────────────────────────────────────── */

@@ -64,6 +64,19 @@
   --tabbar-h: 64px;
   --gutter: clamp(16px, 3.2vw, 44px);
   --blur: 30px;
+  /* Layers, bottom to top. Change the order here, not in each file. */
+  --z-pill: 55;        /* Together pill: under Now Playing */
+  --z-np: 60;          /* Now Playing */
+  --z-cine: 75;        /* Cinematic lyrics */
+  --z-reactions: 76;   /* room reactions fly over everything you're watching */
+  --z-immersive: 80;   /* Wrapped, Album wall, profile editor */
+  --z-sheet: 100;
+  --z-menu: 110;
+  --z-palette: 115;
+  --z-toast: 120;
+  --z-preview: 121;
+  --z-ripple: 10000;
+  --z-skip: 10001;
 }
 
 :root[data-theme='light'] {
@@ -305,7 +318,7 @@ input[type='range'].range::-moz-range-thumb { width: 14px; height: 14px; border:
 }
 
 /* Toasts */
-.toasts { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--player-h) + 28px); z-index: 120; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
+.toasts { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--player-h) + 28px); z-index: var(--z-toast); display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
 .toast { pointer-events: auto; display: flex; align-items: center; gap: 14px; padding: 11px 12px 11px 18px; border-radius: var(--r-full); font-size: 14px; font-weight: 520; max-width: min(92vw, 520px); }
 
 /* Responsive */

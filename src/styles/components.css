@@ -86,7 +86,7 @@
 .seg-label { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 6px; }
 
 /* ── Sheets / dialogs ──────────────────────────────────────────────────── */
-.sheet-root { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 20px; background: var(--scrim); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+.sheet-root { position: fixed; inset: 0; z-index: var(--z-sheet); display: grid; place-items: center; padding: 20px; background: var(--scrim); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
 .sheet { width: 100%; max-height: min(86vh, 820px); overflow: auto; border-radius: var(--r-xl); padding: 22px; }
 .sheet-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; gap: 12px; }
 @media (max-width: 640px) {
@@ -95,7 +95,7 @@
 }
 
 /* ── Menus ─────────────────────────────────────────────────────────────── */
-.menu-root { position: fixed; inset: 0; z-index: 110; }
+.menu-root { position: fixed; inset: 0; z-index: var(--z-menu); }
 .menu { position: fixed; min-width: 248px; max-width: 300px; padding: 6px; border-radius: 16px; transform-origin: top left; }
 .menu-head { display: flex; gap: 12px; align-items: center; padding: 8px 10px 10px; border-bottom: 1px solid var(--hairline); margin-bottom: 4px; }
 .menu-head .art { width: 42px; height: 42px; border-radius: 8px; flex: none; }

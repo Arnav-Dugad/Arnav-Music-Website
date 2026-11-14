@@ -160,7 +160,7 @@ button.fr-row:active { transform: scale(0.99); }
 .pf-artist:hover .art { transform: scale(1.05); }
 .pf-artist > span { max-width: 100%; }
 .pf-blend { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 2px 12px; }
-.pf-edit-scrim { position: fixed; inset: 0; z-index: 80; background: var(--scrim); backdrop-filter: blur(6px); display: grid; place-items: center; padding: 16px; }
+.pf-edit-scrim { position: fixed; inset: 0; z-index: var(--z-immersive); background: var(--scrim); backdrop-filter: blur(6px); display: grid; place-items: center; padding: 16px; }
 .pf-edit { width: min(440px, 100%); padding: 20px; border-radius: var(--r-xl); display: flex; flex-direction: column; gap: 14px; box-shadow: var(--shadow-3); }
 .pf-colors { display: flex; flex-wrap: wrap; gap: 8px; }
 .pf-colors button { width: 26px; height: 26px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(255,255,255,.2); transition: transform .2s var(--ease-out); }

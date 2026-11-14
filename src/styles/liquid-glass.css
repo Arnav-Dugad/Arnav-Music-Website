@@ -146,7 +146,7 @@
 :root[data-glass-style='clear'] .pbar, :root[data-glass-style='clear'] .mini, :root[data-glass-style='clear'] .tabbar { text-shadow: 0 1px 2px rgba(0,0,0,0.35); }
 
 /* ── Press: a ripple of light through the glass (src/lib/liquidGlass.ts) ─── */
-.lg-ripple { position: fixed; z-index: 10000; pointer-events: none; overflow: hidden; isolation: isolate; }
+.lg-ripple { position: fixed; z-index: var(--z-ripple); pointer-events: none; overflow: hidden; isolation: isolate; }
 .lg-ripple i { position: absolute; border-radius: 50%; mix-blend-mode: plus-lighter;
   background: radial-gradient(circle, rgba(255,255,255,0) 30%, rgba(255,255,255,0.28) 56%, rgba(255,255,255,0.1) 66%, rgba(255,255,255,0) 72%); }
 :root[data-theme='light'] .lg-ripple i { mix-blend-mode: normal; background: radial-gradient(circle, rgba(255,255,255,0) 30%, rgba(255,255,255,0.7) 56%, rgba(255,255,255,0.25) 66%, rgba(255,255,255,0) 72%); }

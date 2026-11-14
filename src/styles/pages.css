@@ -383,7 +383,7 @@ button.heat-cell:hover { outline: 2px solid var(--text); outline-offset: 1px; }
 .album-missing-row .tnum { min-width: 22px; font-variant-numeric: tabular-nums; }
 
 /* ── Wrapped story ─────────────────────────────────────────────────────── */
-.wrapped { position: fixed; inset: 0; z-index: 80; background: #050507; display: flex; flex-direction: column; align-items: center; padding: 14px 16px calc(14px + env(safe-area-inset-bottom)); gap: 12px; color: #fff; }
+.wrapped { position: fixed; inset: 0; z-index: var(--z-immersive); background: #050507; display: flex; flex-direction: column; align-items: center; padding: 14px 16px calc(14px + env(safe-area-inset-bottom)); gap: 12px; color: #fff; }
 .wrapped-top { width: min(100%, 520px); display: flex; align-items: center; gap: 10px; }
 .wrapped-stage { position: relative; flex: 1; min-height: 0; aspect-ratio: 9 / 16; max-width: 100%; border-radius: 26px; overflow: hidden; box-shadow: 0 40px 120px rgba(0,0,0,.6); }
 .wrapped-stage canvas { width: 100%; height: 100%; display: block; }
@@ -399,7 +399,7 @@ button.heat-cell:hover { outline: 2px solid var(--text); outline-offset: 1px; }
 @media (max-width: 600px) { .wrapped-stage { border-radius: 18px; width: 100%; flex: none; height: auto; max-height: calc(100dvh - 130px); } }
 
 /* ── Album wall ───────────────────────────────────────────────────────── */
-.wall { position: fixed; inset: 0; z-index: 80; background: radial-gradient(120% 90% at 50% 40%, #1a1730 0%, #07070b 70%); overflow: hidden; touch-action: none; user-select: none; }
+.wall { position: fixed; inset: 0; z-index: var(--z-immersive); background: radial-gradient(120% 90% at 50% 40%, #1a1730 0%, #07070b 70%); overflow: hidden; touch-action: none; user-select: none; }
 .wall-hud { position: absolute; z-index: 2; top: 16px; left: 16px; display: flex; gap: 12px; align-items: center; color: #fff; }
 .wall-scene { position: absolute; inset: 0; perspective: 1100px; perspective-origin: 50% 46%; }
 .wall-world { position: absolute; left: 50%; top: 50%; transform-style: preserve-3d; will-change: transform; }
@@ -462,10 +462,10 @@ button.heat-cell:hover { outline: 2px solid var(--text); outline-offset: 1px; }
 .together-invite .qr svg { width: 100%; height: 100%; }
 .together-sugg { display: flex; align-items: center; gap: 8px; }
 .together-resync { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-radius: 16px; margin-top: 16px; }
-.together-pill { position: fixed; z-index: 70; top: 14px; right: 16px; display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 14px; border-radius: 99px; font-size: 13px; font-weight: 680; color: var(--text); }
+.together-pill { position: fixed; z-index: var(--z-pill); top: 14px; right: 16px; display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 14px; border-radius: 99px; font-size: 13px; font-weight: 680; color: var(--text); }
 .together-pill.reconnecting .dot, .together-pill.connecting .dot { background: #f5b74a; }
 .together-pill.error .dot { background: #ef5b5b; animation: none; }
-.react-layer { position: fixed; z-index: 75; right: 40px; bottom: calc(var(--player-h) + 60px); width: 120px; height: 0; pointer-events: none; }
+.react-layer { position: fixed; z-index: var(--z-reactions); right: 40px; bottom: calc(var(--player-h) + 60px); width: 120px; height: 0; pointer-events: none; }
 .react-bubble { position: absolute; bottom: 0; left: 40px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .react-emoji { font-size: 38px; filter: drop-shadow(0 6px 14px rgba(0,0,0,.35)); }
 .react-name { font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 99px; background: rgba(0,0,0,.5); color: #fff; white-space: nowrap; }
