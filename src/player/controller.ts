@@ -108,6 +108,8 @@ interface Mix {
   token: number
 }
 let mix: Mix | null = null
+const SLEEP_FADE_MS = 30_000
+let sleepFading = false
 let mixToken = 0
 /** Queue key the engine already started on the other deck (so syncTrack doesn't reload it). */
 let handoffKey: string | null = null
@@ -496,7 +498,7 @@ async function maybeRadio() {
     const exclude = new Set(p.queue.map((q) => q.track.id))
     const recs = await radioFor(it.track, { exclude, limit: 15 })
     if (recs.length && player().queue[player().index]?.key === it.key) {
-      player().addToQueue(recs.map((r) => r.track))
+      player().addAutoplay(recs.map((r) => r.track))
       if (!player().context?.includes('radio')) player().patch({ context: `${it.track.artist} radio` })
     }
   } finally {
@@ -528,7 +530,12 @@ function tick() {
   const d = yd || p.duration
   if (p.isPlaying && d > 0 && pos > d * 0.5) void maybeRadio()
   if (p.isPlaying && !p.isBuffering && d > 0) planAutomix(pos, d)
+  // Sleep timer: the music fades slowly over its last 30 seconds instead of stopping short.
+  const sleepLeft = p.sleep?.mode === 'time' ? p.sleep.endsAt - Date.now() : Infinity
+  if (sleepLeft > 0 && sleepLeft < SLEEP_FADE_MS && p.isPlaying && !mix) { sleepFading = true; yt?.setVolume(Math.round(targetVolume() * (sleepLeft / SLEEP_FADE_MS))) }
+  else if (sleepFading && sleepLeft === Infinity) { sleepFading = false; if (!mix) yt?.setVolume(targetVolume()) } // timer cancelled mid-fade
   if (p.sleep?.mode === 'time' && Date.now() >= p.sleep.endsAt) {
+    sleepFading = false
     p.patch({ sleep: null })
     cancelMix()
     void fade(0, 2500).then(() => { player().setPlaying(false); setTimeout(() => yt?.setVolume(targetVolume()), 400) })
@@ -552,7 +559,8 @@ function updateMediaSession(t: Track) {
     album: t.album ?? 'Arnav Music',
     artwork: [
       { src: `https://i.ytimg.com/vi/${t.playbackRef}/mqdefault.jpg`, sizes: '320x180', type: 'image/jpeg' },
-      { src: art, sizes: '1280x720', type: 'image/jpeg' },
+      // Album art from Apple Music is square; a YouTube frame is 16:9.
+      { src: art, sizes: /mzstatic\.com/.test(art) ? '600x600' : '1280x720', type: 'image/jpeg' },
     ],
   })
 }

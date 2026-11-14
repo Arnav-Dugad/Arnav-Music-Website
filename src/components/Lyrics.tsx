@@ -142,6 +142,15 @@ export function SyncedLyrics({ lines, translation, romanized, size, dual = false
     const s = state.current
     s.free = true
     s.manual += delta
+    // Stop at the ends: the first line can come down to the singing spot, the last up to it.
+    const lines = lineRefs.current.filter((x): x is HTMLDivElement => !!x)
+    const cur = lineRefs.current[Math.max(0, s.active)]
+    if (lines.length && cur) {
+      const mid = cur.offsetTop + cur.offsetHeight / 2
+      const max = mid - (lines[0].offsetTop + lines[0].offsetHeight / 2)
+      const min = mid - (lines[lines.length - 1].offsetTop + lines[lines.length - 1].offsetHeight / 2)
+      s.manual = Math.min(max, Math.max(min, s.manual))
+    }
     box.current?.classList.add('free')
     layout(s.active)
     clearTimeout(s.freeTimer)
@@ -159,7 +168,7 @@ export function SyncedLyrics({ lines, translation, romanized, size, dual = false
     <div
       ref={box}
       className={`lyr synced ${size} ${dual ? 'dual' : ''}`}
-      onWheel={(e) => enterFree(-e.deltaY)}
+      onWheel={(e) => enterFree(-(e.deltaMode === 1 ? e.deltaY * 32 : e.deltaMode === 2 ? e.deltaY * (box.current?.clientHeight ?? 600) : e.deltaY))}
       onTouchStart={(e) => { touch.current = e.touches[0].clientY }}
       onTouchMove={(e) => { if (touch.current != null) { const y = e.touches[0].clientY; enterFree(y - touch.current); touch.current = y } }}
       onTouchEnd={() => { touch.current = null }}

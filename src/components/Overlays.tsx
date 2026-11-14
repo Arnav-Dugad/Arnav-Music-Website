@@ -117,7 +117,7 @@ export function TrackMenu() {
             {t.album && <MenuItem icon="album" label={`Go to ${t.album}`} onClick={() => { player().setExpanded(false); nav(albumHref(t)) }} />}
             {t.id.startsWith('yt:') && <MenuItem icon="credits" label="View credits" onClick={() => { player().setExpanded(false); nav(`/credits/${encodeURIComponent(t.id)}`) }} />}
             {menu.playlistId && menu.playlistId.startsWith('arn_') && <MenuItem icon="minus" label="Remove from this playlist" onClick={() => lib().removeFromPlaylist(menu.playlistId!, t.id)} />}
-            {menu.queueKey && <MenuItem icon="minus" label="Remove from queue" onClick={() => player().remove(menu.queueKey!)} />}
+            {menu.queueKey && <MenuItem icon="minus" label="Remove from queue" onClick={() => { const before = usePlayer.getState().queue; player().remove(menu.queueKey!); toast(`Removed “${t.title}”`, { label: 'Undo', run: () => player().restore(before) }) }} />}
             <div className="menu-sep" />
             <MenuItem icon="send" label="Send to friends" onClick={() => useSendSheet.getState().open(t)} />
             <MenuItem icon="share" label="Share" onClick={() => shareTrack(t)} />

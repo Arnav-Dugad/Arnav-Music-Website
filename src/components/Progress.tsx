@@ -33,8 +33,11 @@ export function Progress({ variant = 'full', showTimes = true }: { variant?: 'fu
     player().seek(r * dur)
   }
   const onKey = (e: React.KeyboardEvent) => {
-    if (e.key === 'ArrowRight') { e.preventDefault(); player().seek(pos + 5000) }
-    if (e.key === 'ArrowLeft') { e.preventDefault(); player().seek(pos - 5000) }
+    // Like a native slider: arrows 5 s, Page Up/Down 30 s, Home/End to the start or the end.
+    const to = e.key === 'ArrowRight' ? pos + 5000 : e.key === 'ArrowLeft' ? pos - 5000 : e.key === 'PageUp' ? pos + 30_000 : e.key === 'PageDown' ? pos - 30_000 : e.key === 'Home' ? 0 : e.key === 'End' && dur ? dur - 1000 : null
+    if (to == null) return
+    e.preventDefault()
+    player().seek(Math.max(0, dur ? Math.min(dur - 500, to) : to))
   }
   if (variant === 'line') {
     return <div className="prog-line"><i style={{ transform: `scaleX(${shown})` }} /></div>
@@ -55,6 +58,7 @@ export function Progress({ variant = 'full', showTimes = true }: { variant?: 'fu
         onPointerDown={down}
         onPointerMove={move}
         onPointerUp={up}
+        onPointerCancel={() => setDrag(null)}
         onPointerLeave={() => setHover(null)}
         onKeyDown={onKey}
       >

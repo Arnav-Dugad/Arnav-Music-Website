@@ -8,6 +8,7 @@ export type Panel = 'lyrics' | 'queue' | null
 export type Issue = { kind: 'unavailable'; code: number; trackId: string; resolving: boolean } | null
 export type SleepTimer = { mode: 'time'; endsAt: number; minutes: number } | { mode: 'track' } | { mode: 'queue' } | null
 
+/** `source`: 'you' (Play next / Add to queue), 'autoplay' (endless radio), or unset (the album or playlist). */
 export interface QueueItem { track: Track; key: string; source?: string }
 
 interface PlayerState {
@@ -48,6 +49,8 @@ interface PlayerActions {
   play: (tracks: Track[], startIndex?: number, opts?: { context?: string; contextId?: string; shuffle?: boolean }) => void
   playNext: (tracks: Track[]) => void
   addToQueue: (tracks: Track[]) => void
+  /** Endless radio's picks, at the very end and labelled Autoplay. */
+  addAutoplay: (tracks: Track[]) => void
   jumpTo: (i: number) => void
   next: (opts?: { auto?: boolean }) => void
   prev: (positionMs: number) => void
@@ -58,6 +61,8 @@ interface PlayerActions {
   move: (from: number, to: number) => void
   setUpcoming: (items: QueueItem[]) => void
   clearUpcoming: () => void
+  /** Puts back an earlier queue (Undo), if the song playing now is still in it. */
+  restore: (queue: QueueItem[]) => void
   toggleShuffle: () => void
   cycleRepeat: () => void
   setVolume: (v: number) => void
@@ -82,7 +87,7 @@ function shuffled<T>(arr: T[]): T[] {
   return a
 }
 
-const saved = ls.get<{ queue: Track[]; index: number; volume: number; muted: boolean; repeat: Repeat; shuffle: boolean; mode: MediaVariant; context: string | null; contextId?: string | null } | null>('arnav.player', null)
+const saved = ls.get<{ queue: Track[]; index: number; volume: number; muted: boolean; repeat: Repeat; shuffle: boolean; mode: MediaVariant; context: string | null; contextId?: string | null; rate?: number } | null>('arnav.player', null)
 
 export const usePlayer = create<PlayerState & PlayerActions>()((set, get) => ({
   queue: saved?.queue?.map((t) => item(t)) ?? [],
@@ -96,7 +101,8 @@ export const usePlayer = create<PlayerState & PlayerActions>()((set, get) => ({
   duration: 0,
   volume: saved?.volume ?? 80,
   muted: saved?.muted ?? false,
-  rate: 1,
+  // Your playback speed stays between visits (0.5–2×).
+  rate: saved?.rate && saved.rate >= 0.5 && saved.rate <= 2 ? saved.rate : 1,
   expanded: false,
   panel: null,
   issue: null,
@@ -130,14 +136,26 @@ export const usePlayer = create<PlayerState & PlayerActions>()((set, get) => ({
     const s = get()
     if (!s.queue.length) return get().play(tracks)
     const q = [...s.queue]
-    q.splice(s.index + 1, 0, ...tracks.map((t) => item(t)))
+    q.splice(s.index + 1, 0, ...tracks.map((t) => item(t, 'you')))
     set({ queue: q })
   },
   addToQueue(tracks) {
     remember(tracks)
     const s = get()
     if (!s.queue.length) return get().play(tracks)
-    set({ queue: [...s.queue, ...tracks.map((t) => item(t))] })
+    // Like Spotify: songs you add play after the ones you already added, before the rest of the
+    // album or playlist.
+    let at = s.index + 1
+    while (at < s.queue.length && s.queue[at].source === 'you') at++
+    const q = [...s.queue]
+    q.splice(at, 0, ...tracks.map((t) => item(t, 'you')))
+    set({ queue: q })
+  },
+  addAutoplay(tracks) {
+    remember(tracks)
+    const s = get()
+    if (!s.queue.length) return get().play(tracks)
+    set({ queue: [...s.queue, ...tracks.map((t) => item(t, 'autoplay'))] })
   },
   jumpTo(i) {
     const s = get()
@@ -188,6 +206,12 @@ export const usePlayer = create<PlayerState & PlayerActions>()((set, get) => ({
     set({ queue: [...s.queue.slice(0, s.index + 1), ...items] })
   },
   clearUpcoming: () => set((s) => ({ queue: s.queue.slice(0, s.index + 1) })),
+  restore(queue) {
+    const s = get()
+    const cur = s.queue[s.index]?.key
+    const index = queue.findIndex((q) => q.key === cur)
+    if (index >= 0) set({ queue, index })
+  },
   toggleShuffle() {
     const s = get()
     if (!s.queue.length) return set({ shuffle: !s.shuffle })
@@ -229,12 +253,12 @@ export const currentTrack = (s = usePlayer.getState()): Track | null => s.queue[
 // Persist the queue (like the app's playback_state) — cheap, throttled.
 let persistTimer: ReturnType<typeof setTimeout> | null = null
 usePlayer.subscribe((s, prev) => {
-  if (s.queue === prev.queue && s.index === prev.index && s.volume === prev.volume && s.muted === prev.muted && s.repeat === prev.repeat && s.shuffle === prev.shuffle && s.mode === prev.mode) return
+  if (s.queue === prev.queue && s.index === prev.index && s.volume === prev.volume && s.muted === prev.muted && s.repeat === prev.repeat && s.shuffle === prev.shuffle && s.mode === prev.mode && s.rate === prev.rate) return
   if (persistTimer) clearTimeout(persistTimer)
   persistTimer = setTimeout(() => {
     ls.set('arnav.player', {
       queue: s.queue.slice(0, 500).map((q) => q.track), index: s.index, volume: s.volume, muted: s.muted,
-      repeat: s.repeat, shuffle: s.shuffle, mode: s.mode, context: s.context, contextId: s.contextId,
+      repeat: s.repeat, shuffle: s.shuffle, mode: s.mode, context: s.context, contextId: s.contextId, rate: s.rate,
     })
   }, 500)
 })

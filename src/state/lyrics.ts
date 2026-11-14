@@ -288,3 +288,20 @@ usePlayer.subscribe((s) => {
   last = id
   void useLyrics.getState().load()
 })
+
+// The next song's lyrics are looked up while this one plays (results are cached), so they're
+// there the moment it starts. Only once per song, after a while into the current one, when idle.
+let prefetched: string | null = null
+useProgress.subscribe((p) => {
+  const s = usePlayer.getState()
+  const cur = s.queue[s.index]?.track
+  const next = s.queue[s.index + 1]?.track
+  if (!cur || !next || next.id === prefetched || !settings().onlineLyrics) return
+  const dur = cur.durationMs ?? 0
+  if (p.position < (dur ? Math.min(dur * 0.4, 60_000) : 30_000)) return
+  prefetched = next.id
+  const run = () => { void findLyricsCandidates(next).catch(() => undefined) }
+  const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }
+  if (w.requestIdleCallback) w.requestIdleCallback(run, { timeout: 8000 })
+  else setTimeout(run, 1500)
+})

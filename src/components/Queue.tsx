@@ -10,9 +10,24 @@ import { duration, longDuration } from '../lib/format'
 import { artworkFor } from '../lib/classify'
 import { toast } from '../state/ui'
 import { useLiveHistory } from '../hooks'
+
+/** Removes a song from the queue with an Undo. */
+function removeWithUndo(key: string, title: string) {
+  const before = usePlayer.getState().queue
+  player().remove(key)
+  toast(`Removed “${title}”`, { label: 'Undo', run: () => player().restore(before) })
+}
+
+/** Section labels for the queue (shown on the first song of each run), when there's more than one kind. */
+function queueGroups(items: QueueItem[], context: string | null): (string | undefined)[] {
+  const label = (q: QueueItem) => (q.source === 'you' ? 'Next in queue' : q.source === 'autoplay' ? 'Autoplay · songs like this' : `Next from ${context ?? 'this list'}`)
+  const labels = items.map(label)
+  if (new Set(labels).size < 2) return labels.map(() => undefined)
+  return labels.map((l, i) => (i === 0 || labels[i - 1] !== l ? l : undefined))
+}
 import { QueueChat } from './QueueChat'
 
-function Row({ item, onRemove, eta }: { item: QueueItem; onRemove: () => void; eta?: string }) {
+function Row({ item, onRemove, eta, group }: { item: QueueItem; onRemove: () => void; eta?: string; group?: string }) {
   const controls = useDragControls()
   const t = item.track
   // Liquid drag: the row stretches with its speed and two soft echoes trail behind it.
@@ -31,6 +46,7 @@ function Row({ item, onRemove, eta }: { item: QueueItem; onRemove: () => void; e
       dragListener={false}
       dragControls={controls}
       className={`q-row ${dragging ? 'dragging' : ''}`}
+      data-group={group}
       style={{ y, scaleY, scaleX }}
       whileDrag={{ scale: 1.035, rotate: -0.6, boxShadow: '0 22px 60px rgba(0,0,0,.5)', zIndex: 5, background: 'var(--surface-raised)' }}
       transition={{ type: 'spring', stiffness: 420, damping: 28, mass: 0.8 }}
@@ -69,6 +85,7 @@ export function QueuePanel() {
   const nav = useNavigate()
   const current = queue[index]
   const upcoming = useMemo(() => queue.slice(index + 1), [queue, index])
+  const groups = useMemo(() => queueGroups(upcoming, context), [upcoming, context])
   const pos = useProgress((s) => Math.floor(s.position / 30_000))
   const etas = useMemo(() => {
     const now = Date.now()
@@ -93,7 +110,7 @@ export function QueuePanel() {
               const id = lib().createPlaylist(`Queue · ${new Date().toLocaleDateString([], { month: 'short', day: 'numeric' })}`, queue.slice(index).map((q) => q.track))
               toast('Saved as a playlist', { label: 'Open', run: () => { player().setExpanded(false); nav(`/playlist/${id}`) } })
             }}><Icon name="plus" size={17} /></button>
-            <button className="btn btn-ghost btn-sm" onClick={() => player().clearUpcoming()}>Clear</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => { const before = usePlayer.getState().queue; player().clearUpcoming(); toast('Up next cleared', { label: 'Undo', run: () => player().restore(before) }) }}>Clear</button>
           </>
         )}
       </div>
@@ -128,7 +145,7 @@ export function QueuePanel() {
             ) : (
               <Reorder.Group axis="y" values={upcoming} onReorder={(items) => player().setUpcoming(items)} className="q-list" as="div">
                 <AnimatePresence initial={false}>
-                  {upcoming.map((it, i) => <Row key={it.key} item={it} eta={i < 40 ? etas[i] : undefined} onRemove={() => player().remove(it.key)} />)}
+                  {upcoming.map((it, i) => <Row key={it.key} item={it} group={groups[i]} eta={i < 40 ? etas[i] : undefined} onRemove={() => removeWithUndo(it.key, it.track.title)} />)}
                 </AnimatePresence>
               </Reorder.Group>
             )}
