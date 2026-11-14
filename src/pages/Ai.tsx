@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'motion/react'
 import { Icon, type IconName } from '../components/Icon'
-import { Notice, Spinner, spring } from '../components/ui'
+import { Notice, spring } from '../components/ui'
 import { TrackList } from '../components/TrackRow'
 import { EnergyChart } from '../components/Charts'
 import { MixArt } from '../components/Mix'
@@ -17,7 +17,7 @@ import { REASON_COPY } from '../lib/taste'
 import { longDuration } from '../lib/format'
 import { hashHue } from '../lib/color'
 import { MOODS } from '../lib/types'
-import { createSession, recentPrompts, refine, type SessionResult, type Step } from '../services/session'
+import { clearRecentPrompts, createSession, SessionStopped, recentPrompts, refine, type SessionResult, type Step } from '../services/session'
 import { player } from '../state/player'
 import { lib } from '../state/library'
 import { toast } from '../state/ui'
@@ -97,13 +97,16 @@ export default function AiPage() {
     return extra.length ? `${q.trim()} — ${extra.join(', ')}` : q.trim()
   }
 
+  const stopper = useRef<AbortController | null>(null)
   const run = async (request: string, base?: SessionConstraints) => {
     const q = request.trim()
     if (!q || busy) return
     setError(null)
     if (!base) setResult(null)
+    const ctl = new AbortController()
+    stopper.current = ctl
     try {
-      const r = await createSession(q, setStep, base)
+      const r = await createSession(q, setStep, base, ctl.signal)
       setResult(r)
       if (!r.session.tracks.length) {
         setError(!yt.ready ? 'Connect YouTube in Settings → Sources so Arnav AI can find songs.'
@@ -111,8 +114,10 @@ export default function AiPage() {
             : 'No playable songs matched. Try naming an artist or a genre.')
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong')
+      // Stopped on purpose: no error, the composer is ready again.
+      if (!(e instanceof SessionStopped)) setError(e instanceof Error ? e.message : 'Something went wrong')
     } finally {
+      if (stopper.current === ctl) stopper.current = null
       setStep(null)
     }
   }
@@ -133,7 +138,9 @@ export default function AiPage() {
 
   const s = result?.session
   const c = s?.constraints
-  const prompts = recentPrompts()
+  const [promptsVersion, setPromptsVersion] = useState(0)
+  const prompts = useMemo(() => recentPrompts(), [promptsVersion]) // eslint-disable-line react-hooks/exhaustive-deps
+  const personal = useSettings((s) => s.aiPersonalization)
   const blocked = aiAvailability()
   const engine = !aiEnabled ? 'On-device engine' : blocked ? AI_REASON_COPY[blocked].replace(' — answered on device.', '') : 'Gemini, with an on-device fallback'
   const stepIdx = STEPS.findIndex((x) => x.key === step)
@@ -182,9 +189,15 @@ export default function AiPage() {
               </div>
               <div className="row" style={{ gap: 6 }}>
                 {voice.supported && <button type="button" className={`icon-btn ai-mic ${voice.listening ? 'on recording' : ''}`} aria-label={voice.listening ? 'Stop listening' : 'Speak your request'} onClick={voice.toggle}><Icon name="mic" size={18} /></button>}
-                <motion.button whileTap={{ scale: 0.9 }} className="ai-send" type="submit" disabled={busy || !text.trim()} aria-label="Create session">
-                  {busy ? <Spinner size={16} /> : <Icon name="chevronUp" size={20} strokeWidth={2.4} />}
+                {busy ? (
+                  <motion.button whileTap={{ scale: 0.9 }} className="ai-send stop" type="button" onClick={() => stopper.current?.abort()} aria-label="Stop">
+                    <Icon name="stop" size={16} />
+                  </motion.button>
+                ) : (
+                <motion.button whileTap={{ scale: 0.9 }} className="ai-send" type="submit" disabled={!text.trim()} aria-label="Create session">
+                  <Icon name="chevronUp" size={20} strokeWidth={2.4} />
                 </motion.button>
+                )}
               </div>
             </div>
           </div>
@@ -228,9 +241,16 @@ export default function AiPage() {
               ))}
             </div>
           </section>
+          {/* What leaves this device when you ask (cloud AI is opt-in per setting). */}
+          <p className="t-caption ai-disclosure">
+            <Icon name="info" size={13} /> Arnav AI sends what you type{personal ? ', the time of day and your top artists and genres' : ' and the time of day'} to Gemini to plan the session. {personal ? 'Turn off personalisation' : 'Turn on personalisation'} in <a href="/settings/ai" onClick={(e) => { e.preventDefault(); nav('/settings/ai') }}>Settings → Arnav AI</a>.
+          </p>
           {(prompts.length > 0 || AI_SUGGESTIONS.length > 0) && (
             <section className="section">
-              <div className="section-head"><h2>{prompts.length ? 'Recent' : 'More ideas'}</h2></div>
+              <div className="section-head">
+                <h2>{prompts.length ? 'Recent' : 'More ideas'}</h2>
+                {prompts.length > 0 && <button className="btn btn-ghost btn-sm" onClick={() => { clearRecentPrompts(); setPromptsVersion((v) => v + 1) }}>Clear</button>}
+              </div>
               <div className="ai-recents">
                 {(prompts.length ? prompts.slice(0, 6) : AI_SUGGESTIONS.slice(0, 6)).map((p) => (
                   <button key={p} className="ai-recent" onClick={() => ask(p)}>

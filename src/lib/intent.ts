@@ -62,6 +62,20 @@ export const moodSet = (c: SessionConstraints): Mood[] =>
 
 // ── Prompt (versioned; same contract as the Android app's PromptLibrary.sessionPrompt) ──
 export const SESSION_VERSION = 'session-v4'
+
+/**
+ * The listener's words for the prompt. Follow-ups ("Also: add some Punjabi") arrive appended to the
+ * first request; each keeps its own line so later refinements are never cut off by a length cap.
+ */
+function requestLines(request: string): string {
+  const [base, ...more] = request.split(/\.\s*Also:\s*/i)
+  const clean = (x: string, n: number) => x.trim().slice(0, n).replace(/"/g, "'")
+  const tweaks = more.map((m) => clean(m, 120)).filter(Boolean).slice(-5)
+  const lines = [`Request: "${clean(base, 300)}"`]
+  if (tweaks.length) lines.push('Refinements, in order (the later one wins if they conflict):', ...tweaks.map((t) => `- ${t}`))
+  return lines.join('\n')
+}
+
 export function sessionPrompt(request: string, topArtists: string[], topGenres: string[], hour: number): string {
   return `You are Arnav AI, the music intelligence inside the Arnav Music app.
 Convert the listener's request into listening-session constraints. Do NOT invent song titles.
@@ -70,7 +84,7 @@ seedArtists: 3-5 real, well-known artists whose individual songs fit the request
 searchQueries: 2-4 short phrases that find SINGLE songs on YouTube, e.g. "<artist> songs" or "<genre> <mood> song".
 Never use the words mix, playlist, mashup, jukebox, compilation, nonstop or hour.
 Listener context (opt-in, approximate): top artists=${topArtists.slice(0, 8).join(', ')}; top genres=${topGenres.slice(0, 5).join(', ')}; local hour=${hour}.
-Request: "${request.slice(0, 300).replace(/"/g, "'")}"
+${requestLines(request)}
 Respond ONLY with JSON matching:
 {"title":string<=40 chars,"durationMinutes":int 5-240,"energyTarget":0..1,"energyCurve":"FLAT|RISING|FALLING|WAVE|PEAK",
  "familiarity":0..1,"discoveryRatio":0..1,"artistDiversity":0..1,"moods":[string],"avoidMoods":[string],

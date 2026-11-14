@@ -132,3 +132,7 @@
   .ai-shape { padding: 14px; }
 }
 :root[data-motion='off'] .ai-rim, :root[data-motion='off'] .ai-rim::after, :root[data-motion='off'] .ai-shimmer, :root[data-motion='off'] .ai-aura i { animation: none; }
+
+.ai-disclosure { display: flex; gap: 6px; align-items: flex-start; max-width: 640px; margin: 4px auto 18px; color: var(--text-3); line-height: 1.45; }
+.ai-disclosure svg { flex: none; margin-top: 2px; }
+.ai-disclosure a { color: var(--text-2); text-decoration: underline; text-underline-offset: 2px; }

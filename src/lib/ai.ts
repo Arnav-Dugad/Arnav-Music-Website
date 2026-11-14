@@ -6,7 +6,7 @@ import { useUsage } from './usage'
 import { settings } from '../state/settings'
 import type { Track } from './types'
 
-export type AiUnavailable = 'DISABLED_BY_USER' | 'NOT_CONFIGURED' | 'DAILY_LIMIT' | 'THROTTLED' | 'QUOTA' | 'APP_CHECK' | 'OFFLINE' | 'TIMEOUT' | 'MALFORMED' | 'ERROR'
+export type AiUnavailable = 'DISABLED_BY_USER' | 'NOT_CONFIGURED' | 'DAILY_LIMIT' | 'THROTTLED' | 'QUOTA' | 'APP_CHECK' | 'OFFLINE' | 'TIMEOUT' | 'MALFORMED' | 'ERROR' | 'CANCELLED'
 export type AiOutcome = { ok: true; text: string; cached: boolean; model: string } | { ok: false; reason: AiUnavailable }
 
 export const AI_REASON_COPY: Record<AiUnavailable, string> = {
@@ -20,6 +20,7 @@ export const AI_REASON_COPY: Record<AiUnavailable, string> = {
   TIMEOUT: 'Gemini took too long — answered on device.',
   MALFORMED: 'Gemini’s answer was unusable — answered on device.',
   ERROR: 'Cloud AI failed — answered on device.',
+  CANCELLED: 'Stopped.',
 }
 
 interface Tunables { aiEnabled: boolean; aiModel: string; temperature: number; maxOutputTokens: number; minIntervalMs: number; timeoutMs: number }
@@ -104,19 +105,18 @@ function classify(e: unknown): AiUnavailable {
 
 const isModelGone = (e: unknown) => /not.?found|404|no longer available|is not supported/i.test(e instanceof Error ? e.message : String(e))
 
-function timeout<T>(p: Promise<T>, ms: number): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error('__timeout__')), ms)
-    p.then((v) => { clearTimeout(t); resolve(v) }, (e) => { clearTimeout(t); reject(e) })
-  })
-}
+const sleep = (ms: number, signal?: AbortSignal) => new Promise<void>((resolve) => {
+  if (ms <= 0 || signal?.aborted) return resolve()
+  const t = setTimeout(resolve, ms)
+  signal?.addEventListener('abort', () => { clearTimeout(t); resolve() }, { once: true })
+})
 
 /**
  * The only door to Gemini (Firebase AI Logic, Gemini Developer API).
  * Guarantees: consent, daily cap, min-interval throttle, versioned 7-day cache, timeout,
  * no retries on quota errors, automatic model fallback. Callers always have a local fallback.
  */
-export async function generate(prompt: string | Part[], version: string, opts: { json?: boolean; cacheTtlMs?: number; timeoutMs?: number; maxOutputTokens?: number; temperature?: number; skipThrottle?: boolean } = {}): Promise<AiOutcome> {
+export async function generate(prompt: string | Part[], version: string, opts: { json?: boolean; cacheTtlMs?: number; timeoutMs?: number; maxOutputTokens?: number; temperature?: number; skipThrottle?: boolean; signal?: AbortSignal } = {}): Promise<AiOutcome> {
   await loadRemoteConfig()
   const keyText = typeof prompt === 'string' ? prompt : JSON.stringify(prompt)
   const key = `ai|${version}|${await sha256(keyText)}`
@@ -128,12 +128,26 @@ export async function generate(prompt: string | Part[], version: string, opts: {
   }
   const blocked = aiAvailability()
   if (blocked) return { ok: false, reason: blocked }
-  if (!opts.skipThrottle && Date.now() - lastCallAt < tunables.minIntervalMs) return { ok: false, reason: 'THROTTLED' }
-  lastCallAt = Date.now()
+  if (opts.signal?.aborted) return { ok: false, reason: 'CANCELLED' }
+  // Requests close together wait their turn (each reserves the next slot) instead of silently
+  // falling back to the on-device engine.
+  if (!opts.skipThrottle) {
+    const slot = Math.max(Date.now(), lastCallAt + tunables.minIntervalMs)
+    lastCallAt = slot
+    await sleep(slot - Date.now(), opts.signal)
+    if (opts.signal?.aborted) return { ok: false, reason: 'CANCELLED' }
+  } else lastCallAt = Date.now()
+  // One request against the daily limit, however many models it takes.
+  useUsage.getState().bump({ aiRequests: 1 })
 
   const models = [...new Set([tunables.aiModel, ...FALLBACK_MODELS])].filter((m) => !deadModels.has(m))
   for (const modelName of models) {
-    useUsage.getState().bump({ aiRequests: 1 })
+    // The timeout (and Stop) really cancel the request, so an abandoned answer isn't still billed.
+    const ctl = new AbortController()
+    const stop = () => ctl.abort()
+    opts.signal?.addEventListener('abort', stop, { once: true })
+    let timedOut = false
+    const timer = setTimeout(() => { timedOut = true; ctl.abort() }, opts.timeoutMs ?? tunables.timeoutMs)
     try {
       const [{ getAI, getGenerativeModel, GoogleAIBackend }, , { firebaseApp }] = await loadSdk()
       const ai = getAI(firebaseApp(), { backend: new GoogleAIBackend() })
@@ -145,15 +159,19 @@ export async function generate(prompt: string | Part[], version: string, opts: {
           ...(opts.json ? { responseMimeType: 'application/json' } : {}),
         },
       })
-      const result = await timeout(model.generateContent(prompt), opts.timeoutMs ?? tunables.timeoutMs)
+      const result = await model.generateContent(prompt, { signal: ctl.signal })
       const text = result.response.text()
       if (!text?.trim()) return { ok: false, reason: 'MALFORMED' }
       void idbSet(key, { text, at: Date.now(), model: modelName }, 'cache')
       return { ok: true, text, cached: false, model: modelName }
     } catch (e) {
-      if (e instanceof Error && e.message === '__timeout__') return { ok: false, reason: 'TIMEOUT' }
+      if (opts.signal?.aborted) return { ok: false, reason: 'CANCELLED' }
+      if (timedOut) return { ok: false, reason: 'TIMEOUT' }
       if (isModelGone(e)) { deadModels = new Set([...deadModels, modelName]); continue }
       return { ok: false, reason: classify(e) }
+    } finally {
+      clearTimeout(timer)
+      opts.signal?.removeEventListener('abort', stop)
     }
   }
   return { ok: false, reason: 'NOT_CONFIGURED' }

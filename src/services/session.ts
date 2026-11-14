@@ -34,7 +34,11 @@ function listenerContext() {
 }
 
 /** “45 minutes of energetic coding music…” → constraints → real songs → ordered session. */
-export async function createSession(request: string, onStep: (s: Step) => void, base?: SessionConstraints): Promise<SessionResult> {
+/** Thrown when you press Stop; the page just resets. */
+export class SessionStopped extends Error { constructor() { super('Stopped') } }
+
+export async function createSession(request: string, onStep: (s: Step) => void, base?: SessionConstraints, signal?: AbortSignal): Promise<SessionResult> {
+  const check = () => { if (signal?.aborted) throw new SessionStopped() }
   onStep('interpret')
   const ctx = listenerContext()
   let constraints: SessionConstraints | null = base ?? null
@@ -42,7 +46,8 @@ export async function createSession(request: string, onStep: (s: Step) => void, 
   let model: string | null = null
   let unavailable: AiUnavailable | null = null
   if (!constraints) {
-    const r = await generate(sessionPrompt(request, ctx.artists, ctx.genres, new Date().getHours()), SESSION_VERSION, { json: true })
+    const r = await generate(sessionPrompt(request, ctx.artists, ctx.genres, new Date().getHours()), SESSION_VERSION, { json: true, signal })
+    check()
     if (r.ok) {
       constraints = parseSession(r.text)
       if (constraints) { usedAi = true; model = r.model }
@@ -55,6 +60,7 @@ export async function createSession(request: string, onStep: (s: Step) => void, 
   }
   remember(request)
 
+  check()
   onStep('search')
   const queries = [...new Set([...constraints.searchQueries, ...constraints.seedArtists.map((a) => `${a} songs`)].map((q) => q.trim()).filter(Boolean))].slice(0, 6)
   const state = ytQuotaState()
@@ -65,10 +71,11 @@ export async function createSession(request: string, onStep: (s: Step) => void, 
   await Promise.all(queries.map(async (q, i) => {
     const c = await cachedSearch(q, 'SONGS')
     if (c) { pool.push(...verified(c.tracks)); searched++; return }
-    if (i >= budget || remote >= budget) return
+    if (i >= budget || remote >= budget || signal?.aborted) return
     remote++
     try { pool.push(...verified((await search(q, 'SONGS')).tracks)); searched++ } catch { /* other queries still count */ }
   }))
+  check()
 
   // Familiar candidates from your own listening, filtered so they fit the request.
   const p = profile()
@@ -100,6 +107,7 @@ export async function createSession(request: string, onStep: (s: Step) => void, 
 }
 
 export function recentPrompts(): string[] { return ls.get<string[]>('arnav.aiPrompts', []) }
+export function clearRecentPrompts() { ls.del('arnav.aiPrompts') }
 function remember(q: string) {
   const v = q.trim()
   if (!v) return
