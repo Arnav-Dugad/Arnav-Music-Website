@@ -295,6 +295,8 @@ export default function Home() {
 
   return (
     <div className="page home h-home">
+      {/* A page name for screen readers and the route announcer (Home has no visible title). */}
+      <h1 className="sr-only">Home</h1>
       {!desktop && <TopBar />}
       {!data.cold && <MoodChips />}
       <Handoff />
