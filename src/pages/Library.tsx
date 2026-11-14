@@ -5,7 +5,7 @@ import { Card, Empty, PageHeader, Segmented, Artwork, Sheet } from '../component
 import { Icon } from '../components/Icon'
 import { TrackList } from '../components/TrackRow'
 import { PlaylistThumb } from '../components/Shell'
-import { YouTubeImport } from '../components/YouTubeImport'
+import { connect as connectYtMusic, useYtMusic } from '../services/youtubeMusic'
 import { ImportSheet } from '../components/ImportSheet'
 import { DuplicatesSheet } from '../components/DuplicatesSheet'
 import { useLiveHistory, useRegistryVersion } from '../hooks'
@@ -27,10 +27,10 @@ const TABS: { value: Tab; label: string }[] = [
 export default function Library() {
   const { tab: tabParam } = useParams()
   const nav = useNavigate()
+  const ytLinks = useYtMusic((st) => st.links)
   const tab = (TABS.some((t) => t.value === tabParam) ? tabParam : 'playlists') as Tab
   const [q, setQ] = useState('')
   const [sort, setSort] = useState<'recent' | 'name' | 'count'>('recent')
-  const [importOpen, setImportOpen] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [fileImportOpen, setFileImportOpen] = useState(false)
   const [dupesOpen, setDupesOpen] = useState(false)
@@ -67,7 +67,7 @@ export default function Library() {
   return (
     <div className="page library">
       <PageHeader title="Library" actions={<>
-        <button className="btn btn-secondary btn-sm" onClick={() => setImportOpen(true)}><Icon name="youtube" size={15} /> YouTube</button>
+        <button className="btn btn-secondary btn-sm" onClick={() => { if (useYtMusic.getState().connected) nav('/settings/youtube'); else void connectYtMusic() }}><Icon name="youtube" size={15} /> YouTube Music</button>
         <button className="btn btn-secondary btn-sm" onClick={() => setFileImportOpen(true)}><Icon name="upload" size={15} /> Spotify / CSV</button>
         <button className="btn btn-secondary btn-sm" onClick={() => setDupesOpen(true)} title="Find duplicate songs"><Icon name="filter" size={15} /> Duplicates</button>
         <button className="btn btn-primary btn-sm" onClick={() => { const id = useLibrary.getState().createPlaylist('New playlist'); nav(`/playlist/${id}?edit=1`) }}><Icon name="plus" size={15} /> New playlist</button>
@@ -98,7 +98,8 @@ export default function Library() {
             <div className="grid-cards">
               <Card title="Liked Songs" subtitle={`${likedCount} songs`} custom={<div className="card-art liked-art"><Icon name="heartFill" size={44} /></div>} onOpen={() => nav('/playlist/liked')} onPlay={likedCount ? () => player().play(likedTracks(), 0, { context: 'Liked Songs' }) : undefined} />
               {lists.map((p) => (
-                <Card key={p.id} title={p.name} subtitle={`${p.pinned ? '📌 ' : ''}${p.trackIds.length} songs${p.remoteRef ? ' · YouTube' : ''}`}
+                <Card key={p.id} title={p.name} subtitle={`${p.pinned ? 'Pinned · ' : ''}${p.trackIds.length} songs${p.remoteRef ? ' · YouTube' : ''}`}
+                  badge={ytLinks[p.id] ? <span className="badge yt" title="Synced with YouTube Music"><Icon name="sync" size={11} /> YouTube Music</span> : undefined}
                   custom={<div className="card-art" style={{ overflow: 'hidden', borderRadius: 14 }}><PlaylistThumb artwork={p.artworkUrl} trackIds={p.trackIds} name={p.name} size="lg" /></div>}
                   onOpen={() => nav(`/playlist/${p.id}`)} onPlay={p.trackIds.length ? () => player().play(trackRegistry.many(p.trackIds), 0, { context: p.name }) : undefined} />
               ))}
@@ -185,7 +186,6 @@ export default function Library() {
           ) : <Empty icon="close" title="Nothing hidden" body="“Not interested” and “Don’t recommend this artist” choices show up here, so you can undo them." />
         )}
       </motion.div>
-      <YouTubeImport open={importOpen} onClose={() => setImportOpen(false)} />
       <ImportSheet open={fileImportOpen} onClose={() => setFileImportOpen(false)} />
       <DuplicatesSheet open={dupesOpen} onClose={() => setDupesOpen(false)} />
       <Sheet open={confirmOpen} onClose={() => setConfirmOpen(false)} title="Clear listening history?" width={420}>

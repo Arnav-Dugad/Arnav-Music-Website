@@ -9,6 +9,7 @@ import type { Track } from '../lib/types'
 import { usePlayer, player } from '../state/player'
 import { useLibrary } from '../state/library'
 import { ui, toast } from '../state/ui'
+import { useArrived } from './YouTubeMusic'
 import { usePreviewHold } from '../player/usePreviewHold'
 
 /** Credited names ("Tanishk Bagchi, Asees Kaur" / "A & B" / "A feat. B") as separate artists. */
@@ -111,6 +112,7 @@ export const TrackRow = memo(function TrackRow({ track, index, list, context, nu
   const { id, playing } = useNowPlaying()
   const nav = useNavigate()
   const isCurrent = id === track.id
+  const arrived = useArrived(playlistId, track.id)
   const hold = usePreviewHold(track)
   const play = () => {
     if (onPlay) return onPlay()
@@ -119,7 +121,7 @@ export const TrackRow = memo(function TrackRow({ track, index, list, context, nu
   }
   return (
     <div
-      className={`track-row ${isCurrent ? 'current' : ''} ${compact ? 'compact' : ''}`}
+      className={`track-row ${isCurrent ? 'current' : ''} ${compact ? 'compact' : ''} ${arrived ? 'arrived' : ''}`}
       onClick={(e) => { if (!(e.target as HTMLElement).closest('button')) hold.guard(play)?.() }}
       {...hold.handlers}
       onContextMenu={(e) => { if (hold.held()) { e.preventDefault(); return } openTrackMenu(e, track, { playlistId }) }}

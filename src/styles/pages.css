@@ -567,3 +567,42 @@ button.heat-cell:hover { outline: 2px solid var(--text); outline-offset: 1px; }
 .suggest::-webkit-scrollbar { display: none; }
 .suggest-chip { flex: none; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; gap: 6px; }
 .suggest-chip .subtle { color: var(--text-3); font-weight: 500; }
+
+/* ── YouTube Music sync ──────────────────────────────────────────────────── */
+.yt-hero, .yt-card { border-radius: 22px; padding: 22px; display: flex; flex-direction: column; gap: 12px; }
+.yt-hero .t-title { font-size: 22px; }
+.yt-hero-icons { display: flex; align-items: center; gap: 10px; color: var(--text-3); }
+.yt-badge { width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center; flex: none; color: #fff; background: linear-gradient(135deg, #ff4e45, #c4181b); box-shadow: 0 6px 18px rgba(255, 60, 60, 0.25); }
+.yt-badge.big { width: 48px; height: 48px; border-radius: 14px; }
+.yt-badge.arnav { background: linear-gradient(135deg, var(--brand-a), var(--brand-b)); color: #0b0b0f; box-shadow: 0 6px 18px color-mix(in oklab, var(--brand-b) 35%, transparent); }
+.yt-points { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.yt-points li { display: flex; gap: 8px; align-items: flex-start; }
+.yt-points svg { flex: none; margin-top: 3px; color: var(--success); }
+.yt-status { display: flex; align-items: center; gap: 10px; min-height: 34px; font-size: 14px; color: var(--text-2); }
+.yt-dot { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; flex: none; background: var(--success); }
+.yt-dot.syncing { background: transparent; color: var(--accent); animation: spin 1.2s linear infinite; }
+.yt-dot.needs-pass, .yt-dot.quota { background: var(--warning); }
+.yt-dot.error { background: var(--danger); }
+.yt-dot.idle::after { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #fff; }
+.yt-quota { display: grid; gap: 6px; }
+.yt-quota-bar { height: 6px; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
+.yt-quota-bar i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--brand-a), var(--brand-b)); transition: width 0.6s var(--ease); }
+.yt-links { display: grid; gap: 2px; border-radius: 16px; overflow: hidden; background: var(--surface); }
+.yt-link { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--surface); }
+.yt-link .chip-select { flex: none; }
+.yt-err { color: var(--danger); }
+.yt-log { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.yt-log li { display: flex; gap: 12px; font-size: 14px; color: var(--text-2); }
+.yt-review-list { display: grid; gap: 2px; max-height: 48vh; overflow-y: auto; }
+.yt-review-row { display: flex; align-items: center; gap: 12px; padding: 8px 6px; border-radius: 12px; }
+.yt-review-row.done { opacity: 0.7; }
+.yt-review-row .chip-select { flex: none; max-width: 190px; }
+.yt-chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px 0 6px; border-radius: 99px; font-size: 12.5px; font-weight: 600; background: var(--surface-2); color: var(--text-2); }
+.yt-chip-icon { width: 16px; height: 16px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: var(--success); }
+.yt-chip.pending .yt-chip-icon { background: var(--accent); color: var(--on-accent, #0b0b0f); }
+.yt-chip.err .yt-chip-icon { background: var(--danger); }
+.badge.yt { display: inline-flex; align-items: center; gap: 4px; }
+/* A song that just arrived from YouTube Music glows once. */
+.track-row.arrived { animation: yt-arrive 2.4s var(--ease) both; }
+@keyframes yt-arrive { 0% { background: color-mix(in oklab, var(--accent) 26%, transparent); transform: translateX(-6px); } 30% { transform: none; } 100% { background: transparent; } }
+:root[data-motion='off'] .track-row.arrived { animation: none; }

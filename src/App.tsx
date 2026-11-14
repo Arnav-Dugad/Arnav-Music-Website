@@ -18,6 +18,7 @@ import { isMorphing } from './lib/reveal'
 import { TogetherLayer } from './components/TogetherLayer'
 import { SendSheet } from './components/Social'
 import { MobileAccountButton, TopTabs, MoreSheet } from './components/MobileMenu'
+import { YtLinkReview } from './components/YouTubeMusic'
 import Home from './pages/Home'
 
 const Explore = lazy(() => import('./pages/Explore'))
@@ -175,6 +176,7 @@ export default function App() {
         <QuietBoundary name="shortcuts"><ShortcutsSheet /></QuietBoundary>
         <QuietBoundary name="sign in"><AuthSheet /></QuietBoundary>
         <QuietBoundary name="phone"><PhoneSheet /></QuietBoundary>
+        <QuietBoundary name="youtube music"><YtLinkReview /></QuietBoundary>
         <Toasts />
         <QuietBoundary name="preview"><PreviewPill /></QuietBoundary>
         <QuietBoundary name="together"><TogetherLayer /></QuietBoundary>

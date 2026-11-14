@@ -25,6 +25,8 @@ import { useMusicVideos, videosReady } from '../services/musicVideos'
 import { setMode } from '../player/controller'
 import { useSettings } from '../state/settings'
 import { useAuth } from '../state/auth'
+import { PlaylistYtChip } from '../components/YouTubeMusic'
+import { deleteOnYouTube, unlink as unlinkYt, useYtMusic } from '../services/youtubeMusic'
 import { PLAYLIST_CLOUD_MAX } from '../services/sync'
 
 interface View {
@@ -157,6 +159,7 @@ export default function PlaylistPage() {
           {p && <PublicBar id={id} />}
           {(view.kind === 'local' || view.kind === 'liked') && view.tracks.length > 0 && <VideosLine tracks={view.tracks} title={view.title} id={id} />}
           {lyricsJob && <div className="t-caption" style={{ marginTop: 8 }}>Fetching lyrics {lyricsJob.done}/{lyricsJob.total}…</div>}
+          {p && <div style={{ marginTop: 10 }}><PlaylistYtChip id={id} local={view.kind === 'local'} /></div>}
           {p && signedIn && p.trackIds.length > PLAYLIST_CLOUD_MAX && (
             <div style={{ marginTop: 12 }}><Notice tone="warn">Only the first {PLAYLIST_CLOUD_MAX} songs sync to your phone and other devices. The other {p.trackIds.length - PLAYLIST_CLOUD_MAX} stay on this browser.</Notice></div>
           )}
@@ -201,6 +204,8 @@ function EditSheet({ open, onClose, id }: { open: boolean; onClose: () => void; 
   const [name, setName] = useState(p?.name ?? '')
   const [desc, setDesc] = useState(p?.description ?? '')
   const [confirm, setConfirm] = useState(false)
+  const ytLinked = useYtMusic((st) => !!st.links[id])
+  const [alsoYt, setAlsoYt] = useState(false)
   const [naming, setNaming] = useState(false)
   useEffect(() => { if (open && p) { setName(p.name); setDesc(p.description); setConfirm(false) } }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
   const suggest = async () => {
@@ -220,8 +225,14 @@ function EditSheet({ open, onClose, id }: { open: boolean; onClose: () => void; 
         <button type="button" className="btn btn-secondary btn-sm" style={{ alignSelf: 'flex-start' }} disabled={naming || !p.trackIds.length} onClick={() => void suggest()}>{naming ? <Spinner size={13} /> : <Icon name="sparkles" size={14} />} Suggest a name and description</button>
         <label className="col" style={{ gap: 6 }}><span className="t-caption">Description</span><textarea className="field" rows={3} maxLength={500} value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Add an optional description" /></label>
         <div className="row" style={{ justifyContent: 'space-between', marginTop: 6 }}>
+          {confirm && ytLinked && (
+            <label className="row" style={{ gap: 8, flexBasis: '100%', order: -1 }}>
+              <input type="checkbox" checked={alsoYt} onChange={(e) => setAlsoYt(e.target.checked)} />
+              <span className="t-sub">Also delete it on YouTube Music</span>
+            </label>
+          )}
           {confirm ? (
-            <button type="button" className="btn btn-danger" onClick={() => { lib().deletePlaylist(id); onClose(); toast('Playlist deleted', { label: 'Undo', run: () => { lib().restorePlaylist(id); nav(`/playlist/${id}`) } }); nav('/library') }}><Icon name="trash" size={15} /> Delete for good</button>
+            <button type="button" className="btn btn-danger" onClick={() => { if (alsoYt) void deleteOnYouTube(id); else if (ytLinked) unlinkYt(id); lib().deletePlaylist(id); onClose(); toast('Playlist deleted', { label: 'Undo', run: () => { lib().restorePlaylist(id); nav(`/playlist/${id}`) } }); nav('/library') }}><Icon name="trash" size={15} /> Delete for good</button>
           ) : (
             <button type="button" className="btn btn-ghost" onClick={() => setConfirm(true)}><Icon name="trash" size={15} /> Delete playlist</button>
           )}

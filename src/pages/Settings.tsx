@@ -23,11 +23,12 @@ import { adoptAccount, deleteCloudData, deviceId, refreshAuthUser, syncNow, useS
 import { useApiStatus } from '../services/status'
 import { syncLabel } from '../components/Shell'
 import { applyUpdate, installApp, isIosSafari, usePwa } from '../lib/pwa'
+import { YouTubeMusicSettings } from '../components/YouTubeMusic'
 import { relative } from '../lib/format'
 
-type Section = 'account' | 'appearance' | 'playback' | 'lyrics' | 'ai' | 'sources' | 'sync' | 'usage' | 'privacy' | 'about'
+type Section = 'account' | 'youtube' | 'appearance' | 'playback' | 'lyrics' | 'ai' | 'sources' | 'sync' | 'usage' | 'privacy' | 'about'
 const SECTIONS: { id: Section; label: string; icon: IconName }[] = [
-  { id: 'account', label: 'Account', icon: 'user' }, { id: 'appearance', label: 'Appearance', icon: 'sun' },
+  { id: 'account', label: 'Account', icon: 'user' }, { id: 'youtube', label: 'YouTube Music', icon: 'youtube' }, { id: 'appearance', label: 'Appearance', icon: 'sun' },
   { id: 'playback', label: 'Playback', icon: 'play' }, { id: 'lyrics', label: 'Lyrics', icon: 'lyrics' },
   { id: 'ai', label: 'Arnav AI', icon: 'sparkles' }, { id: 'sources', label: 'Sources', icon: 'youtube' },
   { id: 'sync', label: 'Data & sync', icon: 'cloud' }, { id: 'usage', label: 'Usage & quotas', icon: 'chart' },
@@ -569,7 +570,7 @@ export default function SettingsPage() {
   const nav = useNavigate()
   const current = (SECTIONS.find((s) => s.id === section)?.id ?? 'account') as Section
   const body: Record<Section, ReactNode> = {
-    account: <Account />, appearance: <Appearance />, playback: <Playback />, lyrics: <Lyrics />, ai: <Ai />,
+    account: <Account />, youtube: <YouTubeMusicSettings />, appearance: <Appearance />, playback: <Playback />, lyrics: <Lyrics />, ai: <Ai />,
     sources: <Sources />, sync: <SyncSection />, usage: <Usage />, privacy: <Privacy />, about: <About />,
   }
   return (

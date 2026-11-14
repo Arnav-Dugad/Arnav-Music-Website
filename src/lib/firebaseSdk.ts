@@ -57,6 +57,8 @@ export function watchAuth(cb: (u: User | null) => void) {
 }
 
 const YT_READONLY = 'https://www.googleapis.com/auth/youtube.readonly'
+/** Manage your YouTube playlists and likes (YouTube Music sync). */
+const YT_MANAGE = 'https://www.googleapis.com/auth/youtube'
 
 export async function signInWithGoogle(): Promise<User> {
   const provider = new GoogleAuthProvider()
@@ -120,3 +122,21 @@ export async function signUpEmail(name: string, email: string, password: string)
 
 export const resetPassword = (email: string) => sendPasswordResetEmail(firebaseAuth(), email.trim())
 export const signOutUser = () => signOut(firebaseAuth())
+
+/**
+ * A YouTube pass that can edit your playlists and likes (YouTube Music sync). Google gives a browser
+ * an hour per pass; there's no long-lived key without a server. `quick` skips the consent screen
+ * once you've agreed (Google may still show the window for a moment).
+ */
+export async function youtubeManageToken(mode: 'consent' | 'quick'): Promise<{ token: string; email: string | null; expiresAt: number }> {
+  const provider = new GoogleAuthProvider()
+  provider.addScope(YT_MANAGE)
+  const a = firebaseAuth()
+  const u = a.currentUser
+  const email = u?.email ?? null
+  provider.setCustomParameters(mode === 'consent' ? (email ? { login_hint: email, prompt: 'consent' } : { prompt: 'consent' }) : (email ? { login_hint: email } : {}))
+  const r = !u ? await signInWithPopup(a, provider) : hasGoogle() ? await reauthenticateWithPopup(u, provider) : await linkWithPopup(u, provider)
+  const cred = GoogleAuthProvider.credentialFromResult(r)
+  if (!cred?.accessToken) throw new Error('Google didn’t grant YouTube access.')
+  return { token: cred.accessToken, email: r.user.email ?? email, expiresAt: Date.now() + 55 * 60_000 }
+}

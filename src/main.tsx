@@ -66,6 +66,7 @@ async function boot() {
   startSync()
   startPwa()
   startErrorReports()
+  void import('./services/youtubeMusic').then((m) => m.startYtMusic())
   startReplaySnapshots()
   startMusicVideos()
   for (const a of useSettings.getState().seedArtists) addKnownArtist(a)

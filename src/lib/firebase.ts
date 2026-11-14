@@ -28,6 +28,7 @@ export function hadSession(): boolean {
 export const signInWithGoogle = (): Promise<User> => loadFirebase().then((m) => m.signInWithGoogle())
 export const youtubeAccessToken = (): Promise<string> => loadFirebase().then((m) => m.youtubeAccessToken())
 export const linkGoogle = (): Promise<User> => loadFirebase().then((m) => m.linkGoogle())
+export const youtubeManageToken = (mode: 'consent' | 'quick') => loadFirebase().then((m) => m.youtubeManageToken(mode))
 export const unlinkGoogle = (): Promise<User> => loadFirebase().then((m) => m.unlinkGoogle())
 export const signInEmail = (email: string, password: string): Promise<User> => loadFirebase().then((m) => m.signInEmail(email, password))
 export const signUpEmail = (name: string, email: string, password: string): Promise<User> => loadFirebase().then((m) => m.signUpEmail(name, email, password))
