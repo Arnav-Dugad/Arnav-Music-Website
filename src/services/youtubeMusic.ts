@@ -13,7 +13,7 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { idbGet, idbSet } from '../lib/idb'
-import { youtubeManageToken } from '../lib/firebase'
+import { authMessage, youtubeManageToken } from '../lib/firebase'
 import { mergeLikes, mergeLists, planRemote, type FirstLink, type RemoteItem, type RemoteOp, type SyncMode } from '../lib/ytsync'
 import { videoToTrack, bestThumb, type YtVideo, type YtSnippet } from '../lib/classify'
 import { decodeEntities } from '../lib/format'
@@ -100,7 +100,8 @@ export async function getPass(mode: 'consent' | 'quick' = st().connected ? 'quic
     patch({ connected: true, account: r.email, status: 'idle', message: null })
     return true
   } catch (e) {
-    patch({ message: e instanceof Error ? e.message.replace(/^Firebase: /, '') : 'Couldn’t connect to YouTube' })
+    // Plain words for Google sign-in problems (blocked popup, closed window, this address not allowed…).
+    patch({ message: authMessage(e) })
     return false
   }
 }
