@@ -10,7 +10,7 @@ import { Icon } from '../components/Icon'
 import { Artwork, Empty } from '../components/ui'
 import { artworkFor } from '../lib/classify'
 import { endPreview, isPreviewing, startPreview } from '../player/controller'
-import { forYouNow, freshFinds, type Rec } from '../services/recs'
+import { forYouNow, freshFinds, radioFor, type Rec } from '../services/recs'
 import { likedIds, useLibrary } from '../state/library'
 import { player, usePlayer } from '../state/player'
 import { toast, ui } from '../state/ui'
@@ -24,13 +24,25 @@ export default function Samples() {
   const v = useRegistryVersion()
   const likes = useLibrary((s) => s.likes)
   // A fresh deck each visit: new songs first, then close favourites-to-be (liked songs left out).
-  const deck = useMemo(() => {
+  const initial = useMemo(() => {
     const liked = likedIds(likes)
     const seen = new Set<string>()
     const out: Rec[] = []
     for (const r of [...freshFinds(30), ...forYouNow(30)]) if (!seen.has(r.track.id) && !liked.has(r.track.id)) { seen.add(r.track.id); out.push(r) }
     return out.slice(0, 40)
   }, [v]) // eslint-disable-line react-hooks/exhaustive-deps
+  const [deck, setDeck] = useState<Rec[]>(initial)
+  useEffect(() => { setDeck((d) => (d.length ? d : initial)) }, [initial])
+  /** The rest of the feed becomes songs like [i]'s. */
+  const moreLike = async (i: number) => {
+    const seed = deck[i]?.track
+    if (!seed) return
+    const more = await radioFor(seed, { exclude: new Set(deck.slice(0, i + 1).map((r) => r.track.id)), limit: 20 }).catch(() => [] as Rec[])
+    if (!more.length) { toast('No more songs like this right now'); return }
+    setDeck((d) => [...d.slice(0, i + 1), ...more.map((r) => ({ ...r, caption: `Like ${seed.title}` }))])
+    toast(`Next: songs like “${seed.title}”`)
+    setTimeout(() => go(1), 250)
+  }
   const feed = useRef<HTMLDivElement>(null)
   const [active, setActive] = useState(0)
   const [hinted, setHinted] = useState(false)
@@ -78,14 +90,14 @@ export default function Samples() {
     <div className="samples-page">
       <h1 className="sr-only">Samples</h1>
       <div className="samples-feed" ref={feed} role="feed" aria-label="Samples: new songs picked for you">
-        {deck.map((r, i) => <Sample key={r.track.id} r={r} i={i} active={i === active} total={deck.length} onNext={() => go(1)} />)}
+        {deck.map((r, i) => <Sample key={r.track.id} r={r} i={i} active={i === active} total={deck.length} onNext={() => go(1)} onMore={() => void moreLike(i)} />)}
       </div>
       {!hinted && <motion.div className="samples-hint" initial={{ opacity: 0, y: -10, x: '-50%' }} animate={{ opacity: 1, y: 0, x: '-50%' }} transition={{ delay: 1.2 }}><Icon name="chevronUp" size={16} /> Swipe up for the next song</motion.div>}
     </div>
   )
 }
 
-function Sample({ r, i, active, total, onNext }: { r: Rec; i: number; active: boolean; total: number; onNext: () => void }) {
+function Sample({ r, i, active, total, onNext, onMore }: { r: Rec; i: number; active: boolean; total: number; onNext: () => void; onMore: () => void }) {
   const nav = useNavigate()
   const t = r.track
   const liked = useLibrary((s) => !!s.likes[t.id] && !s.likes[t.id].deleted)
@@ -113,6 +125,7 @@ function Sample({ r, i, active, total, onNext }: { r: Rec; i: number; active: bo
           </button>
           <button className="sample-act" aria-label="Add to queue" onClick={() => { player().addToQueue([t]); toast('Added to your queue') }}><Icon name="queue" size={24} /><span>Queue</span></button>
           <button className="sample-act" aria-label="Add to a playlist" onClick={() => ui().set({ addTo: [t] })}><Icon name="plus" size={24} /><span>Save</span></button>
+          <button className="sample-act" aria-label={`More songs like ${t.title}`} onClick={onMore}><Icon name="radio" size={24} /><span>More</span></button>
           <button className="sample-act play" aria-label={`Play ${t.title}`} onClick={() => { endPreview(); player().play([t], 0, { context: 'Samples' }) }}><Icon name="play" size={24} /><span>Play</span></button>
         </div>
       </div>

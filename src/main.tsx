@@ -65,6 +65,7 @@ async function boot() {
   void fetchKnownNames().then((r) => { if (r) mergeSharedNames(r) })
   startSync()
   startPwa()
+  void import('./services/jumpBack').then((m) => m.startJumpBack())
   startErrorReports()
   void import('./services/youtubeMusic').then((m) => m.startYtMusic())
   startReplaySnapshots()

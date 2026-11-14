@@ -28,7 +28,7 @@ import { useAuth } from '../state/auth'
 import { PinMixButton, PlaylistYtChip } from '../components/YouTubeMusic'
 import { deleteOnYouTube, unlink as unlinkYt, useYtMusic } from '../services/youtubeMusic'
 import { buildDaylist } from '../services/daylist'
-import { DaylistArt } from '../components/Daylist'
+import { DaylistArt, DaylistHistory } from '../components/Daylist'
 import { PLAYLIST_CLOUD_MAX } from '../services/sync'
 
 interface View {
@@ -169,6 +169,7 @@ export default function PlaylistPage() {
           {lyricsJob && <div className="t-caption" style={{ marginTop: 8 }}>Fetching lyrics {lyricsJob.done}/{lyricsJob.total}…</div>}
           {p && <div style={{ marginTop: 10 }}><PlaylistYtChip id={id} local={view.kind === 'local'} /></div>}
           {(view.kind === 'smart' || view.kind === 'daily') && view.tracks.length > 0 && <div style={{ marginTop: 10 }}><PinMixButton source={id} /></div>}
+          {id === 'daylist' && <DaylistHistory current={view.title} />}
           {p && signedIn && p.trackIds.length > PLAYLIST_CLOUD_MAX && (
             <div style={{ marginTop: 12 }}><Notice tone="warn">Only the first {PLAYLIST_CLOUD_MAX} songs sync to your phone and other devices. The other {p.trackIds.length - PLAYLIST_CLOUD_MAX} stay on this browser.</Notice></div>
           )}

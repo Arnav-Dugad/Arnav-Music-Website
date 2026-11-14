@@ -30,6 +30,7 @@ import { useYoutubeReady } from '../services/status'
 import { NowCard, useListeningNow } from '../components/Social'
 import { newReleases } from '../services/releases'
 import { HomeHero } from '../components/Daylist'
+import { JumpBackShelf } from '../components/JumpBack'
 import { useSocial } from '../services/social'
 
 // ── Top of the page ─────────────────────────────────────────────────────────
@@ -299,6 +300,7 @@ export default function Home() {
       <h1 className="sr-only">Home</h1>
       {!desktop && <TopBar />}
       <HomeHero />
+      <JumpBackShelf />
       {!data.cold && <MoodChips />}
       <Handoff />
       <SetupNotice />
