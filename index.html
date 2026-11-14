@@ -19,7 +19,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="preconnect" href="https://i.ytimg.com" />
     <link rel="preconnect" href="https://www.youtube.com" />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300..900&family=Manrope:wght@600;700;800&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+    <!-- Fonts load beside the first paint, not before it (the boot screen covers the swap). -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300..900&family=Manrope:wght@600;700;800&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300..900&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet" /></noscript>
     <!-- Indic and Arabic lyrics: unicode-range subsets, downloaded only when those scripts appear. -->
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400..800&family=Noto+Sans+Gurmukhi:wght@400..800&family=Noto+Sans+Arabic:wght@400..800&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
     <style>

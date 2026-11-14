@@ -47,10 +47,10 @@ function Page({ children }: { children: React.ReactNode }) {
   return (
     <motion.div
       // A cover morph (View Transition) already animates the change; don't fade the page under it.
-      initial={isMorphing() ? false : { opacity: 0, y: 14, filter: 'blur(6px)' }}
-      // The filter is cleared afterwards: a leftover filter would trap fixed overlays inside the page.
-      animate={{ opacity: 1, y: 0, filter: 'blur(0px)', transitionEnd: { filter: 'none' } }}
-      exit={{ opacity: 0, y: -8, filter: 'blur(4px)', transition: { duration: 0.16 } }}
+      initial={isMorphing() ? false : { opacity: 0, y: 12 }}
+      // Opacity and movement only: a full-page blur is costly to paint and delays the next page.
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -6, transition: { duration: 0.12 } }}
       transition={{ type: 'spring', stiffness: 260, damping: 30 }}
     >
       {children}
