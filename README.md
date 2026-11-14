@@ -5,7 +5,7 @@
 # Arnav Music — Web
 **Music, alive.** The web edition of [Arnav Music](https://github.com/Arnav-Dugad/Arnav-Music-Background), on the same backend as the Android app.
 
-**Live:** https://arnav-music.arnavrival12.workers.dev
+**Live:** https://arnav-music.arnavd.workers.dev
 
 </div>
 
