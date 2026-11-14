@@ -32,6 +32,15 @@ let radioTried = new Set<string>()
 const failedRefs = new Set<string>()
 /** Song ↔ Video pairs found by the resolver, so switching back is free. */
 const altPairs = new Map<string, Track>()
+/**
+ * YouTube's own captions (often just "♪♪♪" on music) would sit under our lyric captions:
+ * switch them off on each video as it starts.
+ */
+function noYouTubeCaptions(p: YTPlayer | null) {
+  const m = p as unknown as { unloadModule?: (name: string) => void } | null
+  try { m?.unloadModule?.('captions'); m?.unloadModule?.('cc') } catch { /* older player */ }
+}
+
 /** Bumped whenever a Song/Video pair is learned (the switch shows when a video is ready). */
 export const usePairs = create<{ n: number }>()(() => ({ n: 0 }))
 function pairSet(key: string, t: Track) {
@@ -411,6 +420,7 @@ function onState(deck: number, state: number) {
   const p = player()
   if (state === STATE.PLAYING) {
     loadingSince = 0
+    noYouTubeCaptions(yt)
     p.patch({ isPlaying: true, isBuffering: false, issue: null })
     if (!p.wantPlaying) p.patch({ wantPlaying: true })
     const d = (yt?.getDuration() ?? 0) * 1000
@@ -602,7 +612,7 @@ function syncSwap(s: Swap) {
   try { state = sb.getPlayerState() } catch { /* not ready */ }
   if (state !== STATE.PLAYING) return
   const now = performance.now()
-  if (!s.firstPlaying) s.firstPlaying = now
+  if (!s.firstPlaying) { s.firstPlaying = now; noYouTubeCaptions(sb) }
   if (s.seekedAt && now - s.seekedAt < 260) return // let the seek land
   const target = clock(yt)
   const at = clock(sb)

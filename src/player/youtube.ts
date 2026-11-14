@@ -89,7 +89,7 @@ export function createPlayer(host: HTMLElement, handlers: {
           height: '100%',
           host: 'https://www.youtube.com',
           playerVars: {
-            controls: 0, disablekb: 1, playsinline: 1, rel: 0, iv_load_policy: 3, fs: 0, modestbranding: 1,
+            controls: 0, disablekb: 1, playsinline: 1, rel: 0, iv_load_policy: 3, cc_load_policy: 0, fs: 0, modestbranding: 1,
             enablejsapi: 1, origin: window.location.origin, widget_referrer: window.location.origin,
           },
           events: {
